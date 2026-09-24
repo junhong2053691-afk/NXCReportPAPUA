@@ -887,6 +887,24 @@ function observeLanguageChanges() {
 window.dashLang = currentLang;
 window.dashT = function (value) { return i18nText(value, currentLang()); };
 
+let _redirectingToLogin = false;
+
+function isLoginPage() {
+  const p = window.location.pathname;
+  return p === "/login.html" || p.endsWith("/login.html");
+}
+
+// session 过期（服务重启、12 小时到期）时，后端对 /api/* 返回 401。
+// 在此之前所有 loader 的 .catch(() => {}) 会静默吞掉它，页面停留在旧数字
+// 不再更新且不提示任何东西 —— 操作员无从得知要重新登录。
+function redirectToLogin() {
+  if (_redirectingToLogin) return; // 并发多个请求同时 401 时只跳一次
+  if (isLoginPage()) return; // 死循环防线：登录页自身永不跳转
+  _redirectingToLogin = true;
+  fetchEpoch += 1; // 作废所有在途请求的渲染，避免跳转途中闪出错误
+  window.location.replace("/login.html"); // replace 不留历史，Back 不会再弹回来
+}
+
 async function api(url, opts = {}) {
   const epoch = opts.epoch != null ? opts.epoch : fetchEpoch;
   const { epoch: _epoch, bg: _bg, ...fetchOpts } = opts;
@@ -896,6 +914,16 @@ async function api(url, opts = {}) {
       headers: { "Content-Type": "application/json", ...(fetchOpts.headers || {}) },
       ...fetchOpts,
     });
+    // 必须在 res.json() 之前：401 的 body 只是 {error:"请先登录"}，读它没有意义。
+    // cancelled 标记复用了各页面脚本已有的 `if (e && e.cancelled) return;` 约定，
+    // 让跳转途中所有页面安静 return，而不是闪一屏红色错误。
+    if (res.status === 401) {
+      redirectToLogin();
+      const err = new Error("请先登录");
+      err.unauthorized = true;
+      err.cancelled = true;
+      throw err;
+    }
     const data = await res.json().catch(() => ({}));
     if (epoch !== fetchEpoch) {
       const err = new Error("请求已取消");
