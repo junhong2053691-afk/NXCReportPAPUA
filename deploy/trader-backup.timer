@@ -1,0 +1,13 @@
+[Unit]
+Description=Run trader-dashboard backup hourly
+
+[Timer]
+OnCalendar=hourly
+# 错开整点：盘方 API 在整点前后负载较高，同步循环也更忙
+RandomizedDelaySec=300
+# 机器重启或睡过头时补跑一次
+Persistent=true
+AccuracySec=1min
+
+[Install]
+WantedBy=timers.target

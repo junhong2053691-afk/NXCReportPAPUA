@@ -1,0 +1,19 @@
+[Unit]
+Description=trader-dashboard hourly encrypted backup to R2
+After=trader-dashboard.service
+
+[Service]
+Type=oneshot
+User=trader
+Group=trader
+ExecStart=/usr/local/bin/trader-backup.sh
+
+# 时区要和主服务一致，否则备份文件名的时间戳会和日志、报表对不上
+Environment=TZ=Australia/Sydney
+
+# 备份要读 200MB+ 并压缩，别和 6s 的同步循环抢 IO 和 CPU
+Nice=10
+IOSchedulingClass=idle
+
+TimeoutStartSec=1800
+SyslogIdentifier=trader-backup

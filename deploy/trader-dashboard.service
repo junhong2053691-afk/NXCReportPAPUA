@@ -1,0 +1,101 @@
+[Unit]
+Description=trader-dashboard (multi-company operator backend)
+Documentation=file:/opt/trader-dashboard/DEPLOY.md
+After=network-online.target
+Wants=network-online.target
+
+# 必须放在 [Unit] 段（systemd >= 229 起就在这里，放 [Service] 会被忽略并告警）。
+# 默认 5 次/10s 失败后 systemd 会彻底放弃该服务 —— 那意味着四家公司的同步
+# 无声停止。这个应用宁可无限重试也不能被放弃。
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+User=trader
+Group=trader
+WorkingDirectory=/opt/trader-dashboard
+ExecStart=/usr/bin/node server/index.js
+
+# ───────────── 环境 ─────────────
+# NODE_ENV 是全局 error handler 生效的前提：没有它，Express 4 的 finalhandler
+# 会把完整堆栈（绝对路径、SQL 片段、依赖版本）写进 HTTP 响应体。
+Environment=NODE_ENV=production
+
+# 盘口时区。server/lib/dates.js 用 Date.parse 解析平台返回的【不带时区】的
+# 时间戳，按服务器本地时区处理 —— VPS 默认 UTC 会让所有交易归错日期，
+# 且 verifyDaySync 会永久 mismatch 并无限触发 repair。
+# 必须用 Australia/Sydney（含 DST 规则），不要用 Etc/GMT-10 这类固定偏移。
+Environment=TZ=Australia/Sydney
+
+Environment=TRADER_CONFIG=/etc/trader-dashboard/config.json
+Environment=TRADER_DB=/var/lib/trader-dashboard/trader.db
+Environment=TRADER_STATE_DIR=/var/lib/trader-dashboard/state
+
+# 让 V8 先于 cgroup OOM killer 触发。routes/data.js 的 /deposits 与
+# /withdrawals 没有分页上限（limit=99999999 或 -1 会返回全表），打爆堆时
+# 这样至少能在 journald 留下一条带栈的 "JavaScript heap out of memory"；
+# 而 cgroup OOM 是无声 SIGKILL，什么线索都没有。
+Environment=NODE_OPTIONS=--max-old-space-size=1536
+
+# ───────────── 单实例 ─────────────
+# systemd 天然单实例：同名 unit 不会并发两份，Restart 也保证旧进程已退出。
+# 这是硬要求 —— scheduler.js 的 timers/started 是模块级进程内状态，
+# sync-state-*.json 是非原子写的本地文件且无锁，两个副本会抢写同一批状态
+# 文件并产生重复入账。
+# 因此：不要写 @.service 模板单元，不要用 ExecStartPre 拉第二个进程，
+# 不要改用 PM2（它的 cluster/fork 模式会破坏这个保证）。
+
+# ───────────── 重启 ─────────────
+Restart=always
+RestartSec=10
+
+# ───────────── 停止 ─────────────
+# 全项目零 SIGTERM handler，所以 SIGTERM 走 Node 默认动作（立即退出，
+# 不 close DB、不 checkpoint WAL）。WAL 模式下这【不会】损坏数据库：
+# 已提交事务在 WAL 里，下一个连接会 replay。代价是 WAL 不被回收，
+# 由备份脚本的 wal_checkpoint(TRUNCATE) 兜底。
+KillSignal=SIGTERM
+KillMode=control-group
+TimeoutStopSec=30
+FinalKillSignal=SIGKILL
+
+# ───────────── 启动超时 ─────────────
+# 每次启动都跑一整套 migration（db/init.js 的 migrate()），端口在此期间不开。
+# 本机实测：208MB 库上冷启动 migration 约 10.1s。取 10 倍余量。
+# 注意 Type=simple 在 fork 瞬间就报 active，所以 systemctl status 显示绿色
+# 不等于服务可用 —— 要看日志里的 [scheduler] per-company parallel loops。
+TimeoutStartSec=120
+
+# ───────────── 内存上限 ─────────────
+MemoryAccounting=yes
+MemoryHigh=2G
+MemoryMax=2500M
+TasksMax=256
+
+# ───────────── 日志 ─────────────
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=trader-dashboard
+
+# ───────────── 加固 ─────────────
+# ProtectSystem=strict 会让 /opt/trader-dashboard 变成只读。这是安全的：
+# ensurePublicUtf8（server/index.js）只在文件第二字节为 0x00 时才写入，而
+# public 下全部 22 个 js/css 文件都不满足该条件，函数在当前代码树上是 no-op；
+# 且它现在包了 try/catch，即使真触发也只会 warn 而不会让服务起不来。
+NoNewPrivileges=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectSystem=strict
+ProtectHome=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+ReadWritePaths=/var/lib/trader-dashboard
+RestrictSUIDSGID=yes
+RestrictRealtime=yes
+LockPersonality=yes
+SystemCallArchitectures=native
+UMask=0027
+
+[Install]
+WantedBy=multi-user.target

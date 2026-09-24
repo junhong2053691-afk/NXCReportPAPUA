@@ -1,0 +1,43 @@
+{
+  "port": 3000,
+  "sessionSecret": "__FILL_ME__",
+  "timezone": "Australia/Sydney",
+  "syncIntervalSeconds": 6,
+  "slowSyncIntervalSeconds": 60,
+  "refreshIntervalSeconds": 8,
+  "apiTimeoutMs": 25000,
+  "integrityFailThreshold": 3,
+  "maxPages": 1200,
+  "pageSize": 200,
+  "requestDelayMs": 120,
+  "transactionRecentDays": 30,
+  "transactionBackfillDays": 365,
+  "transactionChunkDays": 31,
+  "transactionMaxPages": 2000,
+  "customerInactiveDays": 2,
+  "customerDormantMaxDays": 7,
+  "admin": {
+    "username": "__FILL_ME__",
+    "password": "__FILL_ME__",
+    "name": "admin"
+  },
+  "platform": {
+    "apiUrl": "https://jkausx6.u55y38.com/api/v1/index.php",
+    "accessId": "__FILL_ME__",
+    "accessToken": "__FILL_ME__",
+    "docsUrl": "https://k3o58k.com/"
+  },
+  "transactionQuickDays": 1,
+  "transactionQuickMaxPages": 200,
+  "transactionFullDayIntervalSeconds": 60,
+  "transactionWatermarkBufferSeconds": 120,
+  "userSyncIntervalSeconds": 120,
+  "enrichIntervalSeconds": 300,
+  "quickRequestDelayMs": 40,
+  "syncIntegrityIntervalSeconds": 90,
+  "yesterdayIntegrityIntervalSeconds": 600,
+  "userQuickMaxPages": 12,
+  "userTailPages": 5,
+  "userTailIntervalSeconds": 30,
+  "userPruneIntervalSeconds": 3600
+}
