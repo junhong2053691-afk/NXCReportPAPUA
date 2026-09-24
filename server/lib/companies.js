@@ -1,6 +1,7 @@
 const fs = require("fs");
 const { readConfig } = require("./readConfig");
 const { syncStatePath } = require("./paths");
+const { runAtomic } = require("./auditLog");
 
 const PRESETS = [
   { id: "aussiex6", name: "AussieX6", sort_order: 1 },
@@ -157,13 +158,14 @@ function deleteCompany(db, id) {
   if (!row) return null;
   const total = db.prepare("SELECT COUNT(*) AS n FROM companies").get().n;
   if (total <= 1) throw new Error("至少保留一家公司，无法删除");
-  const run = db.transaction(() => {
+  // 不能用 db.transaction()：那是 better-sqlite3 专有 API，
+  // 生产在 Node >= 22 上走 node:sqlite，该属性为 undefined → TypeError。
+  runAtomic(db, () => {
     db.prepare("DELETE FROM transactions WHERE company_id = ?").run(id);
     db.prepare("DELETE FROM customers WHERE company_id = ?").run(id);
     db.prepare("DELETE FROM daily_stats WHERE company_id = ?").run(id);
     db.prepare("DELETE FROM companies WHERE id = ?").run(id);
   });
-  run();
   const syncFile = syncStatePath(id);
   try {
     fs.unlinkSync(syncFile);

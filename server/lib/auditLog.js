@@ -47,7 +47,11 @@ function tableExists(db, name) {
 }
 
 function runAtomic(db, fn) {
-  if (db.inTransaction) return fn();
+  // 驱动差异：better-sqlite3 暴露 inTransaction，node:sqlite 暴露 isTransaction。
+  // 只判一个的话，在另一个驱动上这层"已在事务内就别再 BEGIN"的保护就是死代码，
+  // 嵌套调用会得到 "cannot start a transaction within a transaction"，
+  // 而 catch 里的 ROLLBACK 会把外层已完成的写入一起回滚。
+  if (db.isTransaction || db.inTransaction) return fn();
   if (typeof db.transaction === "function") return db.transaction(fn)();
   db.exec("BEGIN");
   try {
