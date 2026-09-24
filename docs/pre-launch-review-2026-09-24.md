@@ -3,7 +3,29 @@
 **日期**：2026-09-24
 **范围**：全库（`server/` + `public/`），三轴审查——数据准确性 / 路由与安全 / 前端与运维
 **取证环境**：`server/db/trader.db`（237MB，4 家公司、162,493 笔交易、230,148 个客户、568 条账单流水），只读访问
-**运行时**：Node v24.15.0，本次未修改任何源码与生产数据
+**运行时**：Node v24.15.0，审查当时未修改任何源码与生产数据
+
+---
+
+## 修复状态（2026-09-24 生产部署时更新）
+
+后续的部署工作修掉了下列各项，**其余条目仍然成立**。生产数据始终未被改动。
+
+| 编号 | 状态 | 说明 |
+|---|---|---|
+| B1 | **已修** | `color` 服务端强制 `^#[0-9a-fA-F]{6}$`；status-options / c-status-options 的 5 个写操作加 `requireAdmin`（两个 GET 保持 operator 可读）。实测 operator 提交 payload 返回 403，admin 提交也被规范成 `#64748b` |
+| B5 | **已修** | 新增全局 4 参数 error handler + `/api` 的 JSON 404；systemd unit 里带 `NODE_ENV=production`。实测 500 只返回 `{"error":"服务器内部错误"}`，无堆栈、无路径、无 SQL 细节 |
+| B6 | **已修** | `deleteCompany` 改用 `runAtomic`，不再调用 better-sqlite3 专有的 `db.transaction()` |
+| B7 | **部分修复** | `runAtomic` 现在同时判 `isTransaction` 与 `inTransaction`，嵌套保护在两个驱动上都生效（实测）。但**测试仍只跑 better-sqlite3 路径**，双驱动测试与统一兼容层仍在 backlog |
+| B8 | **已修** | session 换成 SQLite store（`server/lib/sessionStore.js`，独立 `sessions.db`），实测强杀进程重启后登录态存活；`api()` 拦 401 跳登录页。**另外发现并修掉一个更深层的 bug**：`requireLogin` 用 `req.path` 判断 API 请求，而在 `router.use()` 里该值已被剥掉挂载前缀，导致后端从来只发 302 不发 401 —— 前端的 401 处理原本会是死代码 |
+| B9 | **已修** | `.gitignore` 已排除 `config.json` 与 `server/db/*.db*` 等。仓库已初始化（此前 `.git` 是空目录），首个 commit 只含护栏，实测 93 个入库文件中九类危险模式零命中 |
+| B4 | **缓解，未拆除** | `config.json` 的 `maxPages` 由 500 提到 1200（覆盖约 24 万客户，pokies7bet 余量从 126 页变为 826 页）。**代码层的熔断仍未加**，仍在 backlog 第 1 项 |
+| H3 | **部分修复** | `/api/banks` 的 `requireCompany` 与 `banks.js` 的 session 回退**尚未处理** |
+| 其他 | 未处理 | 见文末 backlog |
+
+另外新增两项部署期加固：应用只监听 `127.0.0.1`（此前绑 0.0.0.0，VPS 公网 IP:3000
+可直接访问并绕过隧道）；`ensurePublicUtf8` 包了 try/catch（它在 `app.listen` 之前
+对代码目录写文件，而生产用 `ProtectSystem=strict` 挂成只读）。
 
 ---
 
@@ -427,9 +449,24 @@ Cloudflare 隧道到源站是 HTTP，cookie 未标 Secure。同时 `express.urle
 
 ### 其余
 
-- **`ensurePublicUtf8` 判不出它要修的那种文件**——[server/index.js:19-35](../server/index.js) 用 `buf[1] === 0` 判 UTF-16LE，但**带 BOM 的文件以 `FF FE` 开头**（`buf[1] === 0xFE`），正是 PowerShell 5.1 `Out-File` 的产物。同仓库的 [server/lib/readConfig.js:3-13](../server/lib/readConfig.js) 已经写对了（BOM + 奇数位 NUL 比例双重判断），应直接复用 `looksUtf16Le`。此外它在**服务源码树上**做非原子 `writeFileSync`、无 try/catch、且位于 `app.listen` 之前——进程在此被杀会留下截断的 `app.js`/`style.css`；`EPERM`/`EBUSY`（编辑器锁、OneDrive、杀毒）会让服务直接起不来。
+- **两个 UTF-16 侦测函数各有盲区，都会漏判** `[实测]`
 
-- **`deleteCompany` 只清 3 张表**——[server/lib/companies.js:161-164](../server/lib/companies.js) 删了 `transactions` / `customers` / `daily_stats`，遗漏全部 `bank_*`、`audit_*` 和 `user_companies`。且 `user_companies` 无外键、`PRAGMA foreign_keys` 未开启。重建同 ID 公司会「继承」旧流水与余额，老 operator 自动重获授权。（该接口目前还因 B6 直接 500。）
+  > **勘误（2026-09-24）**：此条原先说 `readConfig.js` 的 `looksUtf16Le` "已经写对了"并建议 `ensurePublicUtf8` 直接复用它。**这个建议是错的**，实测两者各有盲区：
+  >
+  > | 函数 | 判据 | 盲区 |
+  > |---|---|---|
+  > | `ensurePublicUtf8`（[server/index.js:19-35](../server/index.js)） | `buf[1] === 0` | **带 BOM 的文件**（`FF FE` 开头，`buf[1]` 是 `0xFE`）——正是 PowerShell 5.1 `Out-File` 的产物 |
+  > | `looksUtf16Le`（[server/lib/readConfig.js:3-13](../server/lib/readConfig.js)） | BOM + 前 200 字节里奇数位 NUL 比例 > 0.8 | **中文密集的无 BOM 文件**。中文在 UTF-16LE 里两个字节都非 0（`操` = `cd 64`），所以开头是中文的文件比例上不去 |
+  >
+  > **真实受害者就在本仓库**：`README.md` 是 UTF-16LE 无 BOM，505 个 NUL 里 492 个在奇数位（97.4%），但全文比例只有 68%，低于 0.8 阈值 → `readTextFile` 读出的是乱码。（已在本次部署中转为 UTF-8。）
+  >
+  > 可靠的判据是**扫全文**而非前 200 字节，并改用"NUL 存在且绝大多数落在奇数位"：合法 UTF-8 文本不含 NUL，而 UTF-16LE 里 ASCII 字符编码为 `xx 00`，NUL 几乎全在奇数位。即 `nul > 0 && nul / len > 0.05 && oddNul / nul > 0.9`。改动 `readConfig.js` 会影响启动时读 `config.json` 的路径，所以**未在本次部署中动它**，列入 backlog。
+
+  此外 `ensurePublicUtf8` 在**服务源码树上**做非原子 `writeFileSync`、且位于 `app.listen` 之前——进程在此被杀会留下截断的 `app.js`/`style.css`；`EPERM`/`EBUSY`（编辑器锁、OneDrive、杀毒）或生产的只读挂载会让服务直接起不来。**已在本次部署中给它包了 try/catch**（降级为 warn），但判定逻辑本身未改。
+
+- **`deleteCompany` 只清 3 张表**——[server/lib/companies.js:161-164](../server/lib/companies.js) 删了 `transactions` / `customers` / `daily_stats`，遗漏全部 `bank_*`、`audit_*` 和 `user_companies`。重建同 ID 公司会「继承」旧流水与余额，老 operator 自动重获授权。
+
+  > **勘误（2026-09-24）**：此条原先写「`user_companies` 无外键、`PRAGMA foreign_keys` 未开启」，**后半句是错的**。实测 better-sqlite3 与 `node:sqlite` 的 `foreign_keys` 默认都是 **1（开启）**。但 `server/db/schema.sql` 里 `REFERENCES` / `FOREIGN KEY` 的命中数是 **0** —— 全库根本没有任何外键定义，所以这个 pragma 开与不开完全等价。结论不变，归因应为「没有外键定义」：去开那个 pragma 不会有任何作用。
 
 - **删除银行账户后日报不自洽**——保留了它的 `bank_ledger` 行，于是 [server/lib/bankReport.js:186](../server/lib/bankReport.js) 的总余额丢掉它，但 `totalIn` / `totalOut` / DEPOSIT / WITHDRAW / C STATUS 仍统计它的流水。
 
