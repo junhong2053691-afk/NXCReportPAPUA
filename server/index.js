@@ -6,6 +6,7 @@ const { readConfig } = require("./lib/readConfig");
 const { getDb, seedAdmin } = require("./db/init");
 const { requireLogin, resolveCompany } = require("./middleware");
 const { configPath, dbPath } = require("./lib/paths");
+const { createSessionStore } = require("./lib/sessionStore");
 
 const cfg = readConfig();
 
@@ -23,12 +24,20 @@ function ensurePublicUtf8(publicDir) {
     const dir = path.join(publicDir, sub);
     if (!fs.existsSync(dir)) continue;
     for (const name of fs.readdirSync(dir)) {
-      const file = path.join(dir, name);
-      if (!fs.statSync(file).isFile()) continue;
-      const buf = fs.readFileSync(file);
-      if (buf.length >= 2 && buf[1] === 0) {
-        fs.writeFileSync(file, buf.toString("utf16le"), "utf8");
-        console.log("[utf8-fix] converted", sub + "/" + name);
+      // 整体 try/catch：这个函数在 app.listen 之前跑，而生产用 systemd 的
+      // ProtectSystem=strict 把代码目录挂成只读。一旦真触发写入就会抛 EROFS，
+      // 让服务直接起不来，且报错内容与"UTF-8 转换"毫无关联，极难排查。
+      // 当前代码树上所有 public 文件的第二字节都不是 0x00，此函数是 no-op。
+      try {
+        const file = path.join(dir, name);
+        if (!fs.statSync(file).isFile()) continue;
+        const buf = fs.readFileSync(file);
+        if (buf.length >= 2 && buf[1] === 0) {
+          fs.writeFileSync(file, buf.toString("utf16le"), "utf8");
+          console.log("[utf8-fix] converted", sub + "/" + name);
+        }
+      } catch (error) {
+        console.warn("[utf8-fix] skipped", sub + "/" + name, error.message);
       }
     }
   }
@@ -38,15 +47,49 @@ const app = express();
 const publicDir = path.join(__dirname, "..", "public");
 ensurePublicUtf8(publicDir);
 
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+// 只信任 loopback。绑定 127.0.0.1 后，唯一能连上 socket 的就是本机的 cloudflared。
+// 用 "loopback" 而不是 1：req.ip 会解析成真实客户端 IP，且语义比"信任右边第 1 跳"精确。
+app.set("trust proxy", "loopback");
+
+// 源站是 HTTP-only 且只监听 127.0.0.1 → 能到达这里的请求必然来自本机 cloudflared，
+// 而 cloudflared 的对外侧永远是 Cloudflare 边缘的 HTTPS。据此把 scheme 显式钉成 https，
+// 不依赖 cloudflared 是否注入 X-Forwarded-Proto。
+//
+// 这一步是 cookie.secure 能工作的前提：express-session 在 cookie.secure 为 true
+// 而 issecure() 判定为 false 时会【静默跳过 Set-Cookie】—— 表现是登录返回 200、
+// 前端跳首页、requireLogin 发现无 session 又踢回登录页，形成无任何报错的死循环。
+app.use((req, _res, next) => {
+  if (!req.headers["x-forwarded-proto"]) req.headers["x-forwarded-proto"] = "https";
+  next();
+});
+
+app.use(express.json({ limit: "1mb" }));
+app.use(express.urlencoded({ extended: true, limit: "1mb" }));
 app.use(
   session({
-    name: cfg.sessionName || cfg.sessionName || "connect.sid",
-    secret: cfg.sessionSecret || cfg.sessionSecret,
+    name: cfg.sessionName || "connect.sid",
+    secret: cfg.sessionSecret,
+    // 持久化 store：默认的 MemoryStore 会让每次重启都把所有人踢下线，
+    // 而重启是最常见的运维操作。独立的 sessions.db，不碰主库。
+    store: createSessionStore(),
     resave: false,
     saveUninitialized: false,
-    cookie: { maxAge: 12 * 60 * 60 * 1000 },
+    // proxy:true 让 issecure() 直接读 X-Forwarded-Proto，
+    // 绕开 express 的 trust-proxy 编译细节。
+    proxy: true,
+    // rolling:true 配 resave:false 会让每个请求都写一次 store，
+    // 而前端有 6s 轮询 —— 多个操作员在线就是每秒数次写。
+    rolling: false,
+    cookie: {
+      maxAge: 12 * 60 * 60 * 1000,
+      httpOnly: true,
+      secure: true,
+      // 必须是 lax 而非 strict：操作员会从 WhatsApp / Telegram 点链接进后台，
+      // strict 下这种跨站顶层导航不带 cookie，每次都会被弹回登录页。
+      // lax 允许顶层 GET 导航带 cookie，同时仍挡住跨站 POST。
+      sameSite: "lax",
+      path: "/",
+    },
   })
 );
 
@@ -504,9 +547,48 @@ app.get("/login.html", (_req, res) => {
   res.sendFile(path.join(publicDir, "login.html"));
 });
 
+// 未知 /api 路径必须返回 JSON。否则它会穿过上面的 express.static 落到
+// Express 默认 404（HTML），而前端 api() 的 res.json() 解析失败后
+// 只会显示一句笼统的"请求失败"，掩盖真正的路径错误。
+// 位置要求：在所有 /api 路由注册之后、error handler 之前。
+app.use("/api", (_req, res) => {
+  res.status(404).json({ error: "接口不存在" });
+});
+
+// 全局错误处理器。必须是最后一个 app.use，且必须恰好 4 个形参
+// （少一个 Express 会把它当普通中间件）。
+//
+// 没有它的话，Express 4 的默认 handler 在 NODE_ENV 不是 production 时
+// 会把完整堆栈（绝对路径、SQL 片段、依赖版本）写进 HTTP 响应体。
+app.use((err, req, res, next) => {
+  const status = Number(err && err.status) || 500;
+  console.error("[error]", req.method, req.originalUrl, status, err && (err.stack || err.message));
+  if (res.headersSent) return next(err);
+  if (req.path.startsWith("/api/")) {
+    return res.status(status).json({
+      // 只有 4xx 才回显 message；5xx 一律笼统，避免泄露 SQL / 路径 / 结构
+      error: status < 500 ? String((err && err.message) || "请求失败") : "服务器内部错误",
+    });
+  }
+  res.status(status).type("html").send("服务暂时不可用，请稍后重试");
+});
+
+// Express 4 不捕获 async handler 里 rejected 的 promise，而 Node 22 默认
+// --unhandled-rejections=throw 会直接杀掉进程 —— 那会让四家公司的同步循环
+// 一起中断。宁可带伤运行并在 journald 留下证据。
+// 注意：故意不处理 uncaughtException —— 那种状态下进程语义已不可信，
+// 让它退出由 systemd 重启更安全。
+process.on("unhandledRejection", (reason) => {
+  console.error("[unhandledRejection]", reason && (reason.stack || reason));
+});
+
 const port = cfg.port || 3000;
-app.listen(port, () => {
-  console.log("[trader-dashboard] http://localhost:" + port);
+// 绑 127.0.0.1：生产用 Cloudflare 隧道入站，不绑的话 VPS 公网 IP:3000
+// 可被直接访问，完全绕过隧道与 Cloudflare Access。
+// 留 cfg.host 兜底供本机开发（可填 0.0.0.0），生产 config 不写该字段。
+const host = cfg.host || "127.0.0.1";
+app.listen(port, host, () => {
+  console.log("[trader-dashboard] http://" + host + ":" + port);
   console.log("[trader-dashboard] config:", configPath());
   console.log("[trader-dashboard] db:", dbPath());
   console.log("[trader-dashboard] admin login:", cfg.admin.username);
