@@ -1,0 +1,16 @@
+# 默认不做任何行尾 / 文本转换。两个理由：
+#   1) DEPLOY.md 是 UTF-16LE 编码（要用 server/lib/readConfig.js 的 readTextFile 才能读），
+#      任何 CRLF 规范化都会破坏它的字节流
+#   2) 在 Windows 上开发、在 Linux 上运行 —— 让 git 少插手
+* -text
+
+# 但这几类必须是 LF，否则 Linux 上 `#!/usr/bin/env bash\r` 会报
+# "bad interpreter: no such file or directory"
+*.sh      text eol=lf
+*.service text eol=lf
+*.timer   text eol=lf
+
+# 二进制
+*.mp3 binary
+*.png binary
+*.db  binary
