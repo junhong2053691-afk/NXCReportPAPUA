@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="light dark">
+  <title>&#30331;&#24405; - &#25805;&#30424;&#25163;&#21518;&#21488;</title>
+  <script>
+    try {
+      document.documentElement.setAttribute(
+        "data-theme",
+        localStorage.getItem("dash-theme") === "dark" ? "dark" : "light"
+      );
+    } catch (e) {}
+  </script>
+  <link rel="stylesheet" href="/css/style.css?v=20260731liquid3">
+</head>
+<body class="login-body">
+  <main class="login-page">
+    <section class="login-box glass-panel" aria-labelledby="login-title">
+      <div class="login-brand" aria-hidden="true">T</div>
+      <div class="login-heading">
+        <p class="login-kicker">Trader Command Center</p>
+        <h1 id="login-title">&#25805;&#30424;&#25163;&#21518;&#21488;</h1>
+        <p>&#20351;&#29992;&#24050;&#20998;&#37197;&#30340;&#36134;&#21495;&#23433;&#20840;&#30331;&#24405;</p>
+      </div>
+      <form id="login-form" novalidate>
+        <div class="form-group">
+          <label for="username">&#36134;&#21495; ID</label>
+          <input type="text" id="username" name="username" autocomplete="username" autocapitalize="none" spellcheck="false" required>
+        </div>
+        <div class="form-group">
+          <label for="password">&#23494;&#30721;</label>
+          <div class="password-field">
+            <input type="password" id="password" name="password" autocomplete="current-password" required>
+            <button type="button" class="password-toggle icon-btn" id="password-toggle" aria-label="&#26174;&#31034;&#23494;&#30721;" aria-pressed="false">
+              <i data-lucide="eye"></i>
+              <span class="icon-fallback" aria-hidden="true">Show</span>
+            </button>
+          </div>
+        </div>
+        <div id="error" class="error-msg" role="alert" aria-live="assertive" hidden></div>
+        <button type="submit" class="btn btn-primary login-submit" id="login-submit">
+          <span class="btn-label">&#30331;&#24405;</span>
+          <span class="btn-spinner" aria-hidden="true"></span>
+        </button>
+      </form>
+      <p class="login-footnote">&#25968;&#25454;&#19982;&#25903;&#20184;&#25805;&#20316;&#25353;&#20844;&#21496;&#38548;&#31163;</p>
+    </section>
+  </main>
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+  <script src="/js/login.js?v=20260731liquid3"></script>
+</body>
+</html>
