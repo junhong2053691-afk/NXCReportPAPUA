@@ -74,7 +74,12 @@ function upsertStatusOption(db, companyId, body) {
   const value = normalizeStatusValue(body.value || body.label);
   if (!value) throw Object.assign(new Error("status value required"), { status: 400 });
   const label = String(body.label || defaultLabel(value)).trim();
-  const color = String(body.color || "#64748b").trim();
+  // 必须校验成严格的 6 位 hex。这个值会被前端拼进 style="..." 属性
+  // （public/js/bank-accounts.js 的 statusStyleAttr → gridCellHtml/roCellHtml，
+  // 两处都没有转义），所以一个含引号的 color 就能闭合属性并注入事件处理器，
+  // 让任何 operator 在 admin 的浏览器里执行 JS，进而改走公司 API 凭证。
+  const rawColor = String(body.color || "").trim();
+  const color = /^#[0-9a-fA-F]{6}$/.test(rawColor) ? rawColor : "#64748b";
   const active = body.active === undefined ? 1 : (body.active ? 1 : 0);
   const maxOrder = db
     .prepare("SELECT COALESCE(MAX(sort_order), -1) AS m FROM bank_status_options WHERE company_id = ?")

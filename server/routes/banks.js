@@ -28,6 +28,7 @@ const {
   deleteStatusOption,
 } = require("../lib/bankStatusOptions");
 const { listCompaniesForUser } = require("../lib/userAccess");
+const { requireAdmin } = require("../middleware");
 const {
   BANK_ACCOUNT_FIELDS,
   LEDGER_FIELDS,
@@ -155,7 +156,11 @@ router.get("/c-status-options", (req, res) => {
   res.json({ options, companies });
 });
 
-router.post("/c-status-options", (req, res) => {
+// 以下 STATUS / C STATUS 的写操作全部要求 admin。
+// 对应页面 /bank-settings.html 本来就由 requireAdminPage 保护，但 API 之前
+// 只挂了 requireLogin（server/index.js 的 /api/banks），operator 可以直接 curl，
+// 篡改全公司的 STATUS 配置（影响对账与所有流水显示），也是 XSS 提权的入口。
+router.post("/c-status-options", requireAdmin, (req, res) => {
   const cid = companyId(req);
   const name = String(req.body.name || "").trim();
   const target = req.body.target_company_id != null ? String(req.body.target_company_id).trim() : "";
@@ -165,7 +170,7 @@ router.post("/c-status-options", (req, res) => {
   res.json({ row });
 });
 
-router.delete("/c-status-options/:name", (req, res) => {
+router.delete("/c-status-options/:name", requireAdmin, (req, res) => {
   const cid = companyId(req);
   const name = decodeURIComponent(req.params.name || "").trim();
   getDb()
@@ -179,7 +184,7 @@ router.get("/status-options", (req, res) => {
   res.json({ options: listStatusOptions(getDb(), cid) });
 });
 
-router.post("/status-options", (req, res) => {
+router.post("/status-options", requireAdmin, (req, res) => {
   const cid = companyId(req);
   try {
     res.json({ row: upsertStatusOption(getDb(), cid, req.body || {}) });
@@ -188,7 +193,7 @@ router.post("/status-options", (req, res) => {
   }
 });
 
-router.put("/status-options/:value", (req, res) => {
+router.put("/status-options/:value", requireAdmin, (req, res) => {
   const cid = companyId(req);
   try {
     res.json({
@@ -202,7 +207,7 @@ router.put("/status-options/:value", (req, res) => {
   }
 });
 
-router.delete("/status-options/:value", (req, res) => {
+router.delete("/status-options/:value", requireAdmin, (req, res) => {
   const cid = companyId(req);
   deleteStatusOption(getDb(), cid, decodeURIComponent(req.params.value || ""));
   res.json({ ok: true });
