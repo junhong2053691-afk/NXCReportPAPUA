@@ -1,7 +1,8 @@
-# 默认不做任何行尾 / 文本转换。两个理由：
-#   1) DEPLOY.md 是 UTF-16LE 编码（要用 server/lib/readConfig.js 的 readTextFile 才能读），
-#      任何 CRLF 规范化都会破坏它的字节流
-#   2) 在 Windows 上开发、在 Linux 上运行 —— 让 git 少插手
+# 默认不做任何行尾 / 文本转换：在 Windows 上开发、在 Linux 上运行，让 git 少插手。
+#
+# 历史背景：这个仓库里曾有 UTF-16LE 编码的文件（DEPLOY.md 就是，已转成 UTF-8），
+# 而 server/index.js 的 ensurePublicUtf8 至今还在启动时试图修复这类文件。
+# 保持 -text 可以避免 git 的行尾规范化再次破坏任何非 UTF-8 文件的字节流。
 * -text
 
 # 但这几类必须是 LF，否则 Linux 上 `#!/usr/bin/env bash\r` 会报
