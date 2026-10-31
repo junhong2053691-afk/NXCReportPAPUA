@@ -3,7 +3,6 @@ const { inactiveDays, dormantMaxDays } = require("./customerSegments");
 const { testNameExclude } = require("./winLoss");
 
 const MAX_RANGE_DAYS = 90;
-const MAX_TREND_DAYS = 31;
 
 const SEGMENTS = {
   all: "all",
@@ -132,48 +131,6 @@ function queryReturns(db, companyId, dateFrom, dateTo, minGap) {
     .all(companyId, dateFrom, dateTo, companyId, minGap);
 }
 
-function queryTrend(db, companyId, trendStart, dateTo) {
-  const ck = customerKeySql("t");
-  const ck2 = customerKeySql("t2");
-  return db
-    .prepare(
-      `WITH range_deps AS (
-         SELECT t.created_date, t.created_at, ${ck} AS ck
-         FROM transactions t
-         WHERE t.company_id = ? AND t.type = 'DEPOSIT'
-           AND t.created_date >= ? AND t.created_date <= ?
-           AND ${testNameExclude("t")}
-           AND ${ck} IS NOT NULL
-       ),
-       with_prev AS (
-         SELECT r.created_date, r.ck,
-           (
-             SELECT MAX(t2.created_date)
-             FROM transactions t2
-             WHERE t2.company_id = ?
-               AND t2.type = 'DEPOSIT'
-               AND ${testNameExclude("t2")}
-               AND ${ck2} = r.ck
-               AND t2.created_at < r.created_at
-           ) AS prev_dep_date
-         FROM range_deps r
-       ),
-       returns AS (
-         SELECT created_date, ck
-         FROM with_prev
-         WHERE prev_dep_date IS NOT NULL
-           AND julianday(created_date) - julianday(prev_dep_date) >= 3
-       )
-       SELECT created_date AS date,
-              COUNT(DISTINCT ck) AS users,
-              COUNT(*) AS dep_count
-       FROM returns
-       GROUP BY created_date
-       ORDER BY created_date`
-    )
-    .all(companyId, trendStart, dateTo, companyId);
-}
-
 function computeCustomerReturnReport(db, dateFrom, dateTo, opts = {}) {
   const companyId = opts.companyId;
   const range = normalizeDateRange(dateFrom, dateTo);
@@ -233,20 +190,6 @@ function computeCustomerReturnReport(db, dateFrom, dateTo, opts = {}) {
 
   rows.sort((a, b) => b.return_dep_total - a.return_dep_total || b.silent_days - a.silent_days);
 
-  const trendStart =
-    daysBetween(range.dateFrom, range.dateTo) <= MAX_TREND_DAYS
-      ? range.dateFrom
-      : shiftDateKey(range.dateTo, -(MAX_TREND_DAYS - 1));
-  const trendRaw = queryTrend(db, companyId, trendStart, range.dateTo);
-  const trendMap = Object.fromEntries(trendRaw.map((r) => [r.date, r]));
-  const trend = [];
-  let d = trendStart;
-  while (d <= range.dateTo) {
-    const hit = trendMap[d];
-    trend.push({ date: d, users: hit?.users || 0, dep_count: hit?.dep_count || 0 });
-    d = shiftDateKey(d, 1);
-  }
-
   const today = todayKey();
   const pools = poolCounts(db, today, companyId);
   const returnUsers = rows.length;
@@ -271,7 +214,6 @@ function computeCustomerReturnReport(db, dateFrom, dateTo, opts = {}) {
       return_rate_pct: returnRate,
     },
     pools,
-    trend,
     rows,
     total: rows.length,
     hint:

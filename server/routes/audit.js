@@ -1,7 +1,10 @@
 const express = require("express");
 const { getDb } = require("../db/init");
 const { requireAdmin, requireCompany } = require("../middleware");
-const { TZ, shiftDateKey } = require("../lib/dates");
+// localMidnightUtc 搬进了 lib/dates.js：它是全项目唯一正确的时区↔UTC 换算器，
+// 而时区现在是运行时注入的。以前这里写 `const { TZ } = require(...)`，解构会在
+// require 时快照旧值，注入之后永远看不见新时区。
+const { shiftDateKey, localMidnightUtc } = require("../lib/dates");
 const { eventRow } = require("../lib/auditLog");
 
 const router = express.Router();
@@ -9,37 +12,6 @@ router.use(requireAdmin);
 router.use(requireCompany);
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
-
-function localMidnightUtc(dateKey) {
-  if (!DATE_RE.test(String(dateKey || ""))) return null;
-  const [year, month, day] = dateKey.split("-").map(Number);
-  const target = Date.UTC(year, month - 1, day, 0, 0, 0);
-  let guess = target;
-  const formatter = new Intl.DateTimeFormat("en-CA", {
-    timeZone: TZ,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-    hour12: false,
-  });
-  for (let i = 0; i < 3; i += 1) {
-    const parts = formatter.formatToParts(new Date(guess));
-    const value = (type) => Number(parts.find((part) => part.type === type)?.value || 0);
-    const represented = Date.UTC(
-      value("year"),
-      value("month") - 1,
-      value("day"),
-      value("hour") % 24,
-      value("minute"),
-      value("second")
-    );
-    guess += target - represented;
-  }
-  return new Date(guess).toISOString().slice(0, 19).replace("T", " ");
-}
 
 function parseRefsCompact(value) {
   if (!value) return [];

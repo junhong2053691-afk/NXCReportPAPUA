@@ -19,6 +19,8 @@ const ACTION_LABELS = {
   "bank_account.updated": "修改银行账户",
   "bank_account.banned": "封禁银行账户",
   "bank_account.unbanned": "解封银行账户",
+  "bank_account.archived": "归档银行账户",
+  "bank_account.unarchived": "取消归档银行账户",
   "bank_account.deleted": "删除银行账户",
 };
 
@@ -67,6 +69,8 @@ function escAudit(value) {
 }
 
 function sydneyDateKey(date) {
+  // en-CA gives an ISO YYYY-MM-DD key for API params, not a display language.
+  // Do NOT route this through dateLocale().
   return date.toLocaleDateString("en-CA", { timeZone: "Australia/Sydney" });
 }
 
@@ -162,11 +166,14 @@ function renderEventRows(rows) {
     const ref = primaryRef(row.refs);
     return `<tr class="audit-row" data-event-id="${Number(row.id)}" tabindex="0" aria-label="查看 ${escAudit(actionLabel(row.action))} 详情">
       <td class="audit-time"><strong>${escAudit(formatAuditTime(row.occurred_at).slice(0, 10))}</strong><span>${escAudit(formatAuditTime(row.occurred_at).slice(12))}</span></td>
-      <td><div class="audit-actor"><strong>${escAudit(actorLabel(row))}</strong><span>${sourceChip(row)}${row.actor_role ? ` ${escAudit(row.actor_role)}` : ""}</span></div></td>
+      <td><div class="audit-actor"><strong translate="no">${escAudit(actorLabel(row))}</strong><span>${sourceChip(row)}${row.actor_role ? ` ${escAudit(row.actor_role)}` : ""}</span></div></td>
       <td><span class="audit-action audit-action-${escAudit(row.action.split(".")[0])}">${escAudit(actionLabel(row.action))}</span></td>
       <td>${ref ? `<button class="audit-ref-link" type="button" data-ref-type="${escAudit(ref.type)}" data-ref-id="${escAudit(ref.id)}">${escAudit(refLabel(ref))}</button>` : "—"}</td>
-      <td class="audit-summary-cell">${escAudit(row.summary || actionLabel(row.action))}</td>
-      <td class="audit-reason-cell">${row.reason ? escAudit(row.reason) : '<span class="muted">—</span>'}</td>
+      <!-- summary is server-generated text recorded at the time of the action,
+           reason is free text the operator typed: an audit trail must keep the
+           wording it was written with, so neither is translated. -->
+      <td class="audit-summary-cell" translate="no">${escAudit(row.summary || actionLabel(row.action))}</td>
+      <td class="audit-reason-cell" translate="no">${row.reason ? escAudit(row.reason) : '<span class="muted">—</span>'}</td>
       <td><button class="icon-btn audit-detail-btn" type="button" data-event-id="${Number(row.id)}" aria-label="查看详情"><i data-lucide="chevron-right"></i></button></td>
     </tr>`;
   }).join("");

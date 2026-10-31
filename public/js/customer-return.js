@@ -5,7 +5,6 @@ let currentDateFrom = today;
 let currentDateTo = today;
 let currentSegment = "all";
 let currentPage = 1;
-let trendChart = null;
 const returnLoadGate = createRequestGate();
 const RETURN_PAGE_SIZE = 50;
 
@@ -31,17 +30,6 @@ function readDateInputs() {
   }
 }
 
-function loadChartJs() {
-  return new Promise(function (resolve, reject) {
-    if (window.Chart) return resolve();
-    var s = document.createElement("script");
-    s.src = "https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js";
-    s.onload = resolve;
-    s.onerror = reject;
-    document.head.appendChild(s);
-  });
-}
-
 function renderSummary(data) {
   const s = data.summary;
   document.getElementById("report-date").textContent = "\u62a5\u8868\u65e5\u671f: " + data.date;
@@ -52,60 +40,6 @@ function renderSummary(data) {
   document.getElementById("card-offline-37").textContent = s.offline_3_7 + " \u4eba";
   document.getElementById("card-return-rate").textContent = s.return_rate_pct + "%";
   document.getElementById("report-hint").textContent = data.hint || "";
-}
-
-function renderTrend(rows, data) {
-  const ctx = document.getElementById("return-trend-chart");
-  const title = document.getElementById("trend-title");
-  if (title) {
-    title.textContent =
-      data.dateFrom === data.dateTo ? "\u8fd17\u5929\u56de\u6d41\u8d8b\u52bf" : "\u56de\u6d41\u65e5\u8d8b\u52bf";
-  }
-  if (!ctx || !rows.length) return;
-  if (trendChart) trendChart.destroy();
-  const styles = getComputedStyle(document.documentElement);
-  trendChart = new Chart(ctx, {
-    type: "line",
-    data: {
-      labels: rows.map(function (r) {
-        return String(r.date).slice(5);
-      }),
-      datasets: [
-        {
-          label: "\u56de\u6d41\u4eba\u6570",
-          data: rows.map(function (r) {
-            return r.users;
-          }),
-          borderColor: styles.getPropertyValue("--green").trim() || "#16a34a",
-          borderWidth: 2,
-          pointRadius: 0,
-          tension: 0.3,
-          yAxisID: "y",
-        },
-        {
-          label: "\u56de\u6d41\u5145\u503c\u7b14\u6570",
-          data: rows.map(function (r) {
-            return r.dep_count;
-          }),
-          borderColor: styles.getPropertyValue("--purple").trim() || "#7c3aed",
-          borderWidth: 2,
-          pointRadius: 0,
-          tension: 0.3,
-          yAxisID: "y1",
-        },
-      ],
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      animation: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? false : { duration: 240 },
-      plugins: { legend: { position: "top", labels: { boxWidth: 10, boxHeight: 2 } } },
-      scales: {
-        y: { position: "left", title: { display: true, text: "\u4eba\u6570" } },
-        y1: { position: "right", grid: { drawOnChartArea: false }, title: { display: true, text: "\u7b14\u6570" } },
-      },
-    },
-  });
 }
 
 function renderRows(data) {
@@ -192,17 +126,6 @@ async function loadReport(options) {
   if (!returnLoadGate.isCurrent(requestToken) || !guardCompanyPayload(data)) return;
   renderSummary(data);
   renderRows(data);
-  if (data.trend && data.trend.length) {
-    try {
-      await loadChartJs();
-      if (returnLoadGate.isCurrent(requestToken)) renderTrend(data.trend, data);
-    } catch (chartError) {
-      const title = document.getElementById("trend-title");
-      if (title && returnLoadGate.isCurrent(requestToken)) {
-        title.textContent += " \u00b7 \u56fe\u8868\u7ec4\u4ef6\u672a\u52a0\u8f7d";
-      }
-    }
-  }
   if (scrollTop) scrollListToTop();
   } catch (e) {
     if (e && e.cancelled) return;
@@ -243,14 +166,6 @@ document.querySelectorAll("#segment-tabs .seg-btn").forEach(function (btn) {
     currentPage = 1;
     loadReport();
   };
-});
-
-window.addEventListener("theme-changed", function () {
-  if (!trendChart) return;
-  const styles = getComputedStyle(document.documentElement);
-  trendChart.data.datasets[0].borderColor = styles.getPropertyValue("--green").trim();
-  trendChart.data.datasets[1].borderColor = styles.getPropertyValue("--purple").trim();
-  trendChart.update("none");
 });
 
 applyDateInputs();

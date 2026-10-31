@@ -12,6 +12,12 @@ const SENSITIVE_KEYS = new Set([
   "session",
   "session_id",
   "sessionid",
+  // Google service account 凭证：私钥比 access_token 还敏感，绝不能进审计明细
+  "private_key",
+  "sa_private_key",
+  "saprivatekey",
+  "client_secret",
+  "refresh_token",
 ]);
 
 const LEDGER_FIELDS = [
@@ -24,8 +30,11 @@ const LEDGER_FIELDS = [
 const BANK_ACCOUNT_FIELDS = [
   "id", "company_id", "bank_branch", "bank", "branch", "account_name", "bsb",
   "account_number", "payid", "active", "reset_daily_balance", "account_kind",
-  "lifecycle_status", "sort_order", "note", "created_at", "updated_at",
+  "lifecycle_status", "sort_order", "note", "alert_threshold", "created_at", "updated_at",
 ];
+// 注意 alert_fired_at / alert_fired_date / alert_fired_balance 这三列刻意不在此列：
+// 它们是系统状态而非用户编辑项，加进来只会让 diffFields 产生噪声。
+// （同理它们也不在 routes/banks.js 的 PUT 白名单里——那是安全考虑，见那边的注释。）
 
 const PENDING_FIELDS = [
   "id", "company_id", "tx_id", "tx_type", "amount", "username", "name",

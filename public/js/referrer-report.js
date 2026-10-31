@@ -7,7 +7,6 @@ let currentDateFrom = params.get("dateFrom") || params.get("date") || today;
 let currentDateTo = params.get("dateTo") || params.get("date") || currentDateFrom;
 let currentSegment = "all";
 let currentCustomerPage = 1;
-let trendChart = null;
 const reportLoadGate = createRequestGate();
 const CUSTOMER_PAGE_SIZE = 50;
 
@@ -18,17 +17,6 @@ function segmentLabels(data) {
     new_today: single ? "\u4eca\u65e5\u65b0\u6ce8\u518c" : "\u533a\u95f4\u5185\u65b0\u6ce8\u518c",
     first_dep_today: single ? "\u4eca\u65e5\u9996\u5145" : "\u533a\u95f4\u5185\u9996\u5145",
   };
-}
-
-function loadChartJs() {
-  return new Promise(function (resolve, reject) {
-    if (window.Chart) return resolve();
-    var s = document.createElement("script");
-    s.src = "https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js";
-    s.onload = resolve;
-    s.onerror = reject;
-    document.head.appendChild(s);
-  });
 }
 
 function applyDateInputs() {
@@ -61,55 +49,6 @@ function renderSummary(data) {
   document.querySelectorAll("#segment-tabs .seg-btn").forEach(function (btn) {
     const key = btn.dataset.segment;
     if (labels[key]) btn.textContent = labels[key];
-  });
-}
-
-function renderTrend(rows, data) {
-  const ctx = document.getElementById("ref-trend-chart");
-  const title = document.getElementById("trend-title");
-  if (title) {
-    title.textContent =
-      data.dateFrom === data.dateTo ? "\u8fd17\u65e5\u8d8b\u52bf" : "\u65e5\u671f\u8d8b\u52bf";
-  }
-  if (!ctx || !rows.length) return;
-  if (trendChart) trendChart.destroy();
-  const styles = getComputedStyle(document.documentElement);
-  trendChart = new Chart(ctx, {
-    type: "line",
-    data: {
-      labels: rows.map(function (r) {
-        return String(r.date).slice(5);
-      }),
-      datasets: [
-        {
-          label: "\u65b0\u6ce8\u518c",
-          data: rows.map(function (r) {
-            return r.new_regs;
-          }),
-          borderColor: styles.getPropertyValue("--primary").trim() || "#2563eb",
-          borderWidth: 2,
-          pointRadius: 0,
-          tension: 0.3,
-        },
-        {
-          label: "\u9996\u5145\u4eba\u6570",
-          data: rows.map(function (r) {
-            return r.first_dep_count;
-          }),
-          borderColor: styles.getPropertyValue("--green").trim() || "#16a34a",
-          borderWidth: 2,
-          pointRadius: 0,
-          tension: 0.3,
-        },
-      ],
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      animation: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? false : { duration: 240 },
-      plugins: { legend: { position: "top", labels: { boxWidth: 10, boxHeight: 2 } } },
-      scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } },
-    },
   });
 }
 
@@ -199,15 +138,6 @@ async function loadReport(options) {
   if (!reportLoadGate.isCurrent(requestToken) || !guardCompanyPayload(data)) return;
   renderSummary(data);
   renderCustomers(data);
-  try {
-    await loadChartJs();
-    if (reportLoadGate.isCurrent(requestToken)) renderTrend(data.trend || [], data);
-  } catch (chartError) {
-    const title = document.getElementById("trend-title");
-    if (title && reportLoadGate.isCurrent(requestToken)) {
-      title.textContent += " \u00b7 \u56fe\u8868\u7ec4\u4ef6\u672a\u52a0\u8f7d";
-    }
-  }
   if (scrollTop) scrollListToTop();
   } catch (e) {
     if (e && e.cancelled) return;
@@ -239,14 +169,6 @@ document.querySelectorAll("#segment-tabs .seg-btn").forEach(function (btn) {
     currentCustomerPage = 1;
     loadReport();
   };
-});
-
-window.addEventListener("theme-changed", function () {
-  if (!trendChart) return;
-  const styles = getComputedStyle(document.documentElement);
-  trendChart.data.datasets[0].borderColor = styles.getPropertyValue("--primary").trim();
-  trendChart.data.datasets[1].borderColor = styles.getPropertyValue("--green").trim();
-  trendChart.update("none");
 });
 
 bindCompanySwitch(function () {

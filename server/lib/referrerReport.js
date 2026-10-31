@@ -4,7 +4,6 @@ const { referrerNetTotals } = require("./winLoss");
 const ORGANIC_KEY = "__organic__";
 const ORGANIC_LABEL = "\u81ea\u7136\u6d41\u91cf";
 const MAX_RANGE_DAYS = 90;
-const MAX_TREND_DAYS = 31;
 
 const SORTS = {
   first_dep: "first_dep",
@@ -310,38 +309,6 @@ function computeReferrerLeaderboard(db, dateFrom, dateTo, opts = {}) {
   };
 }
 
-function computeReferrerTrend(db, referrerKey, dateFrom, dateTo, companyId) {
-  const range = normalizeDateRange(dateFrom, dateTo);
-  const days = daysBetween(range.dateFrom, range.dateTo);
-  const trendDays = range.isSingleDay ? 7 : Math.min(days, MAX_TREND_DAYS);
-  const trendEnd = range.dateTo;
-  const trendStart = range.isSingleDay
-    ? shiftDateKey(trendEnd, -(trendDays - 1))
-    : shiftDateKey(trendEnd, -(trendDays - 1));
-
-  const rows = [];
-  for (let i = 0; i < trendDays; i++) {
-    const date = shiftDateKey(trendStart, i);
-    const sql =
-      "WITH " +
-      firstDepCte(companyId) +
-      `
-      SELECT
-        COUNT(DISTINCT CASE WHEN c.register_date_key = ? THEN c.id END) AS new_regs,
-        COUNT(DISTINCT CASE WHEN fd.first_dep_date = ? THEN c.id END) AS first_dep_count
-      FROM customers c
-      LEFT JOIN first_dep fd ON fd.customer_id = c.id
-      WHERE c.company_id = ? AND ${refKeySql("c.referrer")} = ?`;
-    const row = db.prepare(sql).get(date, date, companyId, referrerKey);
-    rows.push({
-      date,
-      new_regs: row?.new_regs || 0,
-      first_dep_count: row?.first_dep_count || 0,
-    });
-  }
-  return rows;
-}
-
 function computeReferrerReport(db, referrerKey, dateFrom, dateTo, opts = {}) {
   const companyId = opts.companyId;
   const range = normalizeDateRange(dateFrom, dateTo);
@@ -399,7 +366,6 @@ function computeReferrerReport(db, referrerKey, dateFrom, dateTo, opts = {}) {
     referrer: label,
     segment,
     summary: { ...summaryRow, total_customers: totalCustomers },
-    trend: computeReferrerTrend(db, referrerKey, dateFrom, dateTo, companyId),
     customers,
   };
 }

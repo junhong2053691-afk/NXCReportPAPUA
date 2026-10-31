@@ -62,11 +62,15 @@
   function renderDetail(data) {
     const c = data.customer;
     const segCls = SEGMENT_BADGE[data.segment] || "badge-gray";
-    document.getElementById("cd-name").textContent = cleanDisplayName(c.name || c.username || c.mobile || "顾客") || "顾客";
+    const nameEl = document.getElementById("cd-name");
+    // Now holds a customer name rather than the placeholder heading, so it is
+    // data. The marker is removed again when the placeholder is restored.
+    nameEl.setAttribute("translate", "no");
+    nameEl.textContent = cleanDisplayName(c.name || c.username || c.mobile || "顾客") || "顾客";
     document.getElementById("cd-sub").innerHTML =
       '<span class="badge ' + segCls + '">' + esc(data.segmentLabel) + "</span>" +
-      (c.mobile ? ' · <span id="cd-mobile">' + esc(c.mobile) + "</span>" : "") +
-      (c.username ? " · " + esc(c.username) : "");
+      (c.mobile ? ' · <span id="cd-mobile" translate="no">' + esc(c.mobile) + "</span>" : "") +
+      (c.username ? ' · <span translate="no">' + esc(c.username) + "</span>" : "");
 
     const t = data.stats.today;
     const a = data.stats.allTime;
@@ -84,8 +88,8 @@
       "<p><b>注册</b> " + esc(c.register_date_key || c.register_date || "-") + "</p>" +
       "<p><b>最后上线</b> " + esc(fmtDate(c.last_login_date || c.last_login) || "-") + "</p>" +
       "<p><b>最后充值</b> " + esc(fmtDate(c.last_deposit) || "-") + "</p>" +
-      "<p><b>推荐人</b> " + esc(c.referrer || "-") + "</p>" +
-      (c.bank_name ? "<p><b>银行</b> " + esc(c.bank_name) + "</p>" : "") +
+      '<p><b>推荐人</b> <span translate="no">' + esc(c.referrer || "-") + "</span></p>" +
+      (c.bank_name ? '<p><b>银行</b> <span translate="no">' + esc(c.bank_name) + "</span></p>" : "") +
       "</div>" +
       '<div class="cd-actions">' +
       (c.mobile ? '<button type="button" class="btn btn-outline btn-sm" id="cd-copy">复制手机号</button>' : "") +
@@ -163,7 +167,9 @@
     backdrop.setAttribute("aria-hidden", "false");
     document.body.classList.add("customer-drawer-open");
     document.getElementById("cd-body").innerHTML = '<p class="cd-loading">加载中…</p>';
-    document.getElementById("cd-name").textContent = "顾客详情";
+    const placeholderEl = document.getElementById("cd-name");
+    placeholderEl.removeAttribute("translate"); // back to a translatable heading
+    placeholderEl.textContent = "顾客详情";
     document.getElementById("cd-sub").textContent = "";
     window.requestAnimationFrame(function () {
       const closeButton = document.getElementById("cd-close");

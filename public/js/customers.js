@@ -143,10 +143,10 @@ async function loadCustomers(options) {
     .map(function (r) {
       return (
         "<tr>" +
-        "<td>" +
+        '<td translate="no">' +
         customerLink(r.name || r.username || "-", r.id, r.mobile) +
         "</td>" +
-        "<td>" +
+        '<td translate="no">' +
         escHtml(r.mobile || "-") +
         "</td>" +
         "<td>" +
@@ -172,7 +172,7 @@ async function loadCustomers(options) {
         "<td>" +
         fmtWinLoss(Number(r.win_loss ?? 0)) +
         "</td>" +
-        "<td>" +
+        '<td translate="no">' +
         escHtml(r.referrer || "-") +
         "</td>" +
         "</tr>"
