@@ -30,6 +30,12 @@ server/db/*.db-shm
 server/db/*.sqlite
 server/db/*.sqlite3
 server/db/backups/
+# 上面的 server/db/*.db 只匹配 server/db/ 直接下的文件，**不匹配子目录**。
+# 而 vacuumSnapshot.js 的快照实际落在 server/db/backup-<时间戳>/trader.db，
+# 于是 git status 把整个 218MB 的库列成未跟踪 —— 一次 `git add .` 就进库了。
+# 这两条按目录和递归各挡一次，与上面那条的意图（含 23 万客户 PII，绝不进库）一致。
+server/db/backup-*/
+server/db/**/*.db
 sessions.db
 sessions.db-wal
 sessions.db-shm
