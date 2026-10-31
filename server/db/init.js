@@ -202,6 +202,14 @@ function migrate(database) {
   } catch (e) {
     console.warn("[db] multi-company migration:", e.message);
   }
+  // 每公司一个独立 Telegram Bot：token 与收件 chat 跟着公司走，在公司设置页由 admin 编辑。
+  // 总控 Bot 的 token / 白名单在 config.json 的 telegram 块，不落库。
+  try {
+    ensureColumn(database, "companies", "telegram_bot_token", "TEXT NOT NULL DEFAULT ''");
+    ensureColumn(database, "companies", "telegram_chat_ids", "TEXT NOT NULL DEFAULT ''");
+  } catch (e) {
+    console.warn("[db] companies telegram columns:", e.message);
+  }
   ensureIndex(database, "idx_customers_company_id", "CREATE INDEX idx_customers_company_id ON customers(company_id)");
   ensureIndex(
     database,
@@ -315,6 +323,13 @@ function migrate(database) {
         ["account_kind", "TEXT NOT NULL DEFAULT 'nominee'"],
         ["lifecycle_status", "TEXT NOT NULL DEFAULT 'active'"],
         ["reset_daily_balance", "INTEGER NOT NULL DEFAULT 0"],
+        ["alert_threshold", "REAL NOT NULL DEFAULT 0"],
+        ["alert_fired_at", "TEXT NOT NULL DEFAULT ''"],
+        ["alert_fired_date", "TEXT NOT NULL DEFAULT ''"],
+        // 上次报警时的余额，「超标期间创新高才再报」的比较基准。旧库补出来是 0，
+        // 于是升级后正在超标且已报过的账户会立刻再报一条——那是对的（新规则下它本来
+        // 就该报），而且只有一条。
+        ["alert_fired_balance", "REAL NOT NULL DEFAULT 0"],
       ]) {
         if (!baCols.includes(col)) database.exec(`ALTER TABLE bank_accounts ADD COLUMN ${col} ${def}`);
       }
@@ -322,6 +337,16 @@ function migrate(database) {
         UPDATE bank_accounts
         SET bank_branch = TRIM(CASE WHEN branch != '' AND branch IS NOT NULL THEN bank || ' ' || branch ELSE bank END)
         WHERE (bank_branch = '' OR bank_branch IS NULL) AND bank != ''
+      `);
+      // 生命周期状态归一化。lifecycle_status 已不在 PUT 白名单里（只能经 ban/unban/
+      // archive/unarchive 改），这条是迁移侧的对位保险：手工改库或旧数据留下的枚举外
+      // 值会被 lib/bankLifecycle 当成 archived（失败关闭），这里把它落到 banned，让它
+      // 出现在「封禁中」待清理队列里而不是无声消失。
+      // 归到 banned 而不是 active：宁可让人点一次解封，也不要让一个来历不明的账户
+      // 直接开始收钱。幂等，现实中匹配 0 行。
+      database.exec(`
+        UPDATE bank_accounts SET lifecycle_status = 'banned', active = 0
+        WHERE lifecycle_status NOT IN ('active', 'banned', 'archived')
       `);
     }
   } catch (e) {
@@ -443,6 +468,170 @@ function migrate(database) {
   } catch (e) {
     console.warn("[db] bank_tx_pending:", e.message);
   }
+  // Telegram 出站队列 + bot 轮询游标（老库兜底，新库由 schema.sql 建）
+  try {
+    database.exec(`CREATE TABLE IF NOT EXISTS telegram_outbox (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      company_id TEXT NOT NULL DEFAULT '',
+      bot_key TEXT NOT NULL DEFAULT '',
+      kind TEXT NOT NULL DEFAULT 'alert',
+      bank_account_id INTEGER NOT NULL DEFAULT 0,
+      text TEXT NOT NULL DEFAULT '',
+      parse_mode TEXT NOT NULL DEFAULT '',
+      state TEXT NOT NULL DEFAULT 'pending',
+      attempts INTEGER NOT NULL DEFAULT 0,
+      last_error TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      sent_at TEXT
+    )`);
+    // 'HTML' = text 已转义且含 <pre>；'' = 纯文本。老库里已有的 pending 行默认 ''，
+    // 于是照纯文本发出去，不会因为未转义的 `&` 被 Telegram 400 掉。
+    ensureColumn(database, "telegram_outbox", "parse_mode", "TEXT NOT NULL DEFAULT ''");
+    database.exec(
+      "CREATE INDEX IF NOT EXISTS idx_tg_outbox_state ON telegram_outbox(state, id)"
+    );
+  } catch (e) {
+    console.warn("[db] telegram_outbox:", e.message);
+  }
+  // 已发出的报警消息，复位时凭 message_id 撤回（老库兜底，新库由 schema.sql 建）
+  try {
+    database.exec(`CREATE TABLE IF NOT EXISTS telegram_sent_messages (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      outbox_id INTEGER NOT NULL DEFAULT 0,
+      company_id TEXT NOT NULL DEFAULT '',
+      bank_account_id INTEGER NOT NULL DEFAULT 0,
+      bot_key TEXT NOT NULL DEFAULT '',
+      chat_id TEXT NOT NULL DEFAULT '',
+      message_id INTEGER NOT NULL,
+      sent_at TEXT NOT NULL DEFAULT (datetime('now')),
+      retracted_at TEXT NOT NULL DEFAULT '',
+      retract_method TEXT NOT NULL DEFAULT '',
+      retract_error TEXT NOT NULL DEFAULT ''
+    )`);
+    database.exec(
+      `CREATE INDEX IF NOT EXISTS idx_tg_sent_outstanding
+       ON telegram_sent_messages(bank_account_id, retracted_at, outbox_id)`
+    );
+  } catch (e) {
+    console.warn("[db] telegram_sent_messages:", e.message);
+  }
+  try {
+    database.exec(`CREATE TABLE IF NOT EXISTS telegram_bot_state (
+      bot_key TEXT PRIMARY KEY,
+      update_offset INTEGER NOT NULL DEFAULT 0,
+      token_fingerprint TEXT NOT NULL DEFAULT '',
+      last_error TEXT NOT NULL DEFAULT '',
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )`);
+  } catch (e) {
+    console.warn("[db] telegram_bot_state:", e.message);
+  }
+  // 全局设置 KV（老库兜底，新库由 schema.sql 建）
+  try {
+    database.exec(`CREATE TABLE IF NOT EXISTS app_settings (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL DEFAULT '{}',
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_by TEXT NOT NULL DEFAULT ''
+    )`);
+  } catch (e) {
+    console.warn("[db] app_settings:", e.message);
+  }
+  // Google Sheets 同步（老库兜底，新库由 schema.sql 建）。
+  // 全局凭证与节奏走 app_settings 的 'sheets' 键，这里只有 per-company 的部分。
+  try {
+    database.exec(`CREATE TABLE IF NOT EXISTS sheets_settings (
+      company_id TEXT PRIMARY KEY,
+      enabled INTEGER NOT NULL DEFAULT 0,
+      spreadsheet_id TEXT NOT NULL DEFAULT '',
+      sa_client_email TEXT NOT NULL DEFAULT '',
+      sa_private_key TEXT NOT NULL DEFAULT '',
+      tx_enabled INTEGER NOT NULL DEFAULT 1,
+      tx_start_month TEXT NOT NULL DEFAULT '',
+      tx_columns_profile TEXT NOT NULL DEFAULT 'minimal',
+      ledger_enabled INTEGER NOT NULL DEFAULT 1,
+      daily_enabled INTEGER NOT NULL DEFAULT 1,
+      monthly_enabled INTEGER NOT NULL DEFAULT 1,
+      input_enabled INTEGER NOT NULL DEFAULT 1,
+      input_buffer_rows INTEGER NOT NULL DEFAULT 200,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )`);
+    database.exec(`CREATE TABLE IF NOT EXISTS sheets_sync_state (
+      company_id TEXT PRIMARY KEY,
+      last_event_id INTEGER NOT NULL DEFAULT 0,
+      dirty_tabs_json TEXT NOT NULL DEFAULT '[]',
+      last_daily_hash TEXT NOT NULL DEFAULT '',
+      last_ledger_hash TEXT NOT NULL DEFAULT '',
+      last_monthly_hash TEXT NOT NULL DEFAULT '',
+      last_options_hash TEXT NOT NULL DEFAULT '',
+      ledger_row_count INTEGER NOT NULL DEFAULT 0,
+      daily_row_count INTEGER NOT NULL DEFAULT 0,
+      input_next_row INTEGER NOT NULL DEFAULT 0,
+      last_count_check_at TEXT NOT NULL DEFAULT '',
+      last_push_at TEXT,
+      last_push_ok INTEGER,
+      last_push_msg TEXT NOT NULL DEFAULT '',
+      pushed_rows_total INTEGER NOT NULL DEFAULT 0,
+      last_import_at TEXT,
+      imported_rows_total INTEGER NOT NULL DEFAULT 0,
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )`);
+    database.exec(`CREATE TABLE IF NOT EXISTS sheets_row_map (
+      company_id TEXT NOT NULL,
+      tab_title TEXT NOT NULL,
+      row_key TEXT NOT NULL,
+      row_number INTEGER NOT NULL,
+      content_hash TEXT NOT NULL DEFAULT '',
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      PRIMARY KEY (company_id, tab_title, row_key)
+    )`);
+    database.exec(`CREATE TABLE IF NOT EXISTS sheets_manual_entries (
+      company_id TEXT NOT NULL,
+      entry_id TEXT NOT NULL,
+      row_number INTEGER NOT NULL DEFAULT 0,
+      ledger_id INTEGER NOT NULL DEFAULT 0,
+      state TEXT NOT NULL DEFAULT 'ok',
+      message TEXT NOT NULL DEFAULT '',
+      payload_json TEXT NOT NULL DEFAULT '{}',
+      imported_at TEXT NOT NULL DEFAULT (datetime('now')),
+      PRIMARY KEY (company_id, entry_id)
+    )`);
+    ensureIndex(
+      database,
+      "idx_sheets_rowmap_pos",
+      "CREATE INDEX idx_sheets_rowmap_pos ON sheets_row_map(company_id, tab_title, row_number)"
+    );
+    ensureIndex(
+      database,
+      "idx_sheets_manual_state",
+      "CREATE INDEX idx_sheets_manual_state ON sheets_manual_entries(company_id, state, imported_at DESC)"
+    );
+  } catch (e) {
+    console.warn("[db] sheets sync:", e.message);
+  }
+  // 数据库快照备份日志（老库兜底，新库由 schema.sql 建）
+  try {
+    database.exec(`CREATE TABLE IF NOT EXISTS db_backup_log (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      kind TEXT NOT NULL DEFAULT 'daily',
+      file_path TEXT NOT NULL DEFAULT '',
+      bytes INTEGER NOT NULL DEFAULT 0,
+      started_at TEXT NOT NULL DEFAULT (datetime('now')),
+      finished_at TEXT,
+      duration_ms INTEGER NOT NULL DEFAULT 0,
+      ok INTEGER NOT NULL DEFAULT 0,
+      message TEXT NOT NULL DEFAULT '',
+      pruned INTEGER NOT NULL DEFAULT 0
+    )`);
+    ensureIndex(
+      database,
+      "idx_db_backup_log_time",
+      "CREATE INDEX idx_db_backup_log_time ON db_backup_log(started_at DESC)"
+    );
+  } catch (e) {
+    console.warn("[db] db_backup_log:", e.message);
+  }
   try {
     const { ensureAuditSchema, backfillAuditHistory } = require("../lib/auditLog");
     ensureAuditSchema(database);
@@ -451,6 +640,41 @@ function migrate(database) {
   } catch (e) {
     console.warn("[db] audit history:", e.message);
   }
+}
+
+/**
+ * 把实例 locale（时区 + 币种）注入进程。
+ *
+ * ⚠️ 必须在 getDb() 内部、conn.exec(schema) 之后、**migrate(conn) 之前**调。因为
+ * migrate 会跑 backfillDateColumns()（用 dateKeyFromIso）和 repairAutoLedgerTimes()
+ * （用 formatWallClock），放到 migrate 之后这两个就会在默认 Sydney 下执行。
+ * app_settings 表在 conn.exec(schema) 之后就存在了。
+ *
+ * index.js 里 scheduler / telegramBots / backup / cleanup 全在 getDb() 之后启动，
+ * 所以这一处注入覆盖整个进程。
+ */
+function bootstrapLocale(database) {
+  const { getLocaleSettings, saveLocaleSettings, LOCALE_KEY } = require("../lib/appSettings");
+  const { setLocale } = require("../lib/locale");
+  try {
+    // 首次启动从 config.json 的 timezone 播种。那是 DB 还不存在时唯一能设时区的
+    // 地方，也让 DEPLOY.md 里「config.json → timezone」那句话从此成立——它在这次
+    // 改动之前是个全项目零读取的死配置。
+    const existing = database.prepare("SELECT 1 FROM app_settings WHERE key = ?").get(LOCALE_KEY);
+    if (!existing) {
+      let tz = "";
+      try {
+        tz = String(require("../lib/readConfig").readConfig().timezone || "").trim();
+      } catch (_) {}
+      if (tz) saveLocaleSettings(database, { timezone: tz }, "bootstrap");
+    }
+  } catch (e) {
+    // 播种失败不该让进程起不来：下面的 getLocaleSettings 会退回默认值。
+    console.warn("[db] locale seed:", e.message);
+  }
+  const applied = setLocale(getLocaleSettings(database));
+  console.log(`[db] locale: ${applied.timezone} / ${applied.currency}`);
+  return applied;
 }
 
 function applyDbPragmas(conn) {
@@ -474,6 +698,7 @@ function getDb() {
     const conn = openDatabase();
     applyDbPragmas(conn);
     conn.exec(fs.readFileSync(SCHEMA_PATH, "utf8").replace(/^\uFEFF/, ""));
+    bootstrapLocale(conn);
     migrate(conn);
     ensurePromoColumns(conn);
     db = conn;

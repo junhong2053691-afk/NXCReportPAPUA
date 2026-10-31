@@ -1,7 +1,8 @@
 "use strict";
 
 const { refreshBankBalance, bankBranchOf } = require("./bankReport");
-const { formatSydneyDateTime, todayKey } = require("./dates");
+const { SQL_OPERATING } = require("./bankLifecycle");
+const { formatWallClock, todayKey } = require("./dates");
 const { cleanLedgerName } = require("./displayName");
 const { isDemoTenant } = require("./readConfig");
 const {
@@ -29,13 +30,20 @@ const OUT_STATUSES = new Set(["withdraw", "wrong", "cash out", "give back", "exp
 const PLATFORM_LEDGER_STATUSES = new Set(["deposit", "withdraw", "cash in"]);
 
 function nowSql() {
-  return formatSydneyDateTime();
+  return formatWallClock();
 }
 
 function normalizeSqlDateTime(value) {
   const raw = String(value || "").trim();
   if (!raw) return "";
-  if (/[TzZ]|[+-]\d{2}:?\d{2}$/.test(raw)) return formatSydneyDateTime(raw);
+  // 只有**结尾**带 Z 或带偏移才算「带时区的瞬间」，才交给 formatWallClock 去换算。
+  //
+  // ⚠️ 这个判定以前写成 /[TzZ]|.../，把 ISO 的**分隔符 T** 和时区标记 Z 混进了同一个
+  // 字符类，于是 "2026-09-15T23:50" 这种裸时间串也被送进 Date.parse——而 ES 规范
+  // 规定不带偏移的日期时间串按**进程本地时区**解析，不是按配置时区。结果同一个输入
+  // 在不同实例上会被静默平移「进程 TZ 与配置 TZ 之差」那么多小时（马来实例留着
+  // TZ=Australia/Sydney 就是 2 小时）。裸时间串必须走下面「原样当墙上时间」那条路。
+  if (/[zZ]$|[+-]\d{2}:?\d{2}$/.test(raw)) return formatWallClock(raw);
   const text = raw.replace("T", " ");
   const m = text.match(/^(\d{4}-\d{2}-\d{2})\s+(\d{1,2}:\d{2}(?::\d{2})?)/);
   if (!m) return "";
@@ -400,10 +408,10 @@ function approvePendingTx(db, companyId, txId, body, actor) {
         throw Object.assign(new Error("本户自付请填写银行账户"), { status: 400 });
       }
       splitSelfBank = db
-        .prepare("SELECT * FROM bank_accounts WHERE id = ? AND company_id = ? AND lifecycle_status != 'banned'")
+        .prepare(`SELECT * FROM bank_accounts WHERE id = ? AND company_id = ? AND ${SQL_OPERATING}`)
         .get(splitSelfBankId, companyId);
       if (!splitSelfBank) {
-        throw Object.assign(new Error("本户自付银行账户无效或已封"), { status: 400 });
+        throw Object.assign(new Error("本户自付银行账户无效、已封禁或已归档"), { status: 400 });
       }
     } else {
       splitSelfBankId = 0;
@@ -543,9 +551,9 @@ function approvePendingTx(db, companyId, txId, body, actor) {
       let bank = null;
       if (bankId) {
         bank = db
-          .prepare("SELECT * FROM bank_accounts WHERE id = ? AND company_id = ? AND lifecycle_status != 'banned'")
+          .prepare(`SELECT * FROM bank_accounts WHERE id = ? AND company_id = ? AND ${SQL_OPERATING}`)
           .get(bankId, companyId);
-        if (!bank) throw Object.assign(new Error("银行账户无效或已封"), { status: 400 });
+        if (!bank) throw Object.assign(new Error("银行账户无效、已封禁或已归档"), { status: 400 });
       }
       // Keep the business direction/status as CASH IN, but place helped money
       // in the shared HELP TRF column so it is visually distinct from cash
@@ -582,9 +590,9 @@ function approvePendingTx(db, companyId, txId, body, actor) {
     const bankId = Number(body.bank_account_id);
     if (!bankId) throw Object.assign(new Error("请选择银行账户"), { status: 400 });
     const bank = db
-      .prepare("SELECT * FROM bank_accounts WHERE id = ? AND company_id = ? AND lifecycle_status != 'banned'")
+      .prepare(`SELECT * FROM bank_accounts WHERE id = ? AND company_id = ? AND ${SQL_OPERATING}`)
       .get(bankId, companyId);
-    if (!bank) throw Object.assign(new Error("银行账户无效或已封"), { status: 400 });
+    if (!bank) throw Object.assign(new Error("银行账户无效、已封禁或已归档"), { status: 400 });
 
     const isDep = pending.tx_type === "DEPOSIT";
     const ledger = insertLedger(db, {
@@ -776,9 +784,9 @@ function submitTransfer(db, fromCompanyId, body, actor) {
   let bank = null;
   if (bankId) {
     bank = db
-      .prepare("SELECT * FROM bank_accounts WHERE id = ? AND company_id = ? AND lifecycle_status != 'banned'")
+      .prepare(`SELECT * FROM bank_accounts WHERE id = ? AND company_id = ? AND ${SQL_OPERATING}`)
       .get(bankId, fromCompanyId);
-    if (!bank) throw Object.assign(new Error("银行账户无效或已封"), { status: 400 });
+    if (!bank) throw Object.assign(new Error("银行账户无效、已封禁或已归档"), { status: 400 });
   }
   if (isTestStatus && !bankId) {
     throw Object.assign(new Error("test in/out 请选择本司银行"), { status: 400 });
@@ -876,4 +884,5 @@ module.exports = {
   platformTxTypeForLedger,
   reopenPendingForLedger,
   nowSql,
+  normalizeSqlDateTime,
 };

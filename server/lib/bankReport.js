@@ -1,5 +1,8 @@
 ﻿const { todayKey } = require("./dates");
 const { isDemoTenant } = require("./readConfig");
+// bankLifecycle 顶层不 require 任何本项目模块（它对 bankReport 的依赖是惰性的），
+// 所以这里顶层 require 不会形成循环。
+const { isCountedInTotals } = require("./bankLifecycle");
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -44,21 +47,71 @@ function money(value) {
   return Number.isFinite(n) ? n : 0;
 }
 
+// 余额净额表达式。computeBankDailyReport 的余额分组查询、下面两个单账户查询都引用
+// 它，避免三处算法各自漂移。
+const NET_EXPR = "COALESCE(SUM(amount_in + trf_amount - ABS(amount_out) - ABS(help_amount)), 0)";
+
 function balanceFromLedger(db, bankAccountId) {
   if (!bankAccountId) return 0;
   const row = db.prepare(`
-    SELECT COALESCE(SUM(amount_in + trf_amount - ABS(amount_out) - ABS(help_amount)), 0) AS n
+    SELECT ${NET_EXPR} AS n
     FROM bank_ledger WHERE bank_account_id = ?
   `).get(bankAccountId);
   return money(row?.n);
 }
 
-function refreshBankBalance(db, bankAccountId) {
+// 截至某个时刻的累计净额。注意与 balanceFromLedger 的差别：这里有 entry_time 上界，
+// 和 computeBankDailyReport（:181）一致，所以未来日期的流水不计入。bank_accounts.balance
+// 那一列走的是无上界的 balanceFromLedger，两者在存在未来流水时并不相等——报警必须用
+// 这个有上界的版本，否则报出来的数和页面上显示的对不上。
+function accountBalanceAsOf(db, bankAccountId, endTime) {
+  if (!bankAccountId) return 0;
+  const row = db.prepare(`
+    SELECT ${NET_EXPR} AS n
+    FROM bank_ledger WHERE bank_account_id = ? AND entry_time <= ?
+  `).get(bankAccountId, endTime);
+  return money(row?.n);
+}
+
+// 单日净额，对应 computeBankDailyReport 里逐行累加的 day_net（:226-229）。
+function accountDayNet(db, bankAccountId, dateKey) {
+  if (!bankAccountId) return 0;
+  const row = db.prepare(`
+    SELECT ${NET_EXPR} AS n
+    FROM bank_ledger
+    WHERE bank_account_id = ? AND entry_time >= ? AND entry_time <= ?
+  `).get(bankAccountId, `${dateKey} 00:00:00`, `${dateKey} 23:59:59`);
+  return money(row?.n);
+}
+
+// 页面上显示的那个余额——勾了「每天归零分开算」的账户显示当日净额，其余显示累计
+// （computeBankDailyReport:276-278 的规则）。报警只允许用这个数。
+function displayBalanceForAccount(db, account, dateKey) {
+  if (!account) return 0;
+  const day = dateKey || todayKey();
+  return account.reset_daily_balance
+    ? accountDayNet(db, account.id, day)
+    : accountBalanceAsOf(db, account.id, `${day} 23:59:59`);
+}
+
+function refreshBankBalance(db, bankAccountId, opts = {}) {
   if (!bankAccountId) return 0;
   const n = balanceFromLedger(db, bankAccountId);
   db.prepare(
     "UPDATE bank_accounts SET balance = ?, updated_at = datetime('now') WHERE id = ?"
   ).run(n, bankAccountId);
+  // 这是全项目唯一的余额写入路径，所有审批 / 流水增删改都汇到这里，所以报警判定挂在
+  // 这里就不可能漏。判定是纯 DB 操作（写 telegram_outbox），不发 HTTP——它运行在调用方
+  // 的事务内部，发网络请求会把审批事务一起卡住。
+  // 惰性 require 断开 bankAlerts -> bankReport 的循环依赖。
+  if (opts.alert !== false) {
+    try {
+      require("./bankAlerts").evaluateBalanceAlert(db, bankAccountId);
+    } catch (e) {
+      // 报警判定出任何问题都不能让审批 / 流水写入失败。
+      console.warn("[alert] evaluate:", e.message);
+    }
+  }
   return n;
 }
 
@@ -69,7 +122,8 @@ function refreshAllBankBalances(db, companyId = null) {
   let changed = 0;
   for (const row of rows) {
     const before = db.prepare("SELECT balance FROM bank_accounts WHERE id = ?").get(row.id);
-    const next = refreshBankBalance(db, row.id);
+    // 修数据不该触发几十条报警。
+    const next = refreshBankBalance(db, row.id, { alert: false });
     if (Math.round((Number(before?.balance || 0) - next) * 100) !== 0) changed++;
   }
   return { checked: rows.length, changed };
@@ -121,14 +175,20 @@ function parseDate(date) {
   return DATE_RE.test(value) ? value : todayKey();
 }
 
+// C STATUS 表记的是「我方相对这家对方公司的净收支」，不是资金流向。走我方银行账户的
+// 钱按实际方向记（IN 列 → IN，OUT 列 → OUT）；HELP TRF 那一列走的是对方账户，方向相反：
+// 对方替我付出（help）＝我欠对方 → 记 IN，对方替我收款（trf）＝对方欠我 → 记 OUT。
+// 所以这里 help/trf 与 NET_EXPR（银行余额，纯资金流向）是**对调**的，不是笔误。
+// 双方都按同一口径翻转，reconcileAlerts 的 current.total + counterparty.total = 0 不受影响。
+// BANK ACC 填不填只决定余额，不改变这里的方向。
 function cStatusTotalsForCompany(db, companyId, date) {
   const start = `${date} 00:00:00`;
   const end = `${date} 23:59:59`;
   const rows = db
     .prepare(`
       SELECT c_status,
-        COALESCE(SUM(amount_in + trf_amount), 0) AS amount_in,
-        COALESCE(SUM(ABS(amount_out) + ABS(help_amount)), 0) AS amount_out
+        COALESCE(SUM(amount_in + ABS(help_amount)), 0) AS amount_in,
+        COALESCE(SUM(ABS(amount_out) + ABS(trf_amount)), 0) AS amount_out
       FROM bank_ledger
       WHERE company_id = ? AND entry_time >= ? AND entry_time <= ? AND c_status <> ''
       GROUP BY c_status
@@ -175,8 +235,7 @@ function computeBankDailyReport(db, companyId, opts = {}) {
     .all(companyId);
   const balanceRows = db
     .prepare(`
-      SELECT bank_account_id,
-        COALESCE(SUM(amount_in + trf_amount - ABS(amount_out) - ABS(help_amount)), 0) AS balance
+      SELECT bank_account_id, ${NET_EXPR} AS balance
       FROM bank_ledger
       WHERE company_id = ? AND entry_time <= ?
       GROUP BY bank_account_id
@@ -234,29 +293,33 @@ function computeBankDailyReport(db, companyId, opts = {}) {
       userSet.add(String(row.username).trim());
     }
 
-    if (DEPOSIT_STATUSES.has(status)) addReport(report, "deposit", amountIn, amountIn > 0 ? 1 : 0);
+    // HELP TRF 列的钱同样是这笔流水的金额，只是没走我方银行账户，STATUS 汇总照常计入
+    // （Excel 的 WITHDRAW 合计含 HELP TRF 那几笔）。前端 splitHelpTrf 按 status 决定它
+    // 落在 help_amount（出账类 status）还是 trf_amount（入账类），所以按方向各取一个，
+    // 另一个在该 status 下恒为 0。
+    const inTotal = amountIn + trfAmount;
+    const outTotal = amountOut + helpAmount;
+
+    if (DEPOSIT_STATUSES.has(status)) addReport(report, "deposit", inTotal, inTotal > 0 ? 1 : 0);
     if (status === "withdraw") {
-      addReport(report, "withdraw", -amountOut, amountOut > 0 ? 1 : 0);
+      addReport(report, "withdraw", -outTotal, outTotal > 0 ? 1 : 0);
       // Split withdraw helper rows are displayed as WITHDRAW but remain IN
       // movements. Keep the existing CASH IN report totals unchanged.
       if (amountIn > 0) addReport(report, "cash in", amountIn, 1);
     }
-    if (status === "wrong") addReport(report, "wrong", -amountOut, amountOut > 0 ? 1 : 0);
-    if (status === "cash in") {
-      const cashInTotal = amountIn + trfAmount;
-      addReport(report, "cash in", cashInTotal, cashInTotal > 0 ? 1 : 0);
-    }
-    if (status === "cash out") addReport(report, "cash out", -amountOut, amountOut > 0 ? 1 : 0);
-    if (status === "expenses") addReport(report, "expenses", -amountOut, amountOut > 0 ? 1 : 0);
-    if (status === "exchange") addReport(report, "exchange", amountIn + amountOut, 1);
+    if (status === "wrong") addReport(report, "wrong", -outTotal, outTotal > 0 ? 1 : 0);
+    if (status === "cash in") addReport(report, "cash in", inTotal, inTotal > 0 ? 1 : 0);
+    if (status === "cash out") addReport(report, "cash out", -outTotal, outTotal > 0 ? 1 : 0);
+    if (status === "expenses") addReport(report, "expenses", -outTotal, outTotal > 0 ? 1 : 0);
+    if (status === "exchange") addReport(report, "exchange", inTotal + outTotal, 1);
     if (status === "redeposit") addReport(report, "redeposit", 0, 1);
-    if (status === "test in") addReport(report, "test in", amountIn, amountIn > 0 ? 1 : 0);
-    if (status === "test out") addReport(report, "test out", -amountOut, amountOut > 0 ? 1 : 0);
+    if (status === "test in") addReport(report, "test in", inTotal, inTotal > 0 ? 1 : 0);
+    if (status === "test out") addReport(report, "test out", -outTotal, outTotal > 0 ? 1 : 0);
 
-    if (status === "deposit" || status === "amopay") depCount += amountIn > 0 ? 1 : 0;
-    if (status === "withdraw") wdCount += amountOut > 0 ? 1 : 0;
+    if (status === "deposit" || status === "amopay") depCount += inTotal > 0 ? 1 : 0;
+    if (status === "withdraw") wdCount += outTotal > 0 ? 1 : 0;
     if (status === "new") newReg += 1;
-    if (status === "unclaim") unclaimAmount += amountIn;
+    if (status === "unclaim") unclaimAmount += inTotal;
 
     const company = String(row.c_status || "").trim();
     if (company) {
@@ -264,8 +327,10 @@ function computeBankDailyReport(db, companyId, opts = {}) {
         companyMap.set(company, { name: company, in: 0, out: 0, total: 0 });
       }
       const item = companyMap.get(company);
-      item.in += amountIn + trfAmount;
-      item.out -= amountOut + helpAmount;
+      // help/trf 在这里与 NET_EXPR 对调，理由见 cStatusTotalsForCompany 的注释。
+      // 这两处必须同口径：一个喂页面的 companyRows，一个喂跨公司对平。
+      item.in += amountIn + helpAmount;
+      item.out -= amountOut + trfAmount;
       item.total = item.in + item.out;
     }
   }
@@ -350,6 +415,7 @@ function computeBankDailyReport(db, companyId, opts = {}) {
         otherName: otherName || otherId,
         currentNames: [],
         counterpartyNames: [],
+        required: false,
       });
     }
     const group = pairGroups.get(key);
@@ -360,13 +426,15 @@ function computeBankDailyReport(db, companyId, opts = {}) {
   for (const rule of cStatusRules) {
     const targetId = String(rule.target_company_id || "").trim();
     if (!targetId || targetId === companyId) continue;
-    ensurePair(targetId, rule.target_company_name || targetId).currentNames.push(rule.name);
+    const group = ensurePair(targetId, rule.target_company_name || targetId);
+    group.currentNames.push(rule.name);
+    if (Number(rule.reconcile_required)) group.required = true;
   }
 
   try {
     const inboundRules = db
       .prepare(`
-        SELECT o.company_id, o.name, c.name AS company_name
+        SELECT o.company_id, o.name, o.reconcile_required, c.name AS company_name
         FROM bank_c_status_options o
         LEFT JOIN companies c ON c.id = o.company_id
         WHERE o.target_company_id = ? AND o.company_id <> ?
@@ -374,7 +442,9 @@ function computeBankDailyReport(db, companyId, opts = {}) {
       `)
       .all(companyId, companyId);
     for (const rule of inboundRules) {
-      ensurePair(rule.company_id, rule.company_name || rule.company_id).counterpartyNames.push(rule.name);
+      const group = ensurePair(rule.company_id, rule.company_name || rule.company_id);
+      group.counterpartyNames.push(rule.name);
+      if (Number(rule.reconcile_required)) group.required = true;
     }
   } catch (_) {}
 
@@ -400,6 +470,10 @@ function computeBankDailyReport(db, companyId, opts = {}) {
 
   const reconcileAlerts = [];
   for (const group of pairGroups.values()) {
+    // 「需要对平」是**配对**的属性，不是单边的：任一侧勾了就两边都巡检。只看本方的
+    // flag 会让勾了的那家报警、没勾的那家页面上什么都没有，对面的操作手永远不知道
+    // 该补账——而差额恰恰只有对面能补。所以这里是 OR，不是 AND，也不是只读本方。
+    if (!group.required) continue;
     const current = sumNames(companyId, group.currentNames);
     const counterparty = sumNames(group.otherId, group.counterpartyNames);
     const difference = current.total + counterparty.total;
@@ -427,9 +501,10 @@ function computeBankDailyReport(db, companyId, opts = {}) {
       total_out: totalOut,
       win_loss: (report.deposit?.amount || 0) + (report.withdraw?.amount || 0),
       ledger_rows: rows.length,
+      // 汇总口径的唯一真源：只有运营中的非 PG 账户进合计。封禁与归档的钱不算自有
+      // 余额，PG 里的钱不是自有资金。前端 isBalanceExcluded 是这条规则的镜像。
       total_balance: [...bankMap.values()].reduce((s, b) => {
-        if (b.lifecycle_status === "banned") return s;
-        if (b.account_kind === "payment_gateway") return s;
+        if (!isCountedInTotals(b)) return s;
         return s + money(b.balance);
       }, 0),
     },
@@ -449,5 +524,14 @@ function computeBankDailyReport(db, companyId, opts = {}) {
   };
 }
 
-module.exports = { computeBankDailyReport, balanceFromLedger, refreshBankBalance, refreshAllBankBalances, bankBranchOf };
+module.exports = {
+  computeBankDailyReport,
+  balanceFromLedger,
+  accountBalanceAsOf,
+  accountDayNet,
+  displayBalanceForAccount,
+  refreshBankBalance,
+  refreshAllBankBalances,
+  bankBranchOf,
+};
 

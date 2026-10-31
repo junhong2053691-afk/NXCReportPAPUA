@@ -47,10 +47,10 @@
     if (!tbody) return;
     tbody.innerHTML = statusRows.map((r) => `
       <tr data-value="${esc(r.value)}">
-        <td class="mono">${esc(r.value)}</td>
+        <td class="mono" translate="no">${esc(r.value)}</td>
         <td><input class="setting-input st-label" value="${esc(r.label || "")}"></td>
         <td><input class="setting-color st-color" type="color" value="${esc(r.color || "#64748b")}"></td>
-        <td><span class="ledger-status" style="--ledger-status-accent:${esc(r.color || "#64748b")};--ledger-status-tint:rgba(100,116,139,.12);color:${esc(r.color || "#64748b")}">${esc(r.label || r.value)}</span></td>
+        <td translate="no"><span class="ledger-status" style="--ledger-status-accent:${esc(r.color || "#64748b")}">${esc(r.label || r.value)}</span></td>
         <td>
           <button type="button" class="btn btn-success btn-xs st-save">\u4fdd\u5b58</button>
           <button type="button" class="btn btn-outline btn-xs st-del">\u79fb\u9664</button>
@@ -65,10 +65,11 @@
     if (!tbody) return;
     tbody.innerHTML = cStatusRows.map((r) => `
       <tr data-name="${esc(r.name)}">
-        <td>${esc(r.name)}</td>
-        <td>${esc(companies.find((c) => c.id === r.target_company_id)?.name || r.target_company_id || "-")}</td>
+        <td translate="no">${esc(r.name)}</td>
+        <td translate="no">${esc(companies.find((c) => c.id === r.target_company_id)?.name || r.target_company_id || "-")}</td>
+        <td><input type="checkbox" class="cs-reconcile" aria-label="\u9700\u8981\u5bf9\u5e73"${r.target_company_id ? "" : " disabled"}${Number(r.reconcile_required) ? " checked" : ""}></td>
         <td><button type="button" class="btn btn-outline btn-xs cs-del">\u79fb\u9664</button></td>
-      </tr>`).join("") || '<tr><td colspan="3" class="empty-state">\u6682\u65e0 C STATUS</td></tr>';
+      </tr>`).join("") || '<tr><td colspan="4" class="empty-state">\u6682\u65e0 C STATUS</td></tr>';
   }
 
   function bind() {
@@ -127,6 +128,21 @@
         document.getElementById("cs-name").value = "";
         return loadCStatus();
       }).then(() => toast("\u5df2\u6dfb\u52a0 C STATUS")).catch((e) => toast(e.message || "\u6dfb\u52a0\u5931\u8d25", "error"));
+    });
+
+    // 只传 name + flag：banks.js 把未传的 target_company_id 当作「保持原值」。
+    document.getElementById("cstatus-rows")?.addEventListener("change", (e) => {
+      const box = e.target.closest(".cs-reconcile");
+      if (!box) return;
+      const name = box.closest("tr[data-name]")?.dataset.name;
+      if (!name) return;
+      api("/api/banks/c-status-options", {
+        method: "POST",
+        body: JSON.stringify({ name, reconcile_required: box.checked ? 1 : 0 }),
+      }).then(loadCStatus).then(() => toast("已保存")).catch((err) => {
+        box.checked = !box.checked;
+        toast(err.message || "保存失败", "error");
+      });
     });
 
     document.getElementById("cstatus-rows")?.addEventListener("click", (e) => {
