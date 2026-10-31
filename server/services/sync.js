@@ -280,14 +280,29 @@ async function syncUserTailPages(db, companyId, tailPages, cfg) {
   return syncUsers(db, companyId, { maxPages: n, startPage });
 }
 
+// 熔断阈值。apiIds 可能是残缺的（maxPages 截断、模块权限没勾、平台返回半截），而
+// fetchAllPages 触顶时正常退出不报错 —— 没有这道闸，一次残缺结果就删掉成千上万个客户。
+// 真实的增量删除是个位数，放宽到 5% 也远在正常范围之外。
+function pruneLimit(totalCount) {
+  return Math.max(50, Math.ceil(totalCount * 0.05));
+}
+
 function pruneStaleCustomers(db, companyId, apiIds) {
   const keep = apiIds instanceof Set ? apiIds : new Set(apiIds);
-  const staleIds = db
+  const allIds = db
     .prepare("SELECT id FROM customers WHERE company_id = ?")
     .all(companyId)
-    .map((r) => r.id)
-    .filter((id) => id && !keep.has(id));
+    .map((r) => r.id);
+  const staleIds = allIds.filter((id) => id && !keep.has(id));
   if (!staleIds.length) return { removed: 0, ids: [] };
+  const limit = pruneLimit(allIds.length);
+  if (staleIds.length > limit) {
+    console.error(
+      "[sync]", companyId, "PRUNE BLOCKED: would delete", staleIds.length,
+      "of", allIds.length, "customers (limit", limit + "); API returned", keep.size
+    );
+    return { removed: 0, ids: [], pruneBlocked: true };
+  }
   const delStmt = (n) =>
     db.prepare(
       "DELETE FROM customers WHERE company_id = ? AND id IN (" + Array(n).fill("?").join(",") + ")"

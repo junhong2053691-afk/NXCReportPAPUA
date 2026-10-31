@@ -25,6 +25,14 @@ function normalizeStatusValue(value) {
     .replace(/\s+/g, " ");
 }
 
+// 状态可由公司自定义，所以校验格式而不是固定名单。这个值会变成前端的 CSS 类名：
+// 曾经不限字符时，operator 写一个含引号的 status 就能在 admin 的浏览器里执行脚本。
+const STATUS_VALUE_RE = /^[a-z0-9][a-z0-9 ._-]{0,39}$/;
+
+function isValidStatusValue(value) {
+  return STATUS_VALUE_RE.test(String(value || ""));
+}
+
 function defaultLabel(value) {
   return normalizeStatusValue(value).toUpperCase();
 }
@@ -73,6 +81,7 @@ function listStatusOptions(db, companyId) {
 function upsertStatusOption(db, companyId, body) {
   const value = normalizeStatusValue(body.value || body.label);
   if (!value) throw Object.assign(new Error("status value required"), { status: 400 });
+  if (!isValidStatusValue(value)) throw Object.assign(new Error("状态值格式无效"), { status: 400 });
   const label = String(body.label || defaultLabel(value)).trim();
   // 必须校验成严格的 6 位 hex。这个值会被前端拼进 style="..." 属性
   // （public/js/bank-accounts.js 的 statusStyleAttr → gridCellHtml/roCellHtml，
@@ -107,6 +116,7 @@ function deleteStatusOption(db, companyId, value) {
 module.exports = {
   DEFAULT_STATUS_OPTIONS,
   normalizeStatusValue,
+  isValidStatusValue,
   listStatusOptions,
   upsertStatusOption,
   deleteStatusOption,

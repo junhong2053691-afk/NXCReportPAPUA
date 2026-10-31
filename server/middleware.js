@@ -1,6 +1,49 @@
+const crypto = require("crypto");
 const { getDb } = require("./db/init");
 const { defaultCompanyId, getCompany } = require("./lib/companies");
 const { isOperator, hasCompanyAccess, firstAuthorizedCompanyId } = require("./lib/userAccess");
+
+// 与 cookie.maxAge 一致。cookie 不滚动，但 store 的过期时间每个请求都会被 touch 顺延，
+// 所以偷到 cookie 的人只要持续发请求就永不过期 —— 绝对上限必须由服务端自己算。
+const SESSION_MAX_AGE_MS = 12 * 60 * 60 * 1000;
+
+// session 里存哈希的派生值而不是哈希本身：session 落在 sessions.db 里，不该多一份
+// password_hash。密码一改标签就变，无需新增列，也不用去翻 store 找这个用户的会话。
+function passwordTag(hash) {
+  return crypto.createHash("sha256").update(String(hash || "")).digest("hex").slice(0, 16);
+}
+
+function establishSession(req, user, now = Date.now()) {
+  req.session.user = {
+    id: user.id,
+    username: user.username,
+    name: user.name,
+    role: user.role,
+  };
+  req.session.loginAt = now;
+  req.session.passwordTag = passwordTag(user.password_hash);
+}
+
+function sessionStillValid(row, session, now = Date.now()) {
+  if (!row || row.status !== "active") return false;
+  if (row.role !== session.user.role) return false;
+  if (session.passwordTag !== passwordTag(row.password_hash)) return false;
+  return Number(session.loginAt) > 0 && now - Number(session.loginAt) < SESSION_MAX_AGE_MS;
+}
+
+// requireLogin 只看 session 里的快照，所以这里必须在所有路由之前按库复核一次：
+// 否则停用、删除、改密都踢不掉已登录的人。按主键查一行，6s 轮询下也没有成本。
+//
+// 用 regenerate 而不是 destroy：destroy 之后 req.session 是 undefined，
+// 带着失效 cookie 重新登录的那个请求就没有 session 可写了。
+function sessionGuard(req, res, next) {
+  if (!req.session || !req.session.user) return next();
+  const row = getDb()
+    .prepare("SELECT role, status, password_hash FROM users WHERE id = ?")
+    .get(req.session.user.id);
+  if (sessionStillValid(row, req.session)) return next();
+  req.session.regenerate((err) => next(err));
+}
 
 function requireLogin(req, res, next) {
   if (!req.session || !req.session.user) {
@@ -68,4 +111,14 @@ function requireDataAccess(req, res, next) {
   next();
 }
 
-module.exports = { requireLogin, requireAdmin, resolveCompany, requireCompany, requireDataAccess };
+module.exports = {
+  requireLogin,
+  requireAdmin,
+  resolveCompany,
+  requireCompany,
+  requireDataAccess,
+  establishSession,
+  sessionGuard,
+  sessionStillValid,
+  passwordTag,
+};

@@ -189,17 +189,17 @@ async function loadTransactions(options) {
         typeBadge(r.type) +
         "</td><td>" +
         redepositDisplay(r) +
-        "</td><td>" +
+        '</td><td translate="no">' +
         customerLink(r.name || "-", r.customer_id, r.mobile) +
-        "</td><td>" +
+        '</td><td translate="no">' +
         escHtml(r.mobile || "-") +
         "</td><td>" +
         fmtMoney(r.amount) +
         "</td><td>" +
         methodDisplay(r) +
-        "</td><td>" +
-        channelDisplay(r) +
-        "</td><td>" +
+        '</td><td translate="no">' +
+        escHtml(channelDisplay(r)) +
+        '</td><td translate="no">' +
         escHtml(r.status || "-") +
         '</td><td><div class="tx-id-cell"><span>' +
         escHtml(r.id || "-") +

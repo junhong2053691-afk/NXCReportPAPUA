@@ -8,6 +8,11 @@
   setupLogout();
 
   const ID_RE = /^[a-z0-9][a-z0-9_-]{0,31}$/;
+  // 两栏都是 password 框且上下紧挨，Bot Token 粘进 Access Token 是很容易犯的错，
+  // 而且后果隐蔽：保存成功、toast 报"已保存"，只有底部同步状态几秒后变成"API 拒绝访问"。
+  // 平台 Access Token 是 64 位十六进制，Telegram 是 <bot_id>:<35+ 字符>，按形状拦。
+  // server/routes/companies.js 有同一条后端校验兜底。
+  const TELEGRAM_TOKEN_RE = /^\d{5,}:[A-Za-z0-9_-]{20,}$/;
   const wrap = document.getElementById("company-cards");
   const createModal = document.getElementById("create-modal");
   const deleteModal = document.getElementById("delete-modal");
@@ -68,13 +73,21 @@
         esc(co.access_id) +
         '"></div>' +
         '<div class="form-group"><label>Access Token</label><input data-f="access_token" type="password" placeholder="' +
-        (co.access_token_set ? "已保存 " + co.access_token_masked + "，留空则保持不变" : "必填") +
+        (co.access_token_set ? "已保存 " + esc(co.access_token_masked) + "，留空则保持不变" : "必填") +
         '"></div>' +
         '<label class="export-check"><input type="checkbox" data-f="enabled" ' +
         (co.enabled ? "checked" : "") +
         "> 启用同步</label>" +
+        '<div class="form-group"><label>Telegram Bot Token</label><input data-f="telegram_bot_token" type="password" placeholder="' +
+        (co.telegram_bot_token_set
+          ? "已保存 " + esc(co.telegram_bot_token_masked) + "，留空则保持不变"
+          : "向 @BotFather 申请，留空则不启用") +
+        '"><small class="form-hint">该公司专属 Bot，用于推送余额报警并响应 /balance、/today。</small></div>' +
+        '<div class="form-group"><label>Telegram 收件 chat</label><input data-f="telegram_chat_ids" value="' +
+        esc(co.telegram_chat_ids) +
+        '" placeholder="例如 -1001234567890,555"><small class="form-hint">多个用逗号分隔。把 Bot 拉进群后发送 /myid 即可获取，群 chat id 是负数。</small></div>' +
         '<p class="company-hint">' +
-        (co.last_sync_at ? "上次同步: " + co.last_sync_at + " — " + (co.last_sync_msg || "") : "尚未同步") +
+        (co.last_sync_at ? "上次同步: " + esc(co.last_sync_at) + " — " + esc(co.last_sync_msg || "") : "尚未同步") +
         "</p>" +
         '<div class="actions company-actions">' +
         '<button class="btn btn-primary btn-sm save-btn">保存</button> ' +
@@ -112,7 +125,28 @@
       });
       if (!ok) return;
     }
+    if (body.access_token && TELEGRAM_TOKEN_RE.test(body.access_token)) {
+      setMessage(hint, "Access Token 里填的是 Telegram Bot Token（形如 123456:AA...）。平台 Access Token 不含冒号——请检查是不是粘错了输入框。", "error");
+      card.querySelector('[data-f="access_token"]')?.focus();
+      return;
+    }
+    if (body.telegram_bot_token && !TELEGRAM_TOKEN_RE.test(body.telegram_bot_token)) {
+      setMessage(hint, "Telegram Bot Token 格式不对，应形如 123456789:AAxxxxxxxx（向 @BotFather 索取）。", "error");
+      card.querySelector('[data-f="telegram_bot_token"]')?.focus();
+      return;
+    }
     if (!body.access_token) delete body.access_token;
+    // 同 access_token：留空表示不改，而不是清空已保存的 token。
+    if (!body.telegram_bot_token) delete body.telegram_bot_token;
+    const badChat = (body.telegram_chat_ids || "")
+      .split(/[,;\s]+/)
+      .filter(Boolean)
+      .filter((v) => !/^-?\d+$/.test(v));
+    if (badChat.length) {
+      setMessage(hint, "Telegram chat id 必须是整数（群为负数）：" + badChat.join(", "), "error");
+      card.querySelector('[data-f="telegram_chat_ids"]')?.focus();
+      return;
+    }
     try {
       await api("/api/companies/" + co.id, { method: "PUT", body: JSON.stringify(body) });
       showToast("公司设置已保存", { tone: "success" });
@@ -214,6 +248,11 @@
     if (!body.name) {
       setMessage(document.getElementById("create-hint"), "请填写显示名称", "error");
       document.getElementById("new-name")?.focus();
+      return;
+    }
+    if (body.access_token && TELEGRAM_TOKEN_RE.test(body.access_token)) {
+      setMessage(document.getElementById("create-hint"), "Access Token 里填的是 Telegram Bot Token（形如 123456:AA...）。Bot Token 请在公司创建后于卡片里单独填写。", "error");
+      document.getElementById("new-access-token")?.focus();
       return;
     }
     try {

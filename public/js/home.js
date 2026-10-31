@@ -293,7 +293,7 @@ function renderTodayLeaderboard(data) {
         "</td><td>" +
         customerLink(r.name || "-", r.customer_id, r.mobile) +
         "</td><td>" +
-        (r.mobile || "-") +
+        escHtml(r.mobile || "-") +
         "</td><td><strong>" +
         fmtMoney(r.dep_total) +
         "</strong></td><td>" +
@@ -307,11 +307,11 @@ function renderTodayLeaderboard(data) {
         "</td><td>" +
         fmtMoney(r.max_single) +
         "</td><td>" +
-        fmtDate(r.last_deposit) +
+        escHtml(fmtDate(r.last_deposit)) +
         "</td><td>" +
-        fmtDate(r.last_withdraw) +
+        escHtml(fmtDate(r.last_withdraw)) +
         "</td><td>" +
-        (r.referrer || "-") +
+        escHtml(r.referrer || "-") +
         "</td></tr>"
       );
     })
@@ -400,7 +400,11 @@ function renderWeekSummary(rows) {
     totalWd += wd;
     var date = String(row.date || "");
     var dateObj = new Date(date + "T00:00:00");
-    var weekday = Number.isNaN(dateObj.getTime()) ? date.slice(5) : dateObj.toLocaleDateString("zh-CN", {
+    // Weekday names are rendered by Intl, not by the dictionary, so this is the
+    // one place that has to follow the language itself. dateLocale() lives in
+    // i18n.js; fall back to zh-CN if that script failed to load.
+    var weekLocale = typeof window.dashDateLocale === "function" ? window.dashDateLocale() : "zh-CN";
+    var weekday = Number.isNaN(dateObj.getTime()) ? date.slice(5) : dateObj.toLocaleDateString(weekLocale, {
       weekday: "short",
       month: "numeric",
       day: "numeric",
@@ -421,10 +425,19 @@ function renderWeekSummary(rows) {
   summary.textContent = "\u7d2f\u8ba1\u51c0\u989d " + (totalNet > 0 ? "+" : "") + compactMoney(totalNet);
 }
 
+var lastWeekRows = null;
+
+// Weekday names come from Intl, so unlike the rest of the page the translation
+// engine cannot re-translate them in place on a toggle: re-render instead.
+window.addEventListener("language-changed", function () {
+  if (lastWeekRows) renderWeekSummary(lastWeekRows);
+});
+
 function loadWeekSummary() {
   return api("/api/data/trend?days=7", { bg: true })
     .then(function (trend) {
-      renderWeekSummary(trend.rows || []);
+      lastWeekRows = trend.rows || [];
+      renderWeekSummary(lastWeekRows);
     })
     .catch(function (error) {
       if (error && error.cancelled) return;

@@ -2,6 +2,14 @@ const express = require("express");
 const router = express.Router();
 const { getDb } = require("../db/init");
 const { computeBankDailyReport, balanceFromLedger, refreshBankBalance, bankBranchOf } = require("../lib/bankReport");
+const { evaluateBalanceAlert, clearFired } = require("../lib/bankAlerts");
+const {
+  LIFECYCLE,
+  SQL_OPERATING,
+  isArchived,
+  statusOf,
+  archiveBlockReason,
+} = require("../lib/bankLifecycle");
 const {
   ACCOUNT_KINDS,
   listCStatusOptions,
@@ -19,10 +27,12 @@ const {
   pendingCounts,
   bankAccLabel,
   nowSql,
+  normalizeSqlDateTime,
   platformTxTypeForLedger,
   reopenPendingForLedger,
 } = require("../lib/bankApply");
 const {
+  isValidStatusValue,
   listStatusOptions,
   upsertStatusOption,
   deleteStatusOption,
@@ -70,8 +80,10 @@ const KNOWN_BANKS = [
   "ME Bank", "Rabobank", "Citibank", "RACQ Bank",
 ];
 
+// 只认 resolveCompany 算出来的值。不能回退到 session：撤销授权后 session 里还留着旧公司，
+// 回退等于让被撤销的 operator 继续读写。挂载处的 requireCompany 保证这里非空。
 function companyId(req) {
-  return req.companyId || (req.session && req.session.companyId) || "";
+  return req.companyId || "";
 }
 
 function actor(req) {
@@ -90,6 +102,59 @@ function requestReason(req, res) {
 function normalizeKind(v) {
   const k = String(v || "nominee").trim().toLowerCase();
   return ACCOUNT_KINDS.includes(k) ? k : "nominee";
+}
+
+// 生命周期状态机：active ──封禁──> banned ──归档(闸门)──> archived
+//                        <──解封──        <──取消归档──
+//
+// 两条刻意的设计：
+//  1. **不允许 active 直接归档**（archive 要求当前是 banned）。这样每个归档背后都有一条
+//     带原因的 banned 事件，而且「封禁中」页签成为通往归档的唯一入口——待清理队列没法
+//     被绕过。
+//  2. **unarchive 回落到 banned 而不是 active**。取消归档只是把账户捞回可见的待清理
+//     队列，要回到运营还得再显式解封一次。这与「解封不自动恢复 active 列」是同一种
+//     谨慎：让钱重新流动永远需要一次明确的人为动作。
+const LIFECYCLE_OPS = {
+  ban: {
+    status: LIFECYCLE.BANNED,
+    active: 0,
+    event: "banned",
+    action: "bank_account.banned",
+    label: "封禁",
+  },
+  unban: {
+    status: LIFECYCLE.ACTIVE,
+    event: "unbanned",
+    action: "bank_account.unbanned",
+    label: "解封",
+  },
+  archive: {
+    status: LIFECYCLE.ARCHIVED,
+    active: 0,
+    event: "archived",
+    action: "bank_account.archived",
+    label: "归档",
+    adminOnly: true,
+    gate: archiveBlockReason,
+  },
+  unarchive: {
+    status: LIFECYCLE.BANNED,
+    event: "unarchived",
+    action: "bank_account.unarchived",
+    label: "取消归档",
+    adminOnly: true,
+    requiresStatus: LIFECYCLE.ARCHIVED,
+    wrongStateError: "该渠道不在已归档状态",
+  },
+};
+
+// 余额上限报警阈值。留空 / null 视为 0 = 不启用；非法值返回 null 让调用方报 400。
+function normalizeAlertThreshold(value) {
+  const raw = String(value ?? "").replace(/,/g, "").trim();
+  if (!raw) return 0;
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n < 0) return null;
+  return n;
 }
 
 router.get("/", (req, res) => {
@@ -163,7 +228,9 @@ router.get("/c-status-options", (req, res) => {
 router.post("/c-status-options", requireAdmin, (req, res) => {
   const cid = companyId(req);
   const name = String(req.body.name || "").trim();
-  const target = req.body.target_company_id != null ? String(req.body.target_company_id).trim() : "";
+  // 未传字段 = 不改（upsertCStatusOption 用 null 表示「保持原值」）。写成 "" 会让
+  // 只改 reconcile_required 的请求顺手把关联公司清空，那条 C STATUS 就脱离对平了。
+  const target = req.body.target_company_id != null ? String(req.body.target_company_id).trim() : null;
   const reconcileRequired = req.body.reconcile_required == null ? null : Number(req.body.reconcile_required) ? 1 : 0;
   if (!name) return res.status(400).json({ error: "name required" });
   const row = upsertCStatusOption(getDb(), cid, name, target, reconcileRequired);
@@ -298,11 +365,16 @@ router.post("/", (req, res) => {
     account_name = "", bsb = "", account_number = "", payid = "", note = "",
     account_kind = "nominee",
     reset_daily_balance = 0,
+    alert_threshold = 0,
   } = req.body;
   const bank_branch = String(bankBranchBody || req.body.bank || "").trim();
   const name = String(account_name || "").trim();
   if (!bank_branch && !name && !account_number && !payid) {
     return res.status(400).json({ error: "请至少填写 BankBranch / NAME / 账号 / PAYID 之一" });
+  }
+  const alertThreshold = normalizeAlertThreshold(alert_threshold);
+  if (alertThreshold == null) {
+    return res.status(400).json({ error: "余额上限报警必须是不小于 0 的数字" });
   }
   const db = getDb();
   const maxOrder = db
@@ -314,12 +386,14 @@ router.post("/", (req, res) => {
       .prepare(
         `INSERT INTO bank_accounts
           (company_id, bank, branch, bank_branch, account_name, bsb, account_number, payid,
-           balance, active, reset_daily_balance, account_kind, lifecycle_status, note, sort_order, updated_at)
-         VALUES (?, ?, '', ?, ?, ?, ?, ?, 0, 1, ?, ?, 'active', ?, ?, datetime('now'))`
+           balance, active, reset_daily_balance, account_kind, lifecycle_status, note, sort_order,
+           alert_threshold, updated_at)
+         VALUES (?, ?, '', ?, ?, ?, ?, ?, 0, 1, ?, ?, 'active', ?, ?, ?, datetime('now'))`
       )
       .run(
         cid, bank_branch, bank_branch, name, bsb.trim(), String(account_number).trim(),
-        String(payid).trim(), reset_daily_balance ? 1 : 0, kind, String(note || "").trim(), maxOrder + 1
+        String(payid).trim(), reset_daily_balance ? 1 : 0, kind, String(note || "").trim(), maxOrder + 1,
+        alertThreshold
       );
     const saved = db.prepare("SELECT * FROM bank_accounts WHERE id = ?").get(result.lastInsertRowid);
     logAccountEvent(db, {
@@ -350,9 +424,17 @@ router.put("/:id", (req, res) => {
   const existing = db.prepare("SELECT * FROM bank_accounts WHERE id = ? AND company_id = ?").get(id, cid);
   if (!existing) return res.status(404).json({ error: "Not found" });
 
+  // alert_fired_at / alert_fired_date 是系统状态，绝不能进白名单——否则可以直接伪造
+  // 「已报警」把某个账户永久静音。
+  //
+  // lifecycle_status 同理不在白名单里：它只能经下面的 ban / unban / archive / unarchive
+  // 四个分支改动。放进白名单的话，一条 PUT {"lifecycle_status":"archived"} 就能绕过
+  // 归档闸门（把还有余额的账户藏起来）、绕过 active = 0 的不变量（sync.js 的自动入账
+  // 只看 active，于是「假封禁」的账户照样收钱）、也不会留下 bank_account_events。
   const allowed = [
     "bank_branch", "account_name", "bsb", "account_number", "payid", "balance",
-    "active", "reset_daily_balance", "note", "sort_order", "account_kind", "lifecycle_status",
+    "active", "reset_daily_balance", "note", "sort_order", "account_kind",
+    "alert_threshold",
   ];
   const sets = [];
   const vals = [];
@@ -361,10 +443,22 @@ router.put("/:id", (req, res) => {
       let v = req.body[key];
       if (key === "account_kind") v = normalizeKind(v);
       if (key === "reset_daily_balance") v = v ? 1 : 0;
+      if (key === "alert_threshold") {
+        v = normalizeAlertThreshold(v);
+        if (v == null) return res.status(400).json({ error: "余额上限报警必须是不小于 0 的数字" });
+      }
       sets.push(`${key} = ?`);
       vals.push(v);
     }
   }
+  // 阈值变了就清空已报警标记，并在同一事务里重新判定：管理员刚说「到 X 就告诉我」，
+  // 而余额已经到了，沉默到下一笔流水才报是错的。
+  const thresholdChanged =
+    req.body.alert_threshold !== undefined &&
+    Math.round(Number(existing.alert_threshold || 0) * 100) !==
+      Math.round(normalizeAlertThreshold(req.body.alert_threshold) * 100);
+  // 复位本身交给 bankAlerts.clearFired（见下面的 runAtomic）：要清哪几列只有那一份，
+  // 在这里再抄一遍 sets.push 早晚会漏掉新加的列——alert_fired_balance 就是这么来的。
   if (req.body.bank_branch !== undefined) {
     sets.push("bank = ?");
     vals.push(String(req.body.bank_branch).trim());
@@ -372,16 +466,38 @@ router.put("/:id", (req, res) => {
     vals.push("");
   }
 
-  // Ban / unban helpers
-  if (req.body.ban === true) {
-    sets.push("lifecycle_status = ?");
-    vals.push("banned");
-    sets.push("active = ?");
-    vals.push(0);
+  // 生命周期变更。四个分支各自声明写什么状态、记什么事件、审计里叫什么，避免像
+  // 以前那样把 status / active / event / action / summary 摊在五处三元表达式里。
+  const lifecycleOp = LIFECYCLE_OPS[
+    ["ban", "unban", "archive", "unarchive"].find((k) => req.body[k] === true) || ""
+  ];
+  const opCount = ["ban", "unban", "archive", "unarchive"].filter((k) => req.body[k] === true).length;
+  if (opCount > 1) {
+    return res.status(400).json({ error: "状态操作互斥，一次只能执行一个" });
   }
-  if (req.body.unban === true) {
+  if (lifecycleOp) {
+    // 归档让账户从所有视图里消失，性质接近 status-options 那类全公司配置的写操作，
+    // 所以要 admin。封禁 / 解封仍然允许 operator 做（那是日常运营动作）。
+    if (lifecycleOp.adminOnly && req.session?.user?.role !== "admin") {
+      return res.status(403).json({ error: "需要管理员权限" });
+    }
+    // 闸门必须在 runAtomic 之前：这个 handler 没有 try/catch，在事务里抛会变成未捕获
+    // 的 500。better-sqlite3 是同步单线程，「先读后写」之间不会有别的请求插进来。
+    if (lifecycleOp.gate) {
+      const blocked = lifecycleOp.gate(db, existing);
+      if (blocked) return res.status(409).json({ error: blocked });
+    }
+    if (lifecycleOp.requiresStatus && statusOf(existing) !== lifecycleOp.requiresStatus) {
+      return res.status(400).json({ error: lifecycleOp.wrongStateError });
+    }
     sets.push("lifecycle_status = ?");
-    vals.push("active");
+    vals.push(lifecycleOp.status);
+    // 不变量：banned | archived ⇒ active = 0。sync.js 的自动入账只看 active，靠这条
+    // 保证封禁 / 归档的账户拿不到新充值。
+    if (lifecycleOp.active != null) {
+      sets.push("active = ?");
+      vals.push(lifecycleOp.active);
+    }
   }
 
   if (!sets.length) return res.status(400).json({ error: "No fields to update" });
@@ -389,21 +505,19 @@ router.put("/:id", (req, res) => {
   vals.push(id, cid);
   const row = runAtomic(db, () => {
     db.prepare(`UPDATE bank_accounts SET ${sets.join(", ")} WHERE id = ? AND company_id = ?`).run(...vals);
-    const saved = db.prepare("SELECT * FROM bank_accounts WHERE id = ?").get(id);
-    let event = "updated";
-    let action = "bank_account.updated";
-    if (req.body.ban === true) {
-      event = "banned";
-      action = "bank_account.banned";
-    } else if (req.body.unban === true) {
-      event = "unbanned";
-      action = "bank_account.unbanned";
+    if (thresholdChanged) {
+      clearFired(db, existing);
+      evaluateBalanceAlert(db, id);
     }
+    const saved = db.prepare("SELECT * FROM bank_accounts WHERE id = ?").get(id);
+    const event = lifecycleOp ? lifecycleOp.event : "updated";
+    const action = lifecycleOp ? lifecycleOp.action : "bank_account.updated";
+    const note = String(req.body.ban_note || req.body.archive_note || "").trim();
     logAccountEvent(db, {
       companyId: cid,
       bankAccountId: id,
       event,
-      note: req.body.ban_note || "",
+      note,
       user: actor(req),
     });
     const changes = diffFields(existing, saved, BANK_ACCOUNT_FIELDS.filter((field) => field !== "updated_at"));
@@ -413,8 +527,8 @@ router.put("/:id", (req, res) => {
         action,
         source: "user",
         actor: actorFromRequest(req),
-        summary: `${event === "updated" ? "更新" : event === "banned" ? "封禁" : "解封"}银行账户 #${id}`,
-        reason: String(req.body.ban_note || "").trim(),
+        summary: `${lifecycleOp ? lifecycleOp.label : "更新"}银行账户 #${id}`,
+        reason: note,
         before: changes.before,
         after: changes.after,
         metadata: { changed_fields: changes.changed },
@@ -580,15 +694,27 @@ router.post("/ledger", (req, res) => {
   const amounts = readLedgerAmounts({ amount_in, amount_out, help_amount, trf_amount }, ["amount_in", "amount_out", "help_amount", "trf_amount"]);
   if (!amounts) return res.status(400).json({ error: "金额必须是有效数字" });
   const ledgerStatus = normalizeLedgerStatus(status, amounts);
+  if (!isValidStatusValue(ledgerStatus)) return res.status(400).json({ error: "STATUS 格式无效" });
   const finalBankAccountId = ledgerStatus === "redeposit" ? 0 : Number(bank_account_id);
   const finalBankAcc = ledgerStatus === "redeposit" ? "" : String(bank_acc).trim();
 
   if (finalBankAccountId) {
     const ba = db
-      .prepare("SELECT id FROM bank_accounts WHERE id = ? AND company_id = ? AND lifecycle_status != 'banned'")
+      .prepare(`SELECT id FROM bank_accounts WHERE id = ? AND company_id = ? AND ${SQL_OPERATING}`)
       .get(finalBankAccountId, cid);
-    if (!ba) return res.status(400).json({ error: "银行账户不属于当前公司" });
+    if (!ba) return res.status(400).json({ error: "银行账户不属于当前公司，或已封禁 / 已归档" });
   }
+
+  // entry_time 必须规范化成实例时区的墙上时间。所有日界都是在这一列上做字符串前缀
+  // 比较，放任客户端写进带 Z 或带偏移的串会同时打穿日报、余额、流水筛选和待审批
+  // 计数，而且没有任何报错。调钱路径（bankApply.submitTransfer）本来就这么做，这里
+  // 是补缺口不是立新规。给了但无效一律 400 拒绝，不静默强转——照 bankApply 的
+  // pendingLedgerEntryTime 已立下的先例。
+  const normalizedEntryTime = normalizeSqlDateTime(entry_time);
+  if (String(entry_time || "").trim() && !normalizedEntryTime) {
+    return res.status(400).json({ error: "入账日期或时间无效" });
+  }
+
   const row = runAtomic(db, () => {
     if (c_status) upsertCStatusOptions(db, cid, String(c_status).trim(), null);
     const result = db.prepare(`
@@ -597,7 +723,7 @@ router.post("/ledger", (req, res) => {
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
     `).run(
       finalBankAccountId, cid,
-      entry_time || nowSql(),
+      normalizedEntryTime || nowSql(),
       String(tx_id).trim(), ledgerStatus, amounts.amount_in, amounts.amount_out,
       amounts.help_amount, amounts.trf_amount,
       finalBankAcc, String(username).trim(), String(name).trim(),
@@ -637,15 +763,26 @@ router.put("/ledger/:id", (req, res) => {
         trf_amount: req.body.trf_amount ?? existing.trf_amount,
       })
     : String(existing.status || "");
+  if (req.body.status !== undefined && !isValidStatusValue(nextStatus)) {
+    return res.status(400).json({ error: "STATUS 格式无效" });
+  }
   if (nextStatus === "redeposit") {
     req.body.status = "redeposit";
     req.body.bank_account_id = 0;
     req.body.bank_acc = "";
   } else if (req.body.bank_account_id) {
     const ba = db
-      .prepare("SELECT id FROM bank_accounts WHERE id = ? AND company_id = ? AND lifecycle_status != 'banned'")
+      .prepare(`SELECT id FROM bank_accounts WHERE id = ? AND company_id = ? AND ${SQL_OPERATING}`)
       .get(Number(req.body.bank_account_id), cid);
-    if (!ba) return res.status(400).json({ error: "é“¶è¡Œè´¦æˆ·ä¸å±žäºŽå½“å‰å…¬å¸" });
+    if (!ba) return res.status(400).json({ error: "银行账户不属于当前公司，或已封禁 / 已归档" });
+  }
+
+  // 同 POST /ledger：entry_time 必须是实例时区的墙上时间格式，给了但无效一律 400
+  // 拒绝而不是静默强转。显式传空串也算无效——这一列 NOT NULL，清空它没有意义。
+  let normalizedEntryTime = "";
+  if (req.body.entry_time !== undefined) {
+    normalizedEntryTime = normalizeSqlDateTime(req.body.entry_time);
+    if (!normalizedEntryTime) return res.status(400).json({ error: "入账日期或时间无效" });
   }
 
   const allowed = [
@@ -657,7 +794,9 @@ router.put("/ledger/:id", (req, res) => {
   for (const key of allowed) {
     if (req.body[key] !== undefined) {
       sets.push(`${key} = ?`);
-      if (key === "status") {
+      if (key === "entry_time") {
+        vals.push(normalizedEntryTime);
+      } else if (key === "status") {
         vals.push(normalizeLedgerStatus(req.body.status, {
           amount_in: req.body.amount_in ?? existing.amount_in,
           amount_out: req.body.amount_out ?? existing.amount_out,
@@ -707,6 +846,17 @@ router.post("/ledger/deleted/:deletedId/restore", (req, res) => {
   const db = getDb();
   const deleted = db.prepare("SELECT * FROM bank_ledger_deleted WHERE id = ? AND company_id = ?").get(deletedId, cid);
   if (!deleted) return res.status(404).json({ error: "Deleted ledger not found" });
+
+  // 恢复流水会刷新目标账户余额。对已归档的账户做这件事，会让它在所有视图之外悄悄带上
+  // 余额——归档闸门（bankLifecycle.archiveBlockReason）挡住的正是这条路，这里是另一半。
+  if (deleted.bank_account_id) {
+    const target = db
+      .prepare("SELECT * FROM bank_accounts WHERE id = ? AND company_id = ?")
+      .get(deleted.bank_account_id, cid);
+    if (target && isArchived(target)) {
+      return res.status(409).json({ error: "该渠道已归档，请先取消归档再恢复流水" });
+    }
+  }
 
   let restoredId = 0;
   let restoredPlatformOrder = false;
@@ -883,7 +1033,14 @@ router.get("/:id/events", (req, res) => {
   res.json({ rows });
 });
 
-router.delete("/:id", (req, res) => {
+// 物理删除账户。前端不提供入口——UI 上的退役路径是 封禁 → 归档，历史流水全部留着。
+// 这个路由只是 admin 的逃生口（删掉建错了、一笔流水都没走过的账户）。
+//
+// 为什么必须挡住「有流水的账户」：bank_ledger 等几张表**没有外键约束**，删掉账户之后
+// 那些流水行就成了孤儿——computeBankDailyReport 的 bankMap.get() 会漏掉它们的明细，
+// 但 totals.total_in / total_out 仍然把它们加进去，于是明细与总额永久对不上；而
+// balanceFromLedger(那个已消失的 id) 还能把钱算出来，只是再没有任何视图会显示。
+router.delete("/:id", requireAdmin, (req, res) => {
   const cid = companyId(req);
   const reason = requestReason(req, res);
   if (reason == null) return;
@@ -891,6 +1048,26 @@ router.delete("/:id", (req, res) => {
   const db = getDb();
   const existing = db.prepare("SELECT * FROM bank_accounts WHERE id = ? AND company_id = ?").get(id, cid);
   if (!existing) return res.status(404).json({ error: "Not found" });
+
+  const used =
+    Number(
+      db.prepare("SELECT COUNT(*) AS n FROM bank_ledger WHERE company_id = ? AND bank_account_id = ?")
+        .get(cid, id)?.n || 0
+    ) +
+    Number(
+      db.prepare("SELECT COUNT(*) AS n FROM bank_ledger_deleted WHERE company_id = ? AND bank_account_id = ?")
+        .get(cid, id)?.n || 0
+    ) +
+    // bank_balance_log 没有 company_id 这一列（schema.sql:129-136），只能按账户 id 查。
+    Number(
+      db.prepare("SELECT COUNT(*) AS n FROM bank_balance_log WHERE bank_account_id = ?").get(id)?.n || 0
+    );
+  if (used > 0) {
+    return res.status(409).json({
+      error: `该渠道已有 ${used} 条流水记录，不能删除；请改用封禁 → 归档`,
+    });
+  }
+
   runAtomic(db, () => {
     db.prepare("DELETE FROM bank_accounts WHERE id = ? AND company_id = ?").run(id, cid);
     appendAuditEvent(db, {

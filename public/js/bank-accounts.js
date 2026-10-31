@@ -1,6 +1,11 @@
 (function () {
   "use strict";
 
+  // 渠道生命周期判定的唯一入口（镜像见 app.js 的 window.BankLifecycle，真源在
+  // server/lib/bankLifecycle.js）。不要在本文件里再写 lifecycle_status 的字面量比较——
+  // 改造前那些 `!== "banned"` 的反向白名单会把「已归档」当成可用账户。
+  const LC = window.BankLifecycle;
+
   let bankRows = [];
   let ledgerRows = [];
   let cStatusOptions = [];
@@ -26,14 +31,18 @@
   let bankReorderBusy = false;
   let draggedBankId = null;
   const RECONCILE_ALARM_SOUND = "/sounds/dragon-studio-alert-444816.mp3";
-  const RECONCILE_SNOOZE_MS = 20 * 60 * 1000;
-  let reconcileAudio = null;
-  let reconcileAlertSig = "";
-  let reconcileAlarmDueAt = 0;
-  let reconcileAlarmActive = false;
-  let reconcileSoundBlocked = false;
+  let reconcileAlarm = null;
+  let reconcileRendering = false;
   let workspaceContextRequest = 0;
   let lastSkippedPendingCount = 0;
+  // 渠道管理弹窗的视图状态。每个页签各自记页码（切回来还在原处），搜索词与展开集合
+  // 跨页签共享。BKD_PAGE_SIZE 把同时渲染的行数钉死，列表再长也不会拖慢弹窗。
+  let bkdTab = "operating";
+  const bkdPage = { operating: 1, banned: 1, archived: 1 };
+  let bkdQuery = "";
+  const bkdExpanded = new Set();
+  const BKD_PAGE_SIZE = 20;
+
   let bankLoadRequest = 0;
   let ledgerLoadRequest = 0;
   let reportLoadRequest = 0;
@@ -143,7 +152,9 @@
     return STATUS_LABEL[status] || String(status || "").toUpperCase();
   }
   function statusClass(status) {
-    const s = String(status || "").toLowerCase().replace(/\s+/g, "-");
+    // Every caller splices this into a class="..." attribute unescaped, so the
+    // whitelist here is what keeps a stored status from closing the attribute.
+    const s = String(status || "").toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9_-]/g, "");
     return "status-" + s;
   }
   let STATUS_COLORS = {
@@ -179,9 +190,19 @@
       STATUS_COLORS[s.value] = { accent: s.color, tint: hexToRgba(s.color, 0.13), text: s.color };
     });
   }
+  // 只把租户配的【色相】交给 CSS（--ledger-status-accent 来自
+  // bank_status_options.color，在「支付设置」页可改），底色/字色/色条
+  // 一律由 style.css 的「状态色：单一真值来源」块派生：
+  //     color: color-mix(in srgb, var(--st) 70%, var(--text) 30%)
+  // --text 随主题翻转，所以暗色模式不再沿用浅色那套原始高饱和值。
+  //
+  // 这里【绝对不能再内联 background/color/!important】：内联 !important
+  // 压过作者样式表里的一切，正是它让原先 146 行状态色 CSS 全部失效
+  // （包括 56 行专门为暗色写的补丁，从未生效过）。
   function statusStyleAttr(status) {
-    const c = STATUS_COLORS[parseStatus(status)] || { accent: "#64748b", tint: "rgba(100,116,139,.12)", text: "#475569" };
-    return `--ledger-status-accent:${c.accent};--ledger-status-tint:${c.tint};background:linear-gradient(90deg,${c.tint},transparent 88%) !important;box-shadow:inset 4px 0 0 ${c.accent};color:${c.text} !important;font-weight:800;`;
+    const c = STATUS_COLORS[parseStatus(status)];
+    const accent = (c && c.accent) || "#64748b";
+    return `--ledger-status-accent:${accent};`;
   }
   function inferRowStatus(r) {
     const st = String(r?.status || "").trim();
@@ -204,8 +225,9 @@
   function isRedepositStatus(status) {
     return parseStatus(status) === "redeposit";
   }
+  // 能出现在录入下拉、渠道 rail、编号与拖拽排序里的账户。封禁与归档都不在内。
   function usableBanks() {
-    return bankRows.filter((b) => String(b.lifecycle_status || "active") !== "banned");
+    return bankRows.filter(LC.isOperating);
   }
   function tabLabel(r) {
     const head = (bankBranchOf(r) || "Bank").slice(0, 12);
@@ -424,7 +446,10 @@
     if (f === "bank_acc" && bankId) attrs += ` data-bank-id="${bankId}"`;
     if (num) attrs += ' inputmode="decimal"';
     if (f === "time") attrs += ' type="time" step="60"';
-    return `<td class="${pick ? "cell-pick" : ""}"><input${attrs}></td>`;
+    // The <input value> is never translated (value is not in I18N_ATTRS, and
+    // readRow/parseStatus read it back to write bank_ledger), but mark the cell
+    // so that stays true by construction rather than by accident.
+    return `<td class="${pick ? "cell-pick" : ""}" translate="no"><input${attrs}></td>`;
   }
 
   function resetEnterSave() {
@@ -606,7 +631,11 @@
     const cls = ["ro-cell", `field-${f.replace(/_/g, "-")}`, num ? "sheet-num" : "", f === "time" ? "sheet-time" : "", f === "tx_id" ? "mono" : "", stCls].filter(Boolean).join(" ");
     const text = f === "status" ? statusLabel(parsedStatus) : (f === "name" ? plainDisplayText(val) : String(val ?? ""));
     const style = f === "status" ? ` style="${statusStyleAttr(parsedStatus)}"` : "";
-    return `<td class="${cls}" title="${esc(text)}"${style}>${esc(text)}</td>`;
+    // translate="no": every GRID_FIELD is data (remark, other_info, name,
+    // username, c_status, bank_acc, tx_id, amounts) or a tenant-defined STATUS
+    // label from bank_status_options. It also covers the title attribute, which
+    // is in I18N_ATTRS and would otherwise run the cell text through the engine.
+    return `<td class="${cls}" translate="no" title="${esc(text)}"${style}>${esc(text)}</td>`;
   }
   function buildGridRow(r, no, isNew) {
     const id = r?.id;
@@ -718,6 +747,11 @@
           hideGridPicker();
           resetEnterSave();
           renderGrid();
+        } else {
+          // Leaving the saved values in the entry row invites a second Enter that
+          // books the same money twice, and the balance would still reconcile.
+          resetNewRow(tr);
+          stopAdding();
         }
         return loadBanks().then(loadSheet).then(loadDailyReport);
       })
@@ -1132,9 +1166,9 @@
     renderFooterTotals();
     renderGrid();
   }
+  // 与后端 bankReport 的 total_balance 同源（isCountedInTotals）：封禁 / 归档 / PG 都不计。
   function isBalanceExcluded(b) {
-    return String(b.lifecycle_status || "active") === "banned"
-      || String(b.account_kind || "nominee") === "payment_gateway";
+    return !LC.isCountedInTotals(b);
   }
   function totalBalance() {
     if (dailyReport?.totals?.total_balance != null) {
@@ -1174,7 +1208,7 @@
     ].filter(([, value]) => String(value ?? "").trim());
     if (!fields.length) return '<div class="bk-bank-info bk-bank-info-empty">未填写银行资料</div>';
     return `<div class="bk-bank-info" title="点击复制完整银行资料">${fields.map(([label, value]) => {
-      return `<span class="bk-bank-info-line"><span class="bk-bank-info-label">${label}</span><span class="bk-bank-info-value">${esc(String(value).trim())}</span></span>`;
+      return `<span class="bk-bank-info-line"><span class="bk-bank-info-label">${label}</span><span class="bk-bank-info-value" translate="no">${esc(String(value).trim())}</span></span>`;
     }).join("")}</div>`;
   }
   function bankDirectoryStats(b) {
@@ -1185,25 +1219,39 @@
       displayBalance: bankDisplayBalance(b),
       excluded: isBalanceExcluded(b),
       isPG: String(b.account_kind || "nominee") === "payment_gateway",
+      overAlert: alertThresholdReached(b),
     };
   }
+  // 与后端 bankAlerts.js 的判定口径保持一致：阈值 > 0、运营中、余额 ≥ 阈值。
+  // 这里只是给列表加个视觉提示，真正的报警判定在服务端。
+  function alertThresholdReached(b) {
+    const threshold = Number(b.alert_threshold || 0);
+    if (!(threshold > 0)) return false;
+    if (!LC.isOperating(b)) return false;
+    return Math.round(bankDisplayBalance(b) * 100) >= Math.round(threshold * 100);
+  }
   function bankDirectoryStatusHtml(b, stats) {
+    const alertFlag = stats.overAlert
+      ? '<span class="bk-flag bk-flag-alert" title="余额已达报警阈值">⚠️</span>'
+      : "";
     if (stats.isPG) {
-      return '<span class="bk-flag bk-flag-pg" title="PaymentGateway balance is excluded from total">PG</span>';
+      return '<span class="bk-flag bk-flag-pg" title="PaymentGateway balance is excluded from total">PG</span>' + alertFlag;
     }
-    return b.active
-      ? '<span class="bk-flag bk-flag-active" title="Active channel">Active</span>'
-      : '<span class="bk-flag bk-flag-idle">Inactive</span>';
+    return (
+      (b.active
+        ? '<span class="bk-flag bk-flag-active" title="Active channel">Active</span>'
+        : '<span class="bk-flag bk-flag-idle">Inactive</span>') + alertFlag
+    );
   }
   function bankDirectoryRowHtml(b, index) {
     const stats = bankDirectoryStats(b);
     const selected = b.id === activeBankId;
     const bankLabel = bankBranchOf(b) || "未命名渠道";
     const accountName = String(b.account_name || "").trim();
-    const nameHtml = accountName ? `<div class="bk-channel-sub"><span class="bk-name-label">NAME</span>${esc(accountName)}</div>` : "";
+    const nameHtml = accountName ? `<div class="bk-channel-sub"><span class="bk-name-label">NAME</span><span translate="no">${esc(accountName)}</span></div>` : "";
     return `<article class="bk-bank-row${selected ? " active" : ""}${stats.isPG ? " bk-bank-row-pg" : ""}" data-id="${b.id}" data-bank-select="${b.id}" tabindex="0" draggable="true" aria-selected="${selected ? "true" : "false"}">
 <div class="bk-col-order"><button type="button" class="bk-order-handle" draggable="true" aria-label="Drag ${esc(bankLabel)} to reorder" title="Drag to reorder"><i data-lucide="grip-vertical"></i></button><span class="bk-row-no">${index + 1}</span></div>
-<div class="bk-col-channel"><span class="bk-field-group-label bk-channel-label">BANK BRANCH</span><div class="bk-channel-name"><strong>${esc(bankLabel)}</strong>${bankDirectoryStatusHtml(b, stats)}</div>${nameHtml}<div class="bk-channel-meta"><span class="kind-tag kind-${esc(b.account_kind || "nominee")}">${esc(KIND_LABEL[b.account_kind] || b.account_kind || "人头")}</span></div></div>
+<div class="bk-col-channel"><span class="bk-field-group-label bk-channel-label">BANK BRANCH</span><div class="bk-channel-name"><strong translate="no">${esc(bankLabel)}</strong>${bankDirectoryStatusHtml(b, stats)}</div>${nameHtml}<div class="bk-channel-meta"><span class="kind-tag kind-${esc(b.account_kind || "nominee")}">${esc(KIND_LABEL[b.account_kind] || b.account_kind || "人头")}</span></div></div>
 <div class="bk-col-info"><span class="bk-field-group-label">银行资料</span>${bankDirectoryInfoHtml(b)}</div>
 <div class="bk-col-balance"><div class="bk-metric-grid"><div class="bk-metric bk-metric-balance"><span>BALANCE</span><strong class="bk-row-balance${stats.excluded ? " bk-balance-excluded" : ""}">${fmt(stats.displayBalance)}</strong></div><div class="bk-metric"><span>COUNT</span><strong>${fmtMetric(stats.txCount)}</strong></div><div class="bk-metric bk-metric-outflow"><span>TOTAL OUTFLOW</span><strong>${fmt(stats.outflow)}</strong></div></div>${stats.excluded ? '<span class="bk-row-flow bk-excluded-note">不计入总余额</span>' : ""}</div>
 <div class="bk-col-actions"><button type="button" class="bk-copy-btn" data-copy-bank-id="${b.id}" title="Copy complete bank information"><i data-lucide="copy"></i><span>Copy info</span></button></div>
@@ -1217,8 +1265,10 @@
       box.innerHTML = `<div class="bk-rail-empty">${esc(tr("还没有支付渠道"))} - ${esc(tr("点右上角「+ 新渠道」添加"))}</div>`;
       return;
     }
-    const railBanks = bankRows.filter((r) => String(r.lifecycle_status || "active") !== "banned");
-    const bannedCount = bankRows.length - railBanks.length;
+    const railBanks = bankRows.filter(LC.isOperating);
+    // 只数封禁中的。归档账户已经退役清零，把它们算进「已封渠道」就等于把这个入口
+    // 变回一个只会越堆越大的数字——那正是要消灭的东西。
+    const bannedCount = bankRows.filter(LC.isBanned).length;
     box.innerHTML = `<section class="bk-directory" aria-label="Payment channels">
 <button type="button" class="bk-directory-summary${activeBankId === ALL_BANKS ? " active" : ""}" data-bank-select="all" aria-pressed="${activeBankId === ALL_BANKS ? "true" : "false"}"><span class="bk-summary-kicker">ALL CHANNELS</span><span class="bk-summary-copy"><strong>全部渠道</strong><span>点击渠道行可筛选流水</span></span><span class="bk-summary-balance"><small>总余额</small><strong>${fmt(totalBalance())}</strong></span><span class="bk-summary-count">${railBanks.length} 个渠道</span></button>
 <div class="bk-channel-list" role="list" aria-label="Payment channel list"><div class="bk-channel-list-head" aria-hidden="true"><span class="bk-col-order">排序</span><span class="bk-col-channel">BANK BRANCH / NAME</span><span class="bk-col-info">BSB / ACCOUNT / PAYID</span><span class="bk-col-balance">BALANCE / COUNT / TOTAL OUTFLOW</span><span class="bk-col-actions">操作</span></div>${railBanks.map((b, i) => bankDirectoryRowHtml(b, i)).join("")}</div>
@@ -1323,22 +1373,6 @@ ${bannedCount > 0 ? `<button type="button" class="bk-banned-summary" id="rail-ba
       }).join("")
       : '<tr><td colspan="4" class="sheet-empty">—</td></tr>';
   }
-  function renderReconcileAlert() {
-    const box = document.getElementById("reconcile-alert");
-    if (!box) return;
-    const alerts = dailyReport?.reconcileAlerts || [];
-    if (!alerts.length) {
-      box.hidden = true;
-      box.innerHTML = "";
-      return;
-    }
-    box.hidden = false;
-    const items = alerts.map((r) =>
-      `<span class="reconcile-alert-item"><strong>${esc(r.display_name || r.name)}</strong> ${fmtSigned(r.difference)}</span>`
-    ).join("");
-    box.innerHTML = `<span class="reconcile-alert-title">检查账目</span><span class="reconcile-alert-text">C STATUS 未对平：</span>${items}`;
-  }
-
   function reconcileScope() {
     const company = document.getElementById("company-select")?.value || "default";
     return `${company}:${sheetDate || ""}`;
@@ -1356,98 +1390,69 @@ ${bannedCount > 0 ? `<button type="button" class="bk-banned-summary" id="rail-ba
       return `${source}:${target}:${name}:${reconcileAmountKey(r.difference)}`;
     }).filter(Boolean).sort().join("|");
   }
-  function reconcileStorageKey(sig) {
-    return `bank-reconcile-ok:${reconcileScope()}:${sig}`;
-  }
-  function readReconcileDueAt(sig) {
+  // The previous implementation wrote one key per signature, so every distinct
+  // difference left a key behind forever. Sweep them once.
+  function purgeLegacyReconcileKeys() {
     try {
-      return Number(localStorage.getItem(reconcileStorageKey(sig)) || 0) || 0;
-    } catch (_) {
-      return 0;
-    }
-  }
-  function saveReconcileDueAt(sig, value) {
-    try {
-      localStorage.setItem(reconcileStorageKey(sig), String(value));
+      Object.keys(localStorage)
+        .filter((k) => k.indexOf("bank-reconcile-ok:") === 0)
+        .forEach((k) => localStorage.removeItem(k));
     } catch (_) {}
   }
-  function clearReconcileDueAt(sig) {
-    if (!sig) return;
-    try {
-      localStorage.removeItem(reconcileStorageKey(sig));
-    } catch (_) {}
-  }
-  function stopReconcileAlarm() {
-    if (!reconcileAudio) return;
-    try {
-      reconcileAudio.pause();
-      reconcileAudio.currentTime = 0;
-    } catch (_) {}
-  }
-  function playReconcileAlarm() {
-    try {
-      if (!reconcileAudio) {
-        reconcileAudio = new Audio(RECONCILE_ALARM_SOUND);
-        reconcileAudio.loop = true;
-      }
-      reconcileAudio.loop = true;
-      reconcileAudio.currentTime = 0;
-      const result = reconcileAudio.play();
-      if (result && typeof result.catch === "function") {
-        result.catch(() => {
-          reconcileSoundBlocked = true;
-          renderReconcileAlertV2();
-        });
-      }
-    } catch (_) {
-      reconcileSoundBlocked = true;
-    }
+  function getReconcileAlarm() {
+    if (reconcileAlarm) return reconcileAlarm;
+    if (typeof window.createEscalatingAlarm !== "function") return null;
+    purgeLegacyReconcileKeys();
+    reconcileAlarm = window.createEscalatingAlarm({
+      soundSrc: RECONCILE_ALARM_SOUND,
+      keyPrefix: "bank-reconcile-alarm",
+      scope: reconcileScope,
+      // renderDailyPanels only runs on the 5 minute loadDailyReport loop, far too
+      // coarse to drive escalation, so the alarm ticks itself and asks for a redraw.
+      onStageChange: () => renderReconcileAlertV2(),
+    });
+    return reconcileAlarm;
   }
   function acknowledgeReconcileAlarm() {
-    if (!reconcileAlertSig) return;
-    reconcileAlarmActive = false;
-    reconcileAlarmDueAt = Date.now() + RECONCILE_SNOOZE_MS;
-    reconcileSoundBlocked = false;
-    stopReconcileAlarm();
-    saveReconcileDueAt(reconcileAlertSig, reconcileAlarmDueAt);
+    const alarm = getReconcileAlarm();
+    if (!alarm) return;
+    alarm.acknowledge();
     renderReconcileAlertV2();
   }
   function renderReconcileAlertV2() {
     const box = document.getElementById("reconcile-alert");
     if (!box) return;
+    // update() can fire onStageChange, which lands back here; render once.
+    if (reconcileRendering) return;
+    reconcileRendering = true;
+    try {
+      renderReconcileAlertBody(box);
+    } finally {
+      reconcileRendering = false;
+    }
+  }
+  function renderReconcileAlertBody(box) {
     const alerts = dailyReport?.reconcileAlerts || [];
+    const alarm = getReconcileAlarm();
     if (!alerts.length) {
-      clearReconcileDueAt(reconcileAlertSig);
+      if (alarm) alarm.update("");
       box.hidden = true;
       box.innerHTML = "";
       box.classList.remove("reconcile-alarming");
-      reconcileAlertSig = "";
-      reconcileAlarmDueAt = 0;
-      reconcileAlarmActive = false;
-      reconcileSoundBlocked = false;
-      stopReconcileAlarm();
       return;
     }
-    const sig = reconcileSignature(alerts);
-    if (sig !== reconcileAlertSig) {
-      clearReconcileDueAt(reconcileAlertSig);
-      reconcileAlertSig = sig;
-      reconcileAlarmDueAt = readReconcileDueAt(sig) || Date.now();
-      reconcileAlarmActive = false;
-      reconcileSoundBlocked = false;
-    }
-    if (Date.now() >= reconcileAlarmDueAt && !reconcileAlarmActive) {
-      reconcileAlarmActive = true;
-      playReconcileAlarm();
-    }
+    if (alarm) alarm.update(reconcileSignature(alerts));
+    const loud = !!alarm && alarm.stage() === "loud";
     box.hidden = false;
-    box.classList.toggle("reconcile-alarming", reconcileAlarmActive);
+    box.classList.toggle("reconcile-alarming", loud);
     const items = alerts.map((r) =>
       `<span class="reconcile-alert-item"><strong>${esc(r.display_name || r.name)}</strong><span>差额 ${fmtSigned(r.difference)}</span><span>IN ${fmtSigned(r.in || 0)}</span><span>OUT ${fmtSigned(r.out || 0)}</span><button type="button" class="btn btn-outline btn-xs reconcile-focus" data-cstatus="${esc(r.name || "")}">查看流水</button></span>`
     ).join("");
-    const note = reconcileAlarmActive
-      ? (reconcileSoundBlocked ? '<span class="reconcile-alert-note">点击页面后声音可用</span>' : "")
-      : '<span class="reconcile-alert-note">已暂停，20分钟后复查</span>';
+    let noteText = "";
+    if (loud) noteText = alarm.blocked() ? "点击页面后声音可用" : "";
+    else if (alarm && alarm.acked()) noteText = "已暂停，20分钟后复查";
+    else noteText = "已记录，5分钟内未处理会提醒";
+    const note = noteText ? `<span class="reconcile-alert-note">${noteText}</span>` : "";
     box.innerHTML = `<span class="reconcile-alert-title">检查账目</span><span class="reconcile-alert-text">C STATUS 未对平：</span>${items}${note}<button type="button" class="btn btn-outline btn-xs reconcile-ok">OK</button>`;
   }
 
@@ -1477,29 +1482,39 @@ ${bannedCount > 0 ? `<button type="button" class="bk-banned-summary" id="rail-ba
     }
     tbody.innerHTML = rows.map((r) => `
       <tr class="${alertSet.has(r.name) ? "cstatus-unbalanced" : ""}">
-        <td class="cstatus-name">${alertSet.has(r.name) ? `<button type="button" class="cstatus-focus" data-cstatus="${esc(r.name)}">${esc(r.name)}</button>` : esc(r.name)}</td>
-        <td class="num-col in-cell ${r.in ? "has-amount" : ""}">${r.in ? fmtSigned(r.in) : ""}</td>
-        <td class="num-col out-cell ${r.out ? "has-amount" : ""}">${r.out ? fmtSigned(r.out) : ""}</td>
-        <td class="num-col total-cell ${r.total ? "has-amount" : ""}">${fmtSigned(r.total)}</td>
+        <td class="cstatus-name" translate="no">${alertSet.has(r.name) ? `<button type="button" class="cstatus-focus" data-cstatus="${esc(r.name)}">${esc(r.name)}</button>` : esc(r.name)}</td>
+        <td class="num-col in-cell ${r.in ? "has-amount" : ""}" translate="no"${r.in ? ` title="${esc(fmtSigned(r.in))}"` : ""}>${r.in ? fmtSigned(r.in) : ""}</td>
+        <td class="num-col out-cell ${r.out ? "has-amount" : ""}" translate="no"${r.out ? ` title="${esc(fmtSigned(r.out))}"` : ""}>${r.out ? fmtSigned(r.out) : ""}</td>
+        <td class="num-col total-cell ${r.total ? "has-amount" : ""}" translate="no" title="${esc(fmtSigned(r.total))}">${fmtSigned(r.total)}</td>
       </tr>`).join("");
   }
 
   function populateStatusFilter() {
     const sel = document.getElementById("sheet-status-filter");
     const dl = document.getElementById("status-datalist");
+    // STATUS labels come from bank_status_options, which each company edits on
+    // the payment-settings page, so they are tenant data even when they read
+    // like UI copy. parseStatus/statusLabel also round-trip them back into
+    // bank_ledger.status, so they must never be translated.
     if (sel) {
+      sel.setAttribute("translate", "no");
       sel.innerHTML = '<option value="">ALL</option>' +
         STATUS_LIST.map((s) => `<option value="${esc(s.value)}">${esc(s.label)}</option>`).join("");
     }
-    if (dl) dl.innerHTML = STATUS_LIST.map((s) => `<option value="${esc(s.label)}">`).join("");
+    if (dl) {
+      dl.setAttribute("translate", "no");
+      dl.innerHTML = STATUS_LIST.map((s) => `<option value="${esc(s.label)}">`).join("");
+    }
   }
   function populateCstatusOptions() {
     const dl = document.getElementById("cstatus-datalist");
-    if (dl) dl.innerHTML = cStatusNames().map((o) => `<option value="${esc(o)}">`).join("");
+    if (!dl) return;
+    dl.setAttribute("translate", "no"); // bank_c_status_options.name is tenant data
+    dl.innerHTML = cStatusNames().map((o) => `<option value="${esc(o)}">`).join("");
   }
   function fillCompanySelects() {
     const opts = '<option value="">—</option>' + companyOptions.map((c) =>
-      `<option value="${esc(c.id)}">${esc(c.name || c.id)}</option>`
+      `<option value="${esc(c.id)}" translate="no">${esc(c.name || c.id)}</option>`
     ).join("");
     const el = document.getElementById("cs-new-company");
     if (!el) return;
@@ -1512,7 +1527,7 @@ ${bannedCount > 0 ? `<button type="button" class="bk-banned-summary" id="rail-ba
     if (!sel) return;
     const list = usableBanks();
     sel.innerHTML = (includeEmpty ? '<option value="">— 不绑银行 —</option>' : "")
-      + list.map((b, i) => `<option value="${b.id}">${esc(bankPickerLabel(b, i))}</option>`).join("");
+      + list.map((b, i) => `<option value="${b.id}" translate="no">${esc(bankPickerLabel(b, i))}</option>`).join("");
   }
 
   function openBankModal(row) {
@@ -1528,14 +1543,21 @@ ${bannedCount > 0 ? `<button type="button" class="bk-banned-summary" id="rail-ba
     document.getElementById("f-account").value = row?.account_number || "";
     document.getElementById("f-payid").value = row?.payid || "";
     document.getElementById("f-note").value = row?.note || "";
+    // 0 表示未启用，显示为空而不是 "0"，和 placeholder「留空 = 不启用」对齐。
+    const threshold = Number(row?.alert_threshold || 0);
+    document.getElementById("f-alert-threshold").value = threshold > 0 ? String(threshold) : "";
     document.getElementById("f-reset-daily").checked = Boolean(row?.reset_daily_balance);
     document.getElementById("bank-modal-err").textContent = "";
     document.getElementById("bank-modal").classList.add("show");
     window.requestAnimationFrame(() => document.getElementById("f-bankbranch")?.focus());
   }
   function restoreBanksListModal(focusSelector) {
-    openBanksListModal(false);
-    window.requestAnimationFrame(() => document.querySelector(focusSelector)?.focus());
+    // 从编辑弹窗回到列表：保住原来的页签 / 页码 / 搜索词，否则改完一个账户就被甩回
+    // 运营中页签的顶部，还得重新找回刚才那一行。
+    openBanksListModal({ keepState: true });
+    window.requestAnimationFrame(() => {
+      (document.querySelector(focusSelector) || document.querySelector(".bkd-tab.active"))?.focus();
+    });
   }
   function closeBankModal({ restoreList = true } = {}) {
     const shouldRestoreList = restoreList && bankModalReturnToList;
@@ -1553,6 +1575,11 @@ ${bannedCount > 0 ? `<button type="button" class="bk-banned-summary" id="rail-ba
       document.getElementById("bank-modal-err").textContent = "请至少填写 BankBranch、NAME、ACCOUNT 或 PAYID 其中一项";
       return;
     }
+    const thresholdRaw = document.getElementById("f-alert-threshold").value.replace(/,/g, "").trim();
+    if (thresholdRaw && !(Number(thresholdRaw) >= 0)) {
+      document.getElementById("bank-modal-err").textContent = "余额上限报警必须是不小于 0 的数字";
+      return;
+    }
     const body = {
       bank_branch, account_name,
       bsb: document.getElementById("f-bsb").value.trim(),
@@ -1560,6 +1587,7 @@ ${bannedCount > 0 ? `<button type="button" class="bk-banned-summary" id="rail-ba
       note: document.getElementById("f-note").value.trim(),
       account_kind: document.getElementById("f-kind").value,
       reset_daily_balance: document.getElementById("f-reset-daily").checked ? 1 : 0,
+      alert_threshold: thresholdRaw ? Number(thresholdRaw) : 0,
     };
     const wasNew = !editingBankId;
     const shouldRestoreList = bankModalReturnToList;
@@ -1585,10 +1613,10 @@ ${bannedCount > 0 ? `<button type="button" class="bk-banned-summary" id="rail-ba
     const name = ledgerNameText(r.name);
     return `<tr>
       <td class="mono">${esc(String(r.entry_time || "").slice(0, 16))}</td>
-      <td><span class="status-chip ${statusClass(r.status)}">${esc(statusLabel(r.status))}</span></td>
+      <td translate="no"><span class="status-chip ${statusClass(r.status)}">${esc(statusLabel(r.status))}</span></td>
       <td class="mono">${esc(r.tx_id || "")}</td>
       <td class="mono bkd-amt ${dir === "in" ? "bkd-in" : "bkd-out"}">${dir === "in" ? "+" : "-"}${fmt(amt)}</td>
-      <td>${esc(r.username || "")}${name ? ` · ${esc(name)}` : ""}</td>
+      <td translate="no">${esc(r.username || "")}${name ? ` · ${esc(name)}` : ""}</td>
     </tr>`;
   }
 
@@ -1599,11 +1627,11 @@ ${bannedCount > 0 ? `<button type="button" class="bk-banned-summary" id="rail-ba
     const user = [r.username, ledgerNameText(r.name), r.c_status].filter(Boolean).join(" · ");
     return `<tr>
       <td class="mono">${esc(String(r.entry_time || "").slice(0, 16))}</td>
-      <td><span class="status-chip ${statusClass(r.status)}">${esc(statusLabel(r.status))}</span></td>
+      <td translate="no"><span class="status-chip ${statusClass(r.status)}">${esc(statusLabel(r.status))}</span></td>
       <td class="mono">${esc(r.tx_id || "")}</td>
       <td class="mono bkd-amt ${dir === "in" ? "bkd-in" : "bkd-out"}">${dir === "in" ? "+" : "-"}${fmt(amt)}</td>
-      <td class="bkd-user-full">${esc(user || "-")}</td>
-      <td class="bkd-remark-full">${esc(r.remark || "")}</td>
+      <td class="bkd-user-full" translate="no">${esc(user || "-")}</td>
+      <td class="bkd-remark-full" translate="no">${esc(r.remark || "")}</td>
     </tr>`;
   }
 
@@ -1628,9 +1656,11 @@ ${bannedCount > 0 ? `<button type="button" class="bk-banned-summary" id="rail-ba
     URL.revokeObjectURL(url);
   }
 
+  // 值一侧全是租户数据（银行名、户名、BSB、账号、PayID、备注、金额），一律 translate="no"：
+  // 否则中英切换会去动它们，也挡不住浏览器自带的自动翻译。标签一侧照常翻译。
   function bkdInfoPair(label, val, mono) {
     if (!val && val !== 0) return "";
-    return `<div class="bkd-pair"><span class="bkd-pair-label">${esc(label)}</span><span class="bkd-pair-val${mono ? " mono" : ""}">${esc(String(val))}</span></div>`;
+    return `<div class="bkd-pair"><span class="bkd-pair-label">${esc(label)}</span><span class="bkd-pair-val${mono ? " mono" : ""}" translate="no">${esc(String(val))}</span></div>`;
   }
 
   function loadBkdDetail(bankId, bodyEl) {
@@ -1660,9 +1690,11 @@ ${bannedCount > 0 ? `<button type="button" class="bk-banned-summary" id="rail-ba
         ${bkdInfoPair("余额", fmt(bankDisplayBalance(b)))}
         ${bkdInfoPair("备注", b.note)}
         <div class="bkd-pair"><span class="bkd-pair-label">状态</span><span class="bkd-pair-val">${
-          String(b.lifecycle_status || "active") === "banned"
-            ? '<span class="bk-flag bk-flag-banned">封禁中</span>'
-            : (b.active ? '<span class="bk-flag bk-flag-active">使用中</span>' : "未启用")
+          LC.isArchived(b)
+            ? '<span class="bk-flag bk-flag-archived">已归档</span>'
+            : LC.isBanned(b)
+              ? '<span class="bk-flag bk-flag-banned">封禁中</span>'
+              : (b.active ? '<span class="bk-flag bk-flag-active">使用中</span>' : "未启用")
         }</span></div>
       </div>`;
 
@@ -1693,62 +1725,229 @@ ${bannedCount > 0 ? `<button type="button" class="bk-banned-summary" id="rail-ba
     });
   }
 
+  // 「账户里还剩多少钱」的权威口径：后端 enrichBankRow 塞进来的 balance，就是无上界的
+  // balanceFromLedger。待清条和归档按钮的可用性都用它，两者永不打架。
+  // 刻意不用 bankDisplayBalance()——那是页面显示口径，对每日归零账户只给当日净额，
+  // 拿它判断「清干净了没有」会把累计还有钱的账户当成空的。
+  function bankLedgerBalance(b) {
+    return Number(b.balance || 0);
+  }
+  function isBkdCleared(b) {
+    return Math.round(bankLedgerBalance(b) * 100) === 0;
+  }
+
+  function bkdPredicate(tab) {
+    if (tab === "banned") return LC.isBanned;
+    if (tab === "archived") return LC.isArchived;
+    if (tab === "operating") return LC.isOperating;
+    return null;
+  }
+
+  function bkdFiltered(tab) {
+    const pred = bkdPredicate(tab) || LC.isOperating;
+    const q = bkdQuery.trim().toLowerCase();
+    return bankRows.filter((b) => {
+      if (!pred(b)) return false;
+      if (!q) return true;
+      return [bankBranchOf(b), b.account_name, b.account_number, b.payid, b.bsb, b.note]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase()
+        .includes(q);
+    });
+  }
+
   function buildBkdItem(b) {
-    const banned = String(b.lifecycle_status || "active") === "banned";
-    const isPG = String(b.account_kind || "nominee") === "payment_gateway";
-    const list = usableBanks();
-    const idx = list.findIndex((x) => x.id === b.id);
+    const status = LC.statusOf(b);
+    const banned = status === "banned";
+    const archived = status === "archived";
+    const idx = usableBanks().findIndex((x) => x.id === b.id);
     const noTag = idx >= 0 ? `<span class="bk-no">${idx + 1}</span>` : "";
-    const excludedNote = (banned || isPG) ? '<span class="bkd-excl-tag">不计汇总</span>' : "";
-    const statusTag = banned
-      ? '<span class="bk-flag bk-flag-banned">封禁中</span>'
-      : (b.active ? '<span class="bk-flag bk-flag-active">使用中</span>' : "");
-    const banActs = banned
-      ? `<button type="button" class="btn btn-outline btn-xs bkd-unban-btn" data-id="${b.id}">解封</button>`
-      : `<button type="button" class="btn btn-outline btn-xs bkd-ban-btn" data-id="${b.id}">封禁</button>`;
-    return `<div class="bkd-item${banned ? " bkd-item-banned" : ""}" data-id="${b.id}">
+    const excludedNote = isBalanceExcluded(b)
+      ? `<span class="bkd-excl-tag">${esc(tr("不计汇总"))}</span>`
+      : "";
+    const statusTag = archived
+      ? `<span class="bk-flag bk-flag-archived">${esc(tr("已归档"))}</span>`
+      : banned
+        ? `<span class="bk-flag bk-flag-banned">${esc(tr("封禁中"))}</span>`
+        : (b.active ? `<span class="bk-flag bk-flag-active">${esc(tr("使用中"))}</span>` : "");
+
+    // 操作按钮按状态分化。已归档行不给编辑、不给「使用中」复选框——服务端已强制
+    // active = 0，UI 上也要让「归档即惰性」成立：要改资料先取消归档。
+    let acts = "";
+    if (archived) {
+      acts = `<button type="button" class="btn btn-outline btn-xs bkd-unarchive-btn" data-id="${b.id}">${esc(tr("取消归档"))}</button>`;
+    } else if (banned) {
+      const archiveBtn = isBkdCleared(b)
+        ? `<button type="button" class="btn btn-outline btn-xs bkd-archive-btn" data-id="${b.id}">${esc(tr("归档"))}</button>`
+        : `<button type="button" class="btn btn-outline btn-xs bkd-archive-btn" data-id="${b.id}" disabled title="${esc(tr("尚余"))} ${esc(fmt(bankLedgerBalance(b)))} ${esc(tr("待清"))}">${esc(tr("归档"))}</button>`;
+      acts =
+        `<button type="button" class="btn btn-outline btn-xs bkd-edit-btn" data-id="${b.id}">${esc(tr("编辑"))}</button>`
+        + `<button type="button" class="btn btn-outline btn-xs bkd-unban-btn" data-id="${b.id}">${esc(tr("解封"))}</button>`
+        + archiveBtn;
+    } else {
+      acts =
+        `<button type="button" class="btn btn-outline btn-xs bkd-edit-btn" data-id="${b.id}">${esc(tr("编辑"))}</button>`
+        + `<input type="checkbox" class="bank-active-chk" data-id="${b.id}" title="${esc(tr("使用中（新充值自动入账）"))}"${b.active ? " checked" : ""}>`
+        + `<button type="button" class="btn btn-outline btn-xs bkd-ban-btn" data-id="${b.id}">${esc(tr("封禁"))}</button>`;
+    }
+
+    const expanded = bkdExpanded.has(b.id);
+    const cls = `bkd-item${banned ? " bkd-item-banned" : ""}${archived ? " bkd-item-archived" : ""}`;
+    // 银行名与户名是租户数据，必须 translate="no"：否则中英切换会把
+    // 「Public Bank Amy」改成「Public 银行 Amy」，顺带也挡住浏览器自带的自动翻译。
+    return `<div class="${cls}" data-id="${b.id}">
   <div class="bkd-item-head">
     ${noTag}
     <span class="kind-tag kind-${esc(b.account_kind || "nominee")}">${esc(KIND_LABEL[b.account_kind] || b.account_kind || "人头")}</span>
-    <span class="bkd-item-name">${esc(bankBranchOf(b) || "Bank")}<span class="bkd-item-sub"> ${esc(b.account_name || "")}</span></span>
+    <span class="bkd-item-name" translate="no">${esc(bankBranchOf(b) || "Bank")}<span class="bkd-item-sub"> ${esc(b.account_name || "")}</span></span>
     ${statusTag}
     ${excludedNote}
-    <span class="bkd-item-bal">${fmt(bankDisplayBalance(b))}</span>
+    <span class="bkd-item-bal" translate="no">${fmt(bankDisplayBalance(b))}</span>
     <div class="bkd-item-acts">
-      <button type="button" class="btn btn-outline btn-xs bkd-edit-btn" data-id="${b.id}">编辑</button>
-      <input type="checkbox" class="bank-active-chk" data-id="${b.id}" title="使用中（新充值自动入账）"${b.active && !banned ? " checked" : ""}${banned ? " disabled" : ""}>
-      ${banActs}
-      <button type="button" class="btn btn-outline btn-xs bkd-toggle-btn" data-id="${b.id}" aria-expanded="false">▸</button>
+      ${acts}
+      <button type="button" class="btn btn-outline btn-xs bkd-toggle-btn" data-id="${b.id}" aria-expanded="${expanded ? "true" : "false"}">${expanded ? "▾" : "▸"}</button>
     </div>
   </div>
-  <div class="bkd-item-body" id="bkd-body-${b.id}" hidden data-loaded="0">
-    <div class="bkd-loading">加载中...</div>
+  <div class="bkd-item-body" id="bkd-body-${b.id}"${expanded ? "" : " hidden"} data-loaded="0">
+    <div class="bkd-loading">${esc(tr("加载中..."))}</div>
   </div>
 </div>`;
   }
 
-  function openBanksListModal(scrollToBanned) {
-    const container = document.getElementById("bkd-body");
-    if (!container) return;
-    const activeBanks = bankRows.filter((r) => String(r.lifecycle_status || "active") !== "banned");
-    const bannedBanks = bankRows.filter((r) => String(r.lifecycle_status || "active") === "banned");
-    container.innerHTML =
-      `<div class="bkd-section">
-        <div class="bkd-section-head">\u8fd0\u8425\u4e2d <span class="bkd-cnt">${activeBanks.length}</span></div>
-        ${activeBanks.length ? activeBanks.map(buildBkdItem).join("") : '<div class="bkd-empty">\u6682\u65e0\u8fd0\u8425\u6e20\u9053</div>'}
-      </div>`
-      + (bannedBanks.length
-        ? `<div class="bkd-section bkd-section-banned" id="bkd-banned-section">
-            <div class="bkd-section-head bkd-section-head-banned">\u5c01\u7981\u4e2d <span class="bkd-cnt">${bannedBanks.length}</span></div>
-            ${bannedBanks.map(buildBkdItem).join("")}
-          </div>`
-        : "");
-    document.getElementById("banks-list-modal").classList.add("show");
-    if (scrollToBanned) {
-      setTimeout(() => {
-        document.getElementById("bkd-banned-section")?.scrollIntoView({ behavior: "smooth", block: "start" });
-      }, 120);
+  // \u5e38\u9a7b\u5f85\u6e05\u6761\u3002\u53ea\u770b\u5c01\u7981\u4e2d\u7684\u8d26\u6237\uff1a\u5f52\u6863\u7684\u5df2\u88ab\u95f8\u95e8\u4fdd\u8bc1\u6e05\u96f6\uff0c\u8fd0\u8425\u4e2d\u7684\u672c\u6765\u5c31\u5728\u7528\u3002
+  function renderBkdCleanupBar() {
+    const bar = document.getElementById("bkd-cleanup-bar");
+    if (!bar) return;
+    const dirty = bankRows.filter((b) => LC.isBanned(b) && !isBkdCleared(b));
+    const total = dirty.reduce((s, b) => s + bankLedgerBalance(b), 0);
+    bar.classList.toggle("is-alert", dirty.length > 0);
+    bar.classList.toggle("is-clean", dirty.length === 0);
+    if (!dirty.length) {
+      bar.innerHTML = `<span>${esc(tr("\u5c01\u7981\u4e2d\u65e0\u5f85\u6e05\u7406"))}</span>`;
+      return;
     }
+    // \u6570\u5b57\u5404\u81ea\u72ec\u7acb\u6210\u8282\u70b9\uff0c\u6587\u672c\u8282\u70b9\u91cc\u4e0d\u6df7\u53d8\u91cf\u2014\u2014i18n \u5f15\u64ce\u6309\u6574\u4e32\u67e5\u5b57\u5178\uff0c\u6df7\u4e86\u5c31\u5f97\u5199
+    // phrase \u89c4\u5219\uff0c\u800c\u53cd\u5411\u89c4\u5219\u5f88\u5bb9\u6613\u8bef\u547d\u4e2d\u771f\u5b9e\u6570\u636e\u3002
+    bar.innerHTML =
+      `<span>${esc(tr("\u5c01\u7981\u4e2d\u5f85\u6e05\u7406"))}</span>`
+      + `<strong translate="no">${dirty.length}</strong>`
+      + `<span>${esc(tr("\u6237 \u00b7 \u5408\u8ba1"))}</span>`
+      + `<strong translate="no">${esc(fmt(total))}</strong>`;
+  }
+
+  function renderBkdTabs() {
+    const wrap = document.getElementById("bkd-tabs");
+    if (!wrap) return;
+    const counts = {
+      operating: bankRows.filter(LC.isOperating).length,
+      banned: bankRows.filter(LC.isBanned).length,
+      archived: bankRows.filter(LC.isArchived).length,
+    };
+    wrap.querySelectorAll(".bkd-tab").forEach((btn) => {
+      const tab = btn.dataset.tab;
+      const on = tab === bkdTab;
+      btn.classList.toggle("active", on);
+      btn.setAttribute("aria-selected", on ? "true" : "false");
+      btn.tabIndex = on ? 0 : -1;
+      // \u8ba1\u6570\u662f\u300c\u8fd9\u4e2a\u72b6\u6001\u4e00\u5171\u51e0\u4e2a\u300d\uff0c\u4e0d\u53d7\u641c\u7d22\u5f71\u54cd\uff1b\u641c\u7d22\u547d\u4e2d\u6570\u7531\u5206\u9875\u5668\u8868\u8fbe\u3002
+      // \u539f\u59cb\u6807\u7b7e\u5b58\u8fdb dataset\uff0c\u907f\u514d\u53cd\u590d\u8ffd\u52a0 (n) \u65f6\u628a\u4e0a\u4e00\u6b21\u7684\u62ec\u53f7\u4e5f\u5f53\u6210\u6807\u7b7e\u3002
+      if (!btn.dataset.label) btn.dataset.label = btn.textContent.trim().replace(/\s*\(\d+\)$/, "");
+      const n = counts[tab] || 0;
+      btn.textContent = n > 0 ? `${btn.dataset.label} (${n})` : btn.dataset.label;
+    });
+  }
+
+  function bkdEmptyText(tab) {
+    if (tab === "banned") return tr("\u6682\u65e0\u5c01\u7981\u6e20\u9053");
+    if (tab === "archived") return tr("\u6682\u65e0\u5df2\u5f52\u6863\u6e20\u9053");
+    return tr("\u6682\u65e0\u8fd0\u8425\u6e20\u9053");
+  }
+
+  function renderBkdPanel() {
+    const panel = document.getElementById("bkd-panel");
+    if (!panel) return;
+    const rows = bkdFiltered(bkdTab);
+    // \u9875\u7801\u94b3\u4f4d\u5fc5\u987b\u5728\u5207\u7247\u4e4b\u524d\uff1a\u5f52\u6863\u6389\u6700\u540e\u4e00\u9875\u6700\u540e\u4e00\u884c\u4e4b\u540e\u9875\u7801\u4f1a\u8d85\u754c\uff0c\u5426\u5219\u9762\u677f\u7a7a\u767d
+    // \u800c\u5206\u9875\u5668\u8fd8\u505c\u5728\u7b2c 3 \u9875\u3002
+    const pages = Math.max(1, Math.ceil(rows.length / BKD_PAGE_SIZE));
+    const page = Math.min(Math.max(1, bkdPage[bkdTab] || 1), pages);
+    bkdPage[bkdTab] = page;
+    const slice = rows.slice((page - 1) * BKD_PAGE_SIZE, page * BKD_PAGE_SIZE);
+
+    panel.innerHTML = slice.length
+      ? slice.map(buildBkdItem).join("")
+      : `<div class="bkd-empty">${esc(bkdQuery.trim() ? tr("\u6ca1\u6709\u5339\u914d\u7684\u6e20\u9053") : bkdEmptyText(bkdTab))}</div>`;
+
+    // \u8d26\u6237\u5c11\u4e8e\u4e00\u9875\u65f6 renderClientPager \u81ea\u5df1\u9690\u85cf\uff0c\u6240\u4ee5\u73b0\u72b6\u4e0b\u96f6\u89c6\u89c9\u4ee3\u4ef7\uff0c\u89c4\u6a21\u957f\u4e0a\u53bb\u81ea\u52a8\u751f\u6548\u3002
+    renderClientPager("bkd-pager", rows.length, page, BKD_PAGE_SIZE, (p) => {
+      bkdPage[bkdTab] = p;
+      renderBkdPanel();
+      panel.scrollTop = 0;
+    });
+    renderIcons(panel);
+
+    // \u5c55\u5f00\u72b6\u6001\u8de8\u5206\u9875\u4e0e\u9875\u7b7e\u4fdd\u7559\uff0c\u660e\u7ec6\u6bcf\u6b21\u91cd\u65b0\u62c9\uff1a\u4f59\u989d\u548c\u6700\u8fd1\u6d41\u6c34\u6b63\u662f\u5c01\u7981 / \u5ba1\u6279\u4e4b\u540e
+    // \u4f1a\u53d8\u7684\u4e1c\u897f\uff0c\u5728\u8fd9\u91cc\u505a\u7f13\u5b58\u7b49\u4e8e\u62ff\u6570\u636e\u51c6\u786e\u6362\u4e00\u6b21\u7f51\u7edc\u8bf7\u6c42\u3002
+    slice.forEach((b) => {
+      if (!bkdExpanded.has(b.id)) return;
+      const bodyEl = document.getElementById(`bkd-body-${b.id}`);
+      if (bodyEl && bodyEl.dataset.loaded === "0") loadBkdDetail(b.id, bodyEl);
+    });
+  }
+
+  function switchBkdTab(tab) {
+    if (!bkdPredicate(tab)) return;
+    bkdTab = tab;
+    renderBkdTabs();
+    renderBkdPanel();
+    const panel = document.getElementById("bkd-panel");
+    if (panel) panel.scrollTop = 0;
+  }
+
+  // opts.tab \u6307\u5b9a\u8fdb\u6765\u65f6\u505c\u5728\u54ea\u4e2a\u9875\u7b7e\uff1bopts.keepState \u7528\u4e8e\u300c\u64cd\u4f5c\u5b8c\u91cd\u5f00\u300d\u2014\u2014\u4fdd\u4f4f\u9875\u7b7e\u3001
+  // \u9875\u7801\u3001\u641c\u7d22\u8bcd\u548c\u5c55\u5f00\u72b6\u6001\uff0c\u5426\u5219\u6bcf\u70b9\u4e00\u6b21\u5c01\u7981\u90fd\u4f1a\u88ab\u7529\u56de\u8fd0\u8425\u4e2d\u9875\u7b7e\u7684\u9876\u90e8\u3002
+  //
+  // \u4e09\u9875\u7b7e\u7684\u7ed3\u6784\u6027\u4f5c\u7528\uff1a\u540c\u4e00\u65f6\u523b\u53ea\u6e32\u67d3\u4e00\u4e2a\u9875\u7b7e\uff0c\u6240\u4ee5\u5c01\u7981\u7684\u6e20\u9053\u518d\u591a\u4e5f\u4e0d\u53ef\u80fd\u628a\u8fd0\u8425\u4e2d
+  // \u7684\u6324\u51fa\u89c6\u91ce\u3002\u8fd9\u4e0d\u662f\u9760\u300c\u9ed8\u8ba4\u6298\u53e0\u300d\u7684\u81ea\u89c9\uff0c\u662f\u7269\u7406\u4e0a\u505a\u4e0d\u5230\u3002
+  function openBanksListModal(opts) {
+    const o = opts || {};
+    if (!o.keepState) {
+      bkdTab = o.tab || "operating";
+      bkdPage.operating = 1;
+      bkdPage.banned = 1;
+      bkdPage.archived = 1;
+      bkdQuery = "";
+      bkdExpanded.clear();
+      const search = document.getElementById("bkd-search");
+      if (search) search.value = "";
+    }
+    renderBkdCleanupBar();
+    renderBkdTabs();
+    renderBkdPanel();
+    document.getElementById("banks-list-modal").classList.add("show");
+  }
+
+  // \u5c01\u7981 / \u89e3\u5c01 / \u5f52\u6863 / \u53d6\u6d88\u5f52\u6863 / \u52fe\u9009\u4f7f\u7528\u4e2d\u7edf\u4e00\u8d70\u8fd9\u91cc\uff1a\u5b58\u8fd8\u6eda\u52a8\u4f4d\u7f6e\u3001\u4fdd\u4f4f\u9875\u7b7e\uff0c
+  // \u5e76\u628a\u7126\u70b9\u515c\u5e95\u5230\u5f53\u524d\u9875\u7b7e\u6309\u94ae\u2014\u2014\u5f52\u6863\u6210\u529f\u540e\u90a3\u4e00\u884c\u4f1a\u79bb\u5f00\u5f53\u524d\u9875\u7b7e\uff0cfocusSelector
+  // \u67e5\u4e0d\u5230\uff0c\u7126\u70b9\u5c31\u4f1a\u6389\u5230 <body>\uff0c\u952e\u76d8\u64cd\u4f5c\u7684\u4eba\u4f1a\u4e22\u5931\u4f4d\u7f6e\u3002
+  function bkdMutate(promise, focusSelector) {
+    const panel = document.getElementById("bkd-panel");
+    const top = panel ? panel.scrollTop : 0;
+    return promise
+      .then(() => loadBanks())
+      .then(() => {
+        openBanksListModal({ keepState: true });
+        const p = document.getElementById("bkd-panel");
+        if (p) p.scrollTop = top;
+        const el = focusSelector ? document.querySelector(focusSelector) : null;
+        (el || document.querySelector(".bkd-tab.active"))?.focus();
+      })
+      .then(() => loadDailyReport())
+      .catch((e) => {
+        if (e && e.cancelled) return;
+        showToast(e?.message || tr("\u64cd\u4f5c\u5931\u8d25"), { tone: "error" });
+      });
   }
 
   function deletedHelpTrfAmount(r) {
@@ -1767,13 +1966,13 @@ ${bannedCount > 0 ? `<button type="button" class="bk-banned-summary" id="rail-ba
       return `<tr data-id="${r.id}">
         <td class="mono">${esc(String(r.deleted_at || "").slice(0, 16))}</td>
         <td class="mono">${esc(String(r.entry_time || "").slice(0, 16))}</td>
-        <td><span class="status-chip ${statusClass(r.status)}">${esc(statusLabel(r.status))}</span></td>
+        <td translate="no"><span class="status-chip ${statusClass(r.status)}">${esc(statusLabel(r.status))}</span></td>
         <td class="mono">${esc(r.tx_id || "")}</td>
         <td class="num-col">${Number(r.amount_in || 0) ? fmt(r.amount_in) : ""}</td>
         <td class="num-col out-cell">${Number(r.amount_out || 0) ? "-" + fmt(Math.abs(r.amount_out)) : ""}</td>
         <td class="num-col">${deletedHelpTrfAmount(r) ? fmt(deletedHelpTrfAmount(r)) : ""}</td>
-        <td>${esc(bankName)}</td>
-        <td>${esc(userName)}</td>
+        <td translate="no">${esc(bankName)}</td>
+        <td translate="no">${esc(userName)}</td>
         <td><button type="button" class="btn btn-success btn-xs deleted-restore" data-id="${r.id}">恢复</button></td>
       </tr>`;
     }).join("");
@@ -1825,10 +2024,22 @@ ${bannedCount > 0 ? `<button type="button" class="bk-banned-summary" id="rail-ba
           if (!el) return;
           const items = d.suggestions || [];
           if (!items.length) { el.style.display = "none"; return; }
+          // 定位策略交给 CSS，这里只配合：
+          // 表格里的下拉是 position:fixed（.ac-sheet），要逃出 .sheet-table-wrap 的滚动
+          // 容器，所以得写视口坐标；modal 里的是 absolute，靠 CSS 的 top/left 贴住
+          // .ac-wrap。对后者绝不能写 inline 坐标 —— .modal 带 transform + backdrop-filter，
+          // 会成为 containing block，视口坐标等于把 .modal 的位置再加一次（实测偏
+          // 464×47px，下拉直接跑到 modal 外面，用户看不到任何补全建议）。
           const rect = inp.getBoundingClientRect();
-          el.style.left = `${rect.left}px`;
-          el.style.top = `${rect.bottom + 2}px`;
-          el.style.width = `${Math.max(rect.width, 120)}px`;
+          if (getComputedStyle(el).position === "fixed") {
+            el.style.left = `${rect.left}px`;
+            el.style.top = `${rect.bottom + 2}px`;
+            el.style.width = `${Math.max(rect.width, 120)}px`;
+          } else {
+            el.style.left = "";
+            el.style.top = "";
+            el.style.width = "";
+          }
           el.innerHTML = items.map((s) => `<li class="ac-item">${esc(s)}</li>`).join("");
           el.style.display = "block";
           el.querySelectorAll(".ac-item").forEach((li) => {
@@ -1893,7 +2104,7 @@ ${bannedCount > 0 ? `<button type="button" class="bk-banned-summary" id="rail-ba
   }
   function bankOptionsHtml(selected) {
     return '<option value="">—</option>' + usableBanks().map((b, i) =>
-      `<option value="${b.id}"${String(selected) === String(b.id) ? " selected" : ""}>${esc(bankPickerLabel(b, i))}</option>`
+      `<option value="${b.id}" translate="no"${String(selected) === String(b.id) ? " selected" : ""}>${esc(bankPickerLabel(b, i))}</option>`
     ).join("");
   }
   function pendingBankRankCompanyId() {
@@ -1924,7 +2135,7 @@ ${bannedCount > 0 ? `<button type="button" class="bk-banned-summary" id="rail-ba
     const lastBankIndex = banks.findIndex((b) => b.id === lastBankId);
     if (lastBankIndex > 0) banks.unshift(banks.splice(lastBankIndex, 1)[0]);
     return '<option value="">—</option>' + banks.map((b, i) =>
-      `<option value="${b.id}">${esc(bankPickerLabel(b, i))}</option>`
+      `<option value="${b.id}" translate="no">${esc(bankPickerLabel(b, i))}</option>`
     ).join("");
   }
   function loadPendingPanels() {
@@ -1947,14 +2158,14 @@ ${bannedCount > 0 ? `<button type="button" class="bk-banned-summary" id="rail-ba
         const pendDate = dateFromSql(r.tx_time, sheetDate || todaySydney());
         const pendName = ledgerNameText(r.name);
         return `<tr data-txid="${esc(r.tx_id)}" data-tx-time="${esc(r.tx_time || "")}" data-pending-amount="${esc(r.amount)}">
-          <td>${esc(r.tx_type)}</td>
+          <td translate="no">${esc(r.tx_type)}</td>
           <td><div class="pend-datetime"><label class="pend-date" title="调整入账日期（平台日期 ${esc(pendDate)}）"><span class="pend-date-label" aria-hidden="true">${esc(compactDateLabel(pendDate))}</span><input class="pend-date-input" type="date" value="${esc(pendDate)}" aria-label="入账日期，平台原始日期 ${esc(pendDate)}"></label><input class="pend-time" type="time" step="60" value="${esc(pendTime)}" title="${esc(r.tx_time || "")}" aria-label="入账时间"></div></td>
-          <td class="mono">${esc(r.tx_id)}</td>
-          <td>${esc(r.username)} / ${esc(pendName)}</td>
+          <td class="mono" translate="no">${esc(r.tx_id)}</td>
+          <td translate="no">${esc(r.username)} / ${esc(pendName)}</td>
           <td>${fmt(r.amount)}</td>
           <td>${isWd
              ? `<select class="pend-mode"><option value="bank">本户</option><option value="help">调钱</option><option value="split">拆分调钱</option><option value="redeposit">REDEP</option></select>
-               <div class="pend-help-summary" hidden role="status" aria-label="调钱方向和状态"><strong>IN</strong><span>${esc(statusLabel("cash in") || "CASH IN")}</span></div>`
+               <div class="pend-help-summary" hidden role="status" aria-label="调钱方向和状态"><strong>IN</strong><span translate="no">${esc(statusLabel("cash in") || "CASH IN")}</span></div>`
             : `<select class="pend-mode"><option value="bank">本户</option><option value="redeposit">REDEP</option></select>`}</td>
           <td>${isWd
              ? `<select class="pend-bank">${pendingBankOptionsHtml()}</select>
@@ -2036,10 +2247,10 @@ ${bannedCount > 0 ? `<button type="button" class="bk-banned-summary" id="rail-ba
           const skippedName = ledgerNameText(r.name);
           return `
           <tr data-txid="${esc(r.tx_id)}">
-            <td>${esc(r.tx_type)}</td>
+            <td translate="no">${esc(r.tx_type)}</td>
             <td class="mono">${esc(String(r.tx_time || "").slice(0, 16))}</td>
-            <td class="mono">${esc(r.tx_id)}</td>
-            <td>${esc(r.username)} / ${esc(skippedName)}</td>
+            <td class="mono" translate="no">${esc(r.tx_id)}</td>
+            <td translate="no">${esc(r.username)} / ${esc(skippedName)}</td>
             <td class="num-col">${fmt(r.amount)}</td>
             <td class="mono">${esc(String(r.decided_at || "").slice(0, 16))}</td>
             <td>${esc(r.decided_by || "")}</td>
@@ -2243,11 +2454,12 @@ ${bannedCount > 0 ? `<button type="button" class="bk-banned-summary" id="rail-ba
   function renderCstatusManage() {
     const tbody = document.getElementById("cs-rows");
     tbody.innerHTML = cStatusOptions.map((o) => `
-      <tr>
-        <td>${esc(o.name)}</td>
-        <td>${esc(o.target_company_id || "")}</td>
+      <tr data-name="${esc(o.name)}">
+        <td translate="no">${esc(o.name)}</td>
+        <td translate="no">${esc(o.target_company_id || "")}</td>
+        <td><input type="checkbox" class="cs-reconcile" aria-label="需要对平"${o.target_company_id ? "" : " disabled"}${Number(o.reconcile_required) ? " checked" : ""}></td>
         <td><button type="button" class="btn btn-outline btn-xs cs-del" data-name="${esc(o.name)}">删</button></td>
-      </tr>`).join("") || '<tr><td colspan="3">—</td></tr>';
+      </tr>`).join("") || '<tr><td colspan="4">—</td></tr>';
   }
 
   function reloadAll() {
@@ -2346,7 +2558,7 @@ ${bannedCount > 0 ? `<button type="button" class="bk-banned-summary" id="rail-ba
 
     document.getElementById("sheet-tabs")?.addEventListener("click", (e) => {
       const bannedBtn = e.target.closest("#rail-banned-btn");
-      if (bannedBtn) { openBanksListModal(true); return; }
+      if (bannedBtn) { openBanksListModal({ tab: "banned" }); return; }
       const copyBankBtn = e.target.closest("[data-copy-bank-id]");
       if (copyBankBtn) {
         e.stopPropagation();
@@ -2492,7 +2704,7 @@ ${bannedCount > 0 ? `<button type="button" class="bk-banned-summary" id="rail-ba
     document.getElementById("add-bank-btn")?.addEventListener("click", () => openBankModal(null));
     document.getElementById("bank-cancel-btn")?.addEventListener("click", closeBankModal);
     document.getElementById("bank-save-btn")?.addEventListener("click", saveBankModal);
-    document.getElementById("sheet-manage-banks")?.addEventListener("click", () => openBanksListModal(false));
+    document.getElementById("sheet-manage-banks")?.addEventListener("click", () => openBanksListModal({ tab: "operating" }));
     document.getElementById("sheet-deleted-btn")?.addEventListener("click", openDeletedLedgerModal);
     document.getElementById("deleted-ledger-close")?.addEventListener("click", () => {
       document.getElementById("deleted-ledger-modal")?.classList.remove("show");
@@ -2505,6 +2717,11 @@ ${bannedCount > 0 ? `<button type="button" class="bk-banned-summary" id="rail-ba
       document.getElementById("banks-list-modal").classList.remove("show");
     });
     document.getElementById("banks-list-modal")?.addEventListener("click", async (e) => {
+      const tabBtn = e.target.closest(".bkd-tab");
+      if (tabBtn) {
+        switchBkdTab(tabBtn.dataset.tab);
+        return;
+      }
       const toggle = e.target.closest(".bkd-toggle-btn");
       if (toggle) {
         const id = Number(toggle.dataset.id);
@@ -2512,6 +2729,9 @@ ${bannedCount > 0 ? `<button type="button" class="bk-banned-summary" id="rail-ba
         if (!bodyEl) return;
         const open = !bodyEl.hidden;
         bodyEl.hidden = open;
+        // \u5c55\u5f00\u96c6\u5408\u662f\u6e32\u67d3\u7684\u771f\u6e90\uff1a\u7ffb\u9875\u6216\u5207\u9875\u7b7e\u540e\u91cd\u65b0\u6e32\u67d3\u65f6\uff0c\u9760\u5b83\u6062\u590d\u5c55\u5f00\u72b6\u6001\u3002
+        if (open) bkdExpanded.delete(id);
+        else bkdExpanded.add(id);
         toggle.setAttribute("aria-expanded", open ? "false" : "true");
         toggle.textContent = open ? "\u25b8" : "\u25be";
         if (!open && bodyEl.dataset.loaded === "0") loadBkdDetail(id, bodyEl);
@@ -2527,30 +2747,79 @@ ${bannedCount > 0 ? `<button type="button" class="bk-banned-summary" id="rail-ba
       if (ban) {
         const note = await showPromptDialog({
           title: "\u5c01\u7981\u652f\u4ed8\u6e20\u9053",
-          message: "\u5c01\u7981\u540e\u8be5\u6e20\u9053\u5c06\u4e0d\u518d\u53c2\u4e0e\u5f53\u524d\u8fd0\u8425\u3002",
+          message: "\u5c01\u7981\u540e\u8be5\u6e20\u9053\u5c06\u4e0d\u518d\u53c2\u4e0e\u5f53\u524d\u8fd0\u8425\uff0c\u5e76\u8fdb\u5165\u300c\u5c01\u7981\u4e2d\u300d\u5f85\u6e05\u7406\u961f\u5217\u3002",
           label: "\u5c01\u7981\u539f\u56e0\uff08\u53ef\u7559\u7a7a\uff09",
           maxLength: 500,
           confirmLabel: "\u786e\u8ba4\u5c01\u7981",
         });
         if (note == null) return;
-        api(`/api/banks/${ban.dataset.id}`, { method: "PUT", body: JSON.stringify({ ban: true, ban_note: note }) })
-          .then(() => loadBanks().then(() => openBanksListModal(false)).then(loadDailyReport));
+        bkdMutate(
+          api(`/api/banks/${ban.dataset.id}`, {
+            method: "PUT",
+            body: JSON.stringify({ ban: true, ban_note: note }),
+          })
+        );
         return;
       }
       const unban = e.target.closest(".bkd-unban-btn");
       if (unban) {
-        api(`/api/banks/${unban.dataset.id}`, { method: "PUT", body: JSON.stringify({ unban: true }) })
-          .then(() => loadBanks().then(() => openBanksListModal(false)).then(loadDailyReport));
+        bkdMutate(
+          api(`/api/banks/${unban.dataset.id}`, { method: "PUT", body: JSON.stringify({ unban: true }) })
+        );
+        return;
+      }
+      const archive = e.target.closest(".bkd-archive-btn");
+      if (archive) {
+        const note = await showPromptDialog({
+          title: "\u5f52\u6863\u652f\u4ed8\u6e20\u9053",
+          message: "\u5f52\u6863\u540e\u8be5\u6e20\u9053\u4e0d\u518d\u51fa\u73b0\u5728\u4efb\u4f55\u5217\u8868\u3001\u4e0b\u62c9\u4e0e Telegram \u63a8\u9001\u4e2d\uff0c\u5386\u53f2\u6d41\u6c34\u5168\u90e8\u4fdd\u7559\u3002\u968f\u65f6\u53ef\u5728\u300c\u5df2\u5f52\u6863\u300d\u9875\u7b7e\u53d6\u6d88\u5f52\u6863\u3002",
+          label: "\u5f52\u6863\u539f\u56e0\uff08\u53ef\u7559\u7a7a\uff09",
+          maxLength: 500,
+          confirmLabel: "\u786e\u8ba4\u5f52\u6863",
+        });
+        if (note == null) return;
+        bkdMutate(
+          api(`/api/banks/${archive.dataset.id}`, {
+            method: "PUT",
+            body: JSON.stringify({ archive: true, archive_note: note }),
+          }).then(() => {
+            // \u5f52\u6863\u6210\u529f\u540e\u90a3\u4e00\u884c\u79bb\u5f00\u5f53\u524d\u9875\u7b7e\uff0c\u4e0d\u8bf4\u4e00\u58f0\u4eba\u4f1a\u4ee5\u4e3a\u6e20\u9053\u88ab\u5220\u4e86\u3002
+            showToast(tr("\u5df2\u5f52\u6863\uff0c\u53ef\u5728\u300c\u5df2\u5f52\u6863\u300d\u9875\u7b7e\u67e5\u770b"), { tone: "success" });
+          })
+        );
+        return;
+      }
+      const unarchive = e.target.closest(".bkd-unarchive-btn");
+      if (unarchive) {
+        bkdMutate(
+          api(`/api/banks/${unarchive.dataset.id}`, {
+            method: "PUT",
+            body: JSON.stringify({ unarchive: true }),
+          }).then(() => {
+            // \u53d6\u6d88\u5f52\u6863\u56de\u843d\u5230\u300c\u5c01\u7981\u4e2d\u300d\u800c\u4e0d\u662f\u76f4\u63a5\u590d\u6d3b\uff0c\u8981\u518d\u663e\u5f0f\u89e3\u5c01\u4e00\u6b21\u624d\u56de\u8fd0\u8425\u3002
+            showToast(tr("\u5df2\u53d6\u6d88\u5f52\u6863\uff0c\u73b0\u5728\u5728\u300c\u5c01\u7981\u4e2d\u300d\u9875\u7b7e"), { tone: "success" });
+          })
+        );
         return;
       }
       const chk = e.target.closest(".bank-active-chk");
       if (chk) {
-        api(`/api/banks/${chk.dataset.id}`, {
-          method: "PUT",
-          body: JSON.stringify({ active: chk.checked ? 1 : 0 }),
-        }).then(() => loadBanks().then(loadDailyReport));
+        bkdMutate(
+          api(`/api/banks/${chk.dataset.id}`, {
+            method: "PUT",
+            body: JSON.stringify({ active: chk.checked ? 1 : 0 }),
+          })
+        );
         return;
       }
+    });
+
+    // \u641c\u7d22\u6846\u5728\u9762\u677f\u5916\u9762\uff0c\u6240\u4ee5\u4e0d\u4f1a\u88ab\u91cd\u6e32\u67d3\u51b2\u6389\u7126\u70b9\u3002\u4e0d\u52a0 debounce\uff1a\u8fc7\u6ee4\u7684\u662f\u5341\u51e0\u884c\u7684
+    // \u6570\u7ec4\uff0c\u6e32\u67d3\u884c\u6570\u53c8\u88ab\u5206\u9875\u9489\u6b7b\u5728 20 \u4ee5\u5185\u3002
+    document.getElementById("bkd-search")?.addEventListener("input", (e) => {
+      bkdQuery = e.target.value || "";
+      bkdPage[bkdTab] = 1;
+      renderBkdPanel();
     });
 
     document.getElementById("sheet-pending-btn")?.addEventListener("click", () => openPendingModal());
@@ -2800,6 +3069,22 @@ ${bannedCount > 0 ? `<button type="button" class="bk-banned-summary" id="rail-ba
       if (!btn) return;
       api(`/api/banks/c-status-options/${encodeURIComponent(btn.dataset.name)}`, { method: "DELETE" })
         .then(() => loadCStatus().then(renderCstatusManage).then(loadDailyReport));
+    });
+    // 只传 name + flag：banks.js 把未传的 target_company_id 当作「保持原值」。
+    document.getElementById("cs-rows")?.addEventListener("change", (e) => {
+      const box = e.target.closest(".cs-reconcile");
+      if (!box) return;
+      const name = box.closest("tr")?.dataset.name;
+      if (!name) return;
+      api("/api/banks/c-status-options", {
+        method: "POST",
+        body: JSON.stringify({ name, reconcile_required: box.checked ? 1 : 0 }),
+      })
+        .then(() => loadCStatus().then(renderCstatusManage).then(loadDailyReport))
+        .catch((err) => {
+          box.checked = !box.checked;
+          showToast(err.message || "保存失败", { tone: "error" });
+        });
     });
   });
 })();

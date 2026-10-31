@@ -1,9 +1,22 @@
+const fs = require("fs");
 const express = require("express");
 const bcrypt = require("bcryptjs");
 const { getDb } = require("../db/init");
-const { getCompany } = require("../lib/companies");
+const { getCompany, maskToken } = require("../lib/companies");
 const { companyDetailsForUser } = require("../lib/userAccess");
 const { requireAdmin } = require("../middleware");
+const { MIN_PASSWORD_LENGTH } = require("../lib/passwordPolicy");
+const {
+  getTelegramSettings,
+  saveTelegramSettings,
+  clearControlBotToken,
+  parseChatIds,
+  isValidChatId,
+  getBackupSettings,
+  saveBackupSettings,
+} = require("../lib/appSettings");
+const { sendMessage, isValidToken, sanitizeErrorText } = require("../services/telegram");
+const { pre } = require("../lib/telegramFormat");
 
 const router = express.Router();
 
@@ -64,6 +77,264 @@ function publicUser(db, user) {
   };
 }
 
+// ---------------------------------------------------------------- Telegram 全局设置
+//
+// 挂在这个 router 上而不是 /api/banks：这里已经 router.use(requireAdmin)，新端点自动
+// 受保护；而且它挂载在 resolveCompany 之前，req.companyId 天然是 undefined，正好匹配
+// 「总控 Bot 是全局配置」的语义。
+
+// telegram_outbox.last_error 存的是内部异常原文，要吐给浏览器之前先洗一遍
+// （sanitizeErrorText 会抹掉任何 bot token 形状的字符串）。
+const sanitizeError = sanitizeErrorText;
+
+function publicTelegramSettings(s) {
+  return {
+    enabled: s.enabled,
+    // token 与 access_token 同等敏感：只回脱敏值，永不返回明文。
+    control_bot_token_set: Boolean(s.controlBotToken),
+    control_bot_token_masked: maskToken(s.controlBotToken),
+    control_chat_ids: s.controlChatIds,
+    mirror_alerts_to_control: s.mirrorAlertsToControl,
+    poll_timeout_seconds: s.pollTimeoutSeconds,
+    outbox_flush_seconds: s.outboxFlushSeconds,
+    reconcile_seconds: s.reconcileSeconds,
+    updated_at: s.updatedAt,
+    updated_by: s.updatedBy,
+  };
+}
+
+function actorLabel(req) {
+  const user = req?.session?.user;
+  if (!user) return "";
+  return String(user.name || user.username || user.id || "");
+}
+
+router.get("/telegram", (_req, res) => {
+  res.json({ settings: publicTelegramSettings(getTelegramSettings(getDb())) });
+});
+
+router.put("/telegram", (req, res) => {
+  const db = getDb();
+  const body = req.body || {};
+  try {
+    const saved = saveTelegramSettings(
+      db,
+      {
+        enabled: body.enabled,
+        controlBotToken: body.control_bot_token,
+        controlChatIds: body.control_chat_ids,
+        mirrorAlertsToControl: body.mirror_alerts_to_control,
+        pollTimeoutSeconds: body.poll_timeout_seconds,
+        outboxFlushSeconds: body.outbox_flush_seconds,
+        reconcileSeconds: body.reconcile_seconds,
+      },
+      actorLabel(req)
+    );
+    // 改完即时生效：重建定时器（间隔可能变了）并按新配置调整 bot 集合。
+    // 整体 try/catch —— Bot 起不来不该让保存失败。
+    try {
+      require("../services/telegramBots").applySettings(saved);
+    } catch (e) {
+      console.warn("[telegram] apply settings:", e.message);
+    }
+    res.json({ ok: true, settings: publicTelegramSettings(saved) });
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+router.delete("/telegram/token", (req, res) => {
+  const saved = clearControlBotToken(getDb(), actorLabel(req));
+  try {
+    require("../services/telegramBots").applySettings(saved);
+  } catch (e) {
+    console.warn("[telegram] apply settings:", e.message);
+  }
+  res.json({ ok: true, settings: publicTelegramSettings(saved) });
+});
+
+// 用**表单里的值**发测试消息（token 留空则用已存的），这样保存前就能验证配置对不对。
+// 照 /api/companies/test-connection 的既有模式。
+router.post("/telegram/test", async (req, res) => {
+  const db = getDb();
+  const body = req.body || {};
+  const current = getTelegramSettings(db);
+  const token = String(body.control_bot_token || "").trim() || current.controlBotToken;
+  const chatIds = body.control_chat_ids !== undefined
+    ? parseChatIds(body.control_chat_ids)
+    : parseChatIds(current.controlChatIds);
+
+  if (!token) return res.status(400).json({ error: "请先填写总控 Bot Token" });
+  if (!isValidToken(token)) {
+    return res.status(400).json({ error: "Bot token 格式不正确，应形如 123456789:AAxxxxxxxx…" });
+  }
+  const bad = chatIds.filter((v) => !isValidChatId(v));
+  if (bad.length) return res.status(400).json({ error: "chat id 必须是整数：" + bad.join(", ") });
+  if (!chatIds.length) return res.status(400).json({ error: "请先填写至少一个白名单 chat" });
+
+  // 顺便验证 HTML parse_mode 这条链路本身能走通——命令回复和余额报警都靠它排版。
+  const text = [
+    "✅ 测试消息",
+    "操盘后台的 Telegram 配置可用。",
+    pre([
+      "/balance   渠道余额",
+      "/today     今日业绩",
+      "/help      全部命令",
+    ]),
+  ].join("\n");
+
+  const failures = [];
+  for (const chatId of chatIds) {
+    try {
+      await sendMessage(token, chatId, text, { botKey: "control-test", parseMode: "HTML" });
+    } catch (e) {
+      failures.push(`${chatId}: ${sanitizeError(e.message)}`);
+    }
+  }
+  if (failures.length) {
+    return res.status(400).json({ error: "发送失败 — " + failures.join("；") });
+  }
+  res.json({ ok: true, message: `已向 ${chatIds.length} 个 chat 发送测试消息` });
+});
+
+router.get("/telegram/status", (_req, res) => {
+  const db = getDb();
+  const counts = { pending: 0, sent: 0, failed: 0, skipped: 0, expired: 0 };
+  let lastFailure = null;
+  let lastSentAt = null;
+  try {
+    for (const row of db.prepare("SELECT state, COUNT(*) AS n FROM telegram_outbox GROUP BY state").all()) {
+      counts[row.state] = row.n;
+    }
+    const failed = db
+      .prepare(
+        "SELECT company_id, bot_key, last_error, created_at FROM telegram_outbox WHERE state = 'failed' ORDER BY id DESC LIMIT 1"
+      )
+      .get();
+    if (failed) {
+      lastFailure = {
+        company_id: failed.company_id,
+        bot_key: failed.bot_key,
+        created_at: failed.created_at,
+        reason: sanitizeError(failed.last_error),
+      };
+    }
+    lastSentAt =
+      db.prepare("SELECT sent_at FROM telegram_outbox WHERE state = 'sent' ORDER BY id DESC LIMIT 1").get()
+        ?.sent_at || null;
+  } catch (e) {
+    return res.status(500).json({ error: e.message });
+  }
+
+  // Bot 级别的故障（401 token 无效 / 403 被踢出群 / 409 有别的消费者）只会写进
+  // telegram_bot_state，不产生 outbox 行。光看出站队列的话，坏 token 会完全静默——
+  // 那正是这个面板要避免的情况。
+  let bots = [];
+  try {
+    const health = require("../services/telegramBots").botHealth();
+    const parkedBy = new Map(health.parked.map((p) => [p.bot_key, p]));
+    const states = db
+      .prepare("SELECT bot_key, last_error, updated_at FROM telegram_bot_state ORDER BY bot_key")
+      .all();
+    const keys = new Set([...states.map((s) => s.bot_key), ...health.running, ...parkedBy.keys()]);
+    bots = [...keys].sort().map((botKey) => {
+      const state = states.find((s) => s.bot_key === botKey);
+      const park = parkedBy.get(botKey);
+      return {
+        bot_key: botKey,
+        running: health.running.includes(botKey),
+        parked_reason: park ? sanitizeError(park.reason) : "",
+        retry_in_seconds: park ? park.retry_in_seconds : null,
+        last_error: sanitizeError(state?.last_error || ""),
+        updated_at: state?.updated_at || "",
+      };
+    });
+  } catch (e) {
+    console.warn("[telegram] bot health:", e.message);
+  }
+
+  res.json({ counts, last_failure: lastFailure, last_sent_at: lastSentAt, bots });
+});
+
+// ---------------------------------------------------------------- 数据库快照备份
+//
+// 和 Telegram 同理挂在这个 router 上：已经 router.use(requireAdmin)，而且挂载在
+// resolveCompany 之前，req.companyId 天然是 undefined —— 正好匹配「备份是整库、
+// 与公司无关」的语义。
+
+function publicBackupSettings(s, dir) {
+  return {
+    enabled: s.enabled,
+    dir: s.dir, // 用户填的原值（可能为空）
+    effective_dir: dir, // 实际会写进去的绝对路径
+    hour: s.hour,
+    keep_days: s.keepDays,
+    updated_at: s.updatedAt,
+    updated_by: s.updatedBy,
+  };
+}
+
+router.get("/backup", (_req, res) => {
+  const db = getDb();
+  const backup = require("../services/backup");
+  const settings = getBackupSettings(db);
+  let dir = "";
+  let files = [];
+  let totalBytes = 0;
+  try {
+    dir = backup.resolveDir(settings);
+    files = backup.listSnapshots(dir);
+    totalBytes = files.reduce((sum, f) => sum + Number(f.bytes || 0), 0);
+  } catch (e) {
+    return res.status(500).json({ error: "备份目录不可用: " + e.message });
+  }
+  res.json({
+    settings: publicBackupSettings(settings, dir),
+    files,
+    total_bytes: totalBytes,
+    log: backup.recentBackupLog(db, 30),
+  });
+});
+
+router.put("/backup", (req, res) => {
+  const db = getDb();
+  const body = req.body || {};
+  const backup = require("../services/backup");
+  try {
+    const saved = saveBackupSettings(
+      db,
+      {
+        enabled: body.enabled,
+        dir: body.dir,
+        hour: body.hour,
+        keepDays: body.keep_days,
+      },
+      actorLabel(req)
+    );
+    // 目录是否真的可写，要等规范化之后才能验——现在验，总比等到凌晨 4 点才发现好。
+    let dir;
+    try {
+      dir = backup.resolveDir(saved);
+      fs.accessSync(dir, fs.constants.W_OK);
+    } catch (e) {
+      return res.status(400).json({ error: "备份目录不可写: " + e.message });
+    }
+    res.json({ ok: true, settings: publicBackupSettings(saved, dir) });
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+// 手动触发。不 await —— 226MB 的库要跑十秒级，HTTP 请求不该挂在那里等。
+// 结果去 GET /backup 的 log 里看。
+router.post("/backup/run", (_req, res) => {
+  const backup = require("../services/backup");
+  backup
+    .runSnapshot({ kind: "manual" })
+    .catch((e) => console.error("[backup] 手动触发失败:", e.message));
+  res.json({ ok: true, started: true, message: "已在后台开始备份，约需十几秒，完成后刷新查看" });
+});
+
 router.get("/users", (_req, res) => {
   const db = getDb();
   const users = db
@@ -92,8 +363,8 @@ router.post("/users", (req, res) => {
   if (!u || u.length < 2) {
     return res.status(400).json({ error: "账号至少 2 个字符" });
   }
-  if (!p || p.length < 4) {
-    return res.status(400).json({ error: "密码至少 4 个字符" });
+  if (!p || p.length < MIN_PASSWORD_LENGTH) {
+    return res.status(400).json({ error: `密码至少 ${MIN_PASSWORD_LENGTH} 个字符` });
   }
   if (!/^[a-zA-Z0-9._-]+$/.test(u)) {
     return res.status(400).json({ error: "账号只能用字母、数字、._-" });
@@ -147,8 +418,8 @@ router.put("/users/:id", (req, res) => {
     params.push(String(name).trim());
   }
   if (password != null && String(password)) {
-    if (String(password).length < 4) {
-      return res.status(400).json({ error: "密码至少 4 个字符" });
+    if (String(password).length < MIN_PASSWORD_LENGTH) {
+      return res.status(400).json({ error: `密码至少 ${MIN_PASSWORD_LENGTH} 个字符` });
     }
     updates.push("password_hash = ?");
     params.push(bcrypt.hashSync(String(password), 10));

@@ -31,6 +31,11 @@ function rowToPublic(row) {
     last_sync_ok: row.last_sync_ok == null ? null : Boolean(row.last_sync_ok),
     last_sync_msg: row.last_sync_msg || "",
     has_credentials: Boolean(row.api_url && row.access_id && row.access_token),
+    // Telegram bot token 与 access_token 同等敏感，只回脱敏值，永不返回明文。
+    // chat id 不是机密（拿到也没法冒充 bot），明文返回方便前端回填。
+    telegram_bot_token_set: Boolean(row.telegram_bot_token),
+    telegram_bot_token_masked: maskToken(row.telegram_bot_token),
+    telegram_chat_ids: row.telegram_chat_ids || "",
   };
 }
 
@@ -86,9 +91,20 @@ function upsertCompany(db, data) {
   else if (data.enabled === true || data.enabled === 1) enabled = 1;
   else enabled = existing ? existing.enabled : 0;
   const sortOrder = data.sort_order != null ? Number(data.sort_order) : existing ? existing.sort_order : nextSortOrder(db);
+  // Telegram bot token 与 access_token 同样走「留空 = 保持不变」，这样前端可以只显示
+  // 脱敏值、不回填明文，而用户不改这一栏时也不会把 token 清空。
+  const tgToken =
+    data.telegram_bot_token != null && data.telegram_bot_token !== ""
+      ? data.telegram_bot_token
+      : existing?.telegram_bot_token || "";
+  // chat id 则是普通字段：传空字符串就是真的要清空收件人。
+  const tgChats =
+    data.telegram_chat_ids != null ? data.telegram_chat_ids : existing?.telegram_chat_ids || "";
   db.prepare(
-    `INSERT INTO companies (id, name, api_url, access_id, access_token, enabled, sort_order, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+    `INSERT INTO companies
+       (id, name, api_url, access_id, access_token, enabled, sort_order,
+        telegram_bot_token, telegram_chat_ids, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
      ON CONFLICT(id) DO UPDATE SET
        name = excluded.name,
        api_url = excluded.api_url,
@@ -96,6 +112,8 @@ function upsertCompany(db, data) {
        access_token = CASE WHEN excluded.access_token != '' THEN excluded.access_token ELSE companies.access_token END,
        enabled = excluded.enabled,
        sort_order = excluded.sort_order,
+       telegram_bot_token = CASE WHEN excluded.telegram_bot_token != '' THEN excluded.telegram_bot_token ELSE companies.telegram_bot_token END,
+       telegram_chat_ids = excluded.telegram_chat_ids,
        updated_at = datetime('now')`
   ).run(
     id,
@@ -104,7 +122,9 @@ function upsertCompany(db, data) {
     String(data.access_id || "").trim(),
     String(token || "").trim(),
     enabled,
-    sortOrder
+    sortOrder,
+    String(tgToken || "").trim(),
+    String(tgChats || "").trim()
   );
   return getCompany(db, id);
 }

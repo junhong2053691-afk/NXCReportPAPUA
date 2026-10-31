@@ -11,10 +11,33 @@ const {
 const { isOperator, hasCompanyAccess, listCompaniesForUser, firstAuthorizedCompanyId } = require("../lib/userAccess");
 const { setActiveCompany } = require("../lib/activeCompany");
 const { invalidateSegmentCounts } = require("../lib/segmentCountCache");
+const { parseChatIds, isValidChatId } = require("../services/telegramBots");
+const { formatSydneyDateTime } = require("../lib/dates");
+const { apiUrlProblem, credentialChangeProblem } = require("../lib/apiUrlPolicy");
 
 const router = express.Router();
 
+const TEST_TIMEOUT_MS = 15000;
+
 const ID_RE = /^[a-z0-9][a-z0-9_-]{0,31}$/;
+
+// 两栏都是 password 框、上下紧挨着，Bot Token 粘进 Access Token 是很容易犯的错，
+// 而且后果隐蔽：保存会成功、toast 显示"已保存"，只有卡片底部的同步状态在几秒后变成
+// "API 拒绝访问"，看起来像网络问题而不是填错了栏。两种 token 的形状差别很大
+// （平台 token 是 64 位十六进制，Telegram 是 <bot_id>:<35+ 字符>），直接按形状拦。
+const TELEGRAM_TOKEN_RE = /^\d{5,}:[A-Za-z0-9_-]{20,}$/;
+
+function checkTokenSwap(body) {
+  const access = String(body.access_token || "").trim();
+  const tg = String(body.telegram_bot_token || "").trim();
+  if (access && TELEGRAM_TOKEN_RE.test(access)) {
+    return "Access Token 里填的是 Telegram Bot Token（形如 123456:AA...）。平台 Access Token 不含冒号——请检查是不是粘错了输入框。";
+  }
+  if (tg && !TELEGRAM_TOKEN_RE.test(tg)) {
+    return "Telegram Bot Token 格式不对，应形如 123456789:AAxxxxxxxx（向 @BotFather 索取）。";
+  }
+  return null;
+}
 
 async function testApiCredentials(creds) {
   const apiUrl = String(creds.api_url || "").trim();
@@ -23,6 +46,8 @@ async function testApiCredentials(creds) {
   if (!apiUrl || !accessId || !accessToken) {
     throw new Error("请先填写完整的 API URL、Access ID 和 Access Token");
   }
+  const urlProblem = apiUrlProblem(apiUrl);
+  if (urlProblem) throw new Error(urlProblem);
   const form = new FormData();
   form.append("module", "/transactions/getAllTransactions");
   form.append("accessId", accessId);
@@ -30,9 +55,20 @@ async function testApiCredentials(creds) {
   form.append("type", "DEPOSIT");
   form.append("pageIndex", "0");
   form.append("pageSize", "1");
-  form.append("sDate", "2020-01-01 00:00:00");
-  form.append("eDate", "2030-01-01 00:00:00");
-  const text = await (await fetch(apiUrl, { method: "POST", body: form })).text();
+  // 盘方对交易查询有 31 天窗口上限（与 config.json 的 transactionChunkDays 对应，
+  // sync.js 就是按 31 天分块拉的）。这里原先写的是 2020-01-01 → 2030-01-01，超限，
+  // 于是无论凭证和白名单对不对，都只会回 "Start and end date cannot be more than
+  // 31 days." —— 按钮永远测不出"连接成功"。只问最近 1 天就够：我们要验的是鉴权能不能过。
+  form.append("sDate", formatSydneyDateTime(new Date(Date.now() - 24 * 3600 * 1000).toISOString()));
+  form.append("eDate", formatSydneyDateTime(new Date().toISOString()));
+  // redirect:"error"：307/308 会把含 token 的表单原样重放到跳转目标。
+  const response = await fetch(apiUrl, {
+    method: "POST",
+    body: form,
+    redirect: "error",
+    signal: AbortSignal.timeout(TEST_TIMEOUT_MS),
+  });
+  const text = await response.text();
   let json;
   try {
     json = JSON.parse(text);
@@ -87,6 +123,10 @@ router.post("/", requireAdmin, (req, res) => {
     return res.status(400).json({ error: "公司 ID 仅支持小写字母、数字、下划线和连字符（2-32位）" });
   }
   if (!name) return res.status(400).json({ error: "请填写显示名称" });
+  const swap = checkTokenSwap(body);
+  if (swap) return res.status(400).json({ error: swap });
+  const urlProblem = apiUrlProblem(body.api_url);
+  if (urlProblem) return res.status(400).json({ error: urlProblem });
   const db = getDb();
   if (getCompany(db, id)) return res.status(409).json({ error: "该公司 ID 已存在" });
   const row = upsertCompany(db, {
@@ -129,10 +169,20 @@ router.put("/:id", requireAdmin, (req, res) => {
   const existing = getCompany(db, id);
   if (!existing) return res.status(404).json({ error: "公司不存在" });
   const body = req.body || {};
+  const swap = checkTokenSwap(body);
+  if (swap) return res.status(400).json({ error: swap });
+  const credentialProblem = credentialChangeProblem(existing, body);
+  if (credentialProblem) return res.status(400).json({ error: credentialProblem });
   const creds = resolveCredentials(db, id, body);
   const enabling = body.enabled === true || body.enabled === 1;
   if (enabling && (!creds.api_url || !creds.access_id || !creds.access_token)) {
     return res.status(400).json({ error: "启用同步前请填写完整 API URL、Access ID 和 Token" });
+  }
+  if (body.telegram_chat_ids !== undefined) {
+    const bad = parseChatIds(body.telegram_chat_ids).filter((v) => !isValidChatId(v));
+    if (bad.length) {
+      return res.status(400).json({ error: "Telegram chat id 必须是整数（群为负数）：" + bad.join(", ") });
+    }
   }
   const row = upsertCompany(db, {
     id,
@@ -142,7 +192,15 @@ router.put("/:id", requireAdmin, (req, res) => {
     access_token: body.access_token,
     enabled: body.enabled,
     sort_order: body.sort_order,
+    telegram_bot_token: body.telegram_bot_token,
+    telegram_chat_ids: body.telegram_chat_ids,
   });
+  // Bot 配置改完即时生效，不用重启服务。整体 try/catch：Bot 起不来不该让保存失败。
+  try {
+    require("../services/telegramBots").reconcileBots();
+  } catch (e) {
+    console.warn("[telegram] reconcile after company update:", e.message);
+  }
   res.json({ ok: true, company: rowToPublic(row) });
 });
 
@@ -168,7 +226,10 @@ router.delete("/:id", requireAdmin, (req, res) => {
 router.post("/:id/test", requireAdmin, async (req, res) => {
   const id = String(req.params.id || "").trim().toLowerCase();
   const db = getDb();
-  if (!getCompany(db, id)) return res.status(404).json({ error: "公司不存在" });
+  const existing = getCompany(db, id);
+  if (!existing) return res.status(404).json({ error: "公司不存在" });
+  const credentialProblem = credentialChangeProblem(existing, req.body || {});
+  if (credentialProblem) return res.status(400).json({ ok: false, error: credentialProblem });
   try {
     const creds = resolveCredentials(db, id, req.body || {});
     const message = await testApiCredentials(creds);
