@@ -10,6 +10,9 @@ const { todayKey } = require("../lib/dates");
 
 const projectRoot = path.join(__dirname, "..", "..");
 
+// computeCustomerDetail 会读配置，而 config.json 不进 git。用模板才能在干净 checkout 上跑。
+process.env.TRADER_CONFIG = path.join(projectRoot, "config.example.json");
+
 function detailDatabase() {
   const db = new Database(":memory:");
   db.exec(`
