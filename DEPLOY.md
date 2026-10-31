@@ -89,10 +89,32 @@ Cloudflare Edge（CDN + 防护）
 （`curl -4 ifconfig.me` / `curl -6 ifconfig.me`），若盘方只收 IPv4，就禁用
 IPv6 出口或给 Node 加 `--dns-result-order=ipv4first`。
 
-切换后要**逐公司验证白名单真的生效了**（直接读 `companies` 表取凭证打最小请求，
-不经过应用），看到 `Invalid Access` 就**不要启动服务** —— `runLane` 会把该公司
-退避 300s → 1800s，你会以为"起来了在等"，其实它在睡觉。命令见
-[deploy/README.md](deploy/README.md)。
+切换后要**逐公司验证白名单真的生效了**，用 `scripts/check-api-access.js` —— 它直接读
+`companies` 表取凭证打最小请求，**不经过应用**（不启动调度器、不跑 migration、零写入）：
+
+```bash
+# VPS：必须显式给 TRADER_DB，否则读的是代码目录里不存在的 server/db/trader.db
+sudo -u trader TRADER_DB=/var/lib/trader-dashboard/trader.db \
+  node /opt/trader-dashboard/scripts/check-api-access.js
+
+# 只测一家（逐家改白名单时用）
+sudo -u trader TRADER_DB=... node .../check-api-access.js --company=rolex66
+```
+```powershell
+node scripts\check-api-access.js          # 本机，默认路径，无需 env
+```
+
+**退出码就是闸门**：`0` 全部通过（唯一允许 `systemctl start` 的状态）／`2` 有公司被拒
+（**不要启动服务**）／`3` 网络或业务层失败，不是白名单／`4` 没测起来（环境或参数错）。
+
+看到 `Invalid Access` 就**不要启动服务** —— `runLane` 会把该公司退避 300s → 1800s，
+你会以为"起来了在等"，其实它在睡觉。（已经启动了才发现？改完白名单用
+`systemctl restart`：退避状态只在内存的 `backoff` Map 里，restart 即清零，别干等。）
+
+> **被拒时盘方会把它看到的源 IP 回显给你**，形如 `Invalid Access IP [113.211.213.170]`，
+> 脚本会把它单独提取出来。**这比 `curl ifconfig.me` 权威** —— 有 NAT、多出口或 IPv6 时
+> 本地探测值与盘方实际看到的值可能不同，而白名单要填的是**盘方看到的那个**。
+> 四家回显的 IP 不一致 = 本机有多个出口，那种状态下白名单无论填哪个都会时通时不通。
 
 ---
 
@@ -174,9 +196,14 @@ Node 应用也要设成开机自启（见下文「Windows 计划任务」）。
 
 ### 4.1 初始化 VPS
 
+**先做 SSH 与防火墙基线**（非 root 用户、仅密钥登录、`ufw` 默认拒绝入站、自动安全更新），
+命令见 [deploy/README.md](deploy/README.md) 的「VPS 基线」。下面的 `root` 指基线之后的
+`sudo -i`。
+
 ```bash
 # SSH 登录
-ssh root@你的VPS_IP
+ssh deploy@你的VPS_IP
+sudo -i
 
 # 基础环境
 apt update && apt upgrade -y
@@ -213,7 +240,10 @@ systemctl restart systemd-journald
 
 ### 4.2 上传项目
 
-**方法 1：Git（推荐）**
+> ⚠️ **只用 `git archive`，不要手写 `tar` 打包项目目录。** 项目目录里有 `config.json`
+> （含平台凭证）、`server/db/trader.db`、`server/db/backup-*/`（明文全库，23 万客户）和
+> 日志。`git archive` 只含已提交的文件，从机制上带不出这些东西。**它只打包 HEAD，所以
+> 上传前必须先 commit。**
 
 ```bash
 # 建专用系统用户与目录（详见 deploy/README.md）
@@ -222,29 +252,25 @@ mkdir -p /opt/trader-dashboard /etc/trader-dashboard \
          /var/lib/trader-dashboard/state /var/backups/trader-dashboard
 chown -R trader:trader /opt/trader-dashboard /var/lib/trader-dashboard /var/backups/trader-dashboard
 chown root:trader /etc/trader-dashboard && chmod 0750 /etc/trader-dashboard
+```
 
-# 用 trader 身份 clone（别 root clone 再 chown，容易漏掉 .git/）
-sudo -u trader git clone <你的私有库地址> /opt/trader-dashboard
+```powershell
+# 本机 PowerShell
+cd C:\Users\junho\trader-dashboard
+git archive --format=tar.gz -o trader-dashboard.tar.gz HEAD
+scp trader-dashboard.tar.gz deploy@VPS_IP:/tmp/
+Remove-Item trader-dashboard.tar.gz
+```
+
+```bash
+# VPS 上
+sudo -u trader tar -xzf /tmp/trader-dashboard.tar.gz -C /opt/trader-dashboard
+rm /tmp/trader-dashboard.tar.gz
 cd /opt/trader-dashboard
 sudo -u trader npm ci --omit=dev
 ```
 
 > better-sqlite3 自带 `prebuilds/linux-x64.node`，**零编译零联网**即可用。
-
-**方法 2：本机 scp 打包上传**
-
-```powershell
-# 在本机 PowerShell（排除 node_modules）
-cd C:\Users\junho
-tar -czf trader-dashboard.tar.gz --exclude=node_modules --exclude=.git trader-dashboard
-scp trader-dashboard.tar.gz root@VPS_IP:/opt/
-```
-
-```bash
-# VPS 上
-cd /opt && tar -xzf trader-dashboard.tar.gz
-cd trader-dashboard && npm install --production
-```
 
 ### 4.3 配置文件
 
@@ -256,8 +282,8 @@ cd trader-dashboard && npm install --production
 **不要 scp，不要粘到聊天软件。** 用 ssh stdin：
 
 ```bash
-# 在本机（注意命令前的空格，避开 shell history）
- cat config.prod.json | ssh trader@VPS_IP 'sudo tee /etc/trader-dashboard/config.json > /dev/null'
+# 在本机（注意命令前的空格，避开 shell history）。trader 是 nologin 且无 sudo，要用 deploy
+ cat config.prod.json | ssh deploy@VPS_IP 'sudo tee /etc/trader-dashboard/config.json > /dev/null'
 ```
 
 ```bash
@@ -270,11 +296,15 @@ chmod 0640 /etc/trader-dashboard/config.json
 
 | 字段 | 生产值 | 原因 |
 |---|---|---|
-| `sessionSecret` | **全新 48 字节随机** | 旧值可能出现在日志、截图或对话里；换掉等于强制所有旧 session 失效 |
-| `admin.password` | **全新强密码** | 登录零限流 + 密码策略只要求 4 位，公网暴露后是字典攻击面 |
+| `sessionSecret` | **全新 48 字节随机** | 旧值可能出现在日志、截图或对话里。生产下占位值或不足 32 字符会拒绝启动 |
 | `maxPages` | **1200**（已改，别调回 500） | 500 页 × 200 = 10 万客户上限，而 pokies7bet 已有 74,794（374 页）。触顶时 `fetchAllPages` 会**正常退出不报错**，`apiIds` 残缺 → `pruneStaleCustomers` 删掉真实客户 |
 | `platform.*` | **整段可以删掉** | `services/platform.js` 优先从 `companies` 表读凭证，config 里的回落只对 `aussiex6` 生效。留着等于多一份明文凭证 |
-| `host` | **不要写这个字段** | 留空即绑 127.0.0.1。写了会让服务暴露在公网 IP 上，绕过隧道 |
+| `host` | **不要写这个字段** | 留空即绑 127.0.0.1。写了会让服务暴露在公网 IP 上，绕过隧道和 Access，登录限流用的 `CF-Connecting-IP` 也变成可伪造 |
+
+**`admin.password` 改了也不生效。** `seedAdmin` 只在 users 表为空时写入，而这里是整库搬过来
+的。搬库之后、启动之前，用 `scripts/set-password.js` 逐个账号改密（至少 12 位），命令见
+[deploy/README.md](deploy/README.md) 的「改账号密码」。还有账号在用默认密码时，
+`NODE_ENV=production` 下服务会打印 `[startup] 拒绝启动` 并退出。
 
 ### 4.4 用 systemd 守护进程
 
@@ -347,7 +377,7 @@ credentials-file: /root/.cloudflared/<Tunnel-ID>.json
 
 ingress:
   - hostname: dash.yourdomain.com
-    service: http://localhost:3000
+    service: http://127.0.0.1:3000
   - service: http_status:404
 ```
 
@@ -361,9 +391,150 @@ systemctl enable cloudflared
 systemctl start cloudflared
 ```
 
-### 4.6 更新盘方 API 白名单
+### 4.6 切换盘方 API 白名单（从 VPN 出口切到 VPS 固定 IP）
 
-VPS 部署完成后，到盘方后台把 **IP Address** 改成 VPS 公网 IP。
+改白名单本身只是一步：**盘方后台 → Manage API → 编辑 Key → 改 `IP Address`**。
+会咬人的是它前后两件事：**改完怎么确认真生效了**，以及**历史数据怎么搬过去**。
+
+#### 4.6.1 先确认四家的三件事
+
+四家的 `api_url` 各自独立（`jkausx6` / `jkrolex` / `jkezspn` / `jkpks7b`），很可能是四套
+独立对接 —— 那就是四次沟通、四次改动、四次验证。先把这张表填满（问什么见 2.3）：
+
+| 公司 | 后台地址 | `IP Address` 能填几个 | 改动生效时间 | 已勾模块 |
+|---|---|---|---|---|
+| aussiex6 | | | | |
+| rolex66 | | | | |
+| ezspin68 | | | | |
+| pokies7bet | | | | |
+
+**四家里只要有一家只能填一个 IP，那一家就走分支 B**（两个分支可以混用）。
+
+#### 4.6.2 记录三个 IP
+
+- **VPS IPv4** 和 **VPS IPv6**：`curl -4 ifconfig.me` / `curl -6 ifconfig.me`
+- **当前 VPN 出口 IP + 节点名**（如 Surfshark 的具体节点）
+
+第三个是**回滚资产**：消费级 VPN 是共享 IP 且会轮换，换个节点就变。没记下来，回滚时
+就拿不回原来那个能用的 IP 了。
+
+最权威的取值方式是跑一次 `scripts/check-api-access.js`：被拒时盘方会直接回显它看到的
+源 IP（见 2.3 末尾）。**填白名单以盘方回显的为准**，不是以 `ifconfig.me` 为准。
+
+#### 4.6.3 分支 A：四家都能填两个 IP（零停机）
+
+1. 四家后台各**追加** VPS IPv4，旧的 VPN 出口 IP **原地保留**
+2. VPS 上跑自检 → **必须退出码 0**（此时本机仍在正常同步，两边互不影响）
+3. **本机也跑一次同一个脚本** → 也必须 0。有些后台的"两个 IP"是换行或逗号分隔，
+   一存就把旧的吃掉了 —— 这一步专门用来抓这个
+4. **互斥时点**：停本机 Node（`Get-NetTCPConnection -LocalPort 3000 -State Listen | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force }`），确认进程消失。
+   **从这一刻起本机不得再 `npm start`**
+5. 搬库（4.6.5）
+6. VPS `systemctl start trader-dashboard`，按 4.4 的三条日志 + deploy/README.md 的三条
+   硬证据验收
+7. 稳定 24–48 小时（至少覆盖一次日切和一次备份 timer）后，再回四家后台删掉旧的 VPN IP。
+   **删之前不要卸载 VPN 客户端**
+
+> **双 IP 并存是为了回滚，不是为了双机并跑。** 除第 2–3 步（只读探测）外，任何时刻都只能
+> 有一台机器在跑 Node（见 2.2 的单实例硬约束）。两台同跑不会污染对方的库（各自一份 db +
+> 各自的 `sync-state-*.json`），但两个库会**分叉**，事后必须丢掉一边的人工录入 ——
+> 比重复入账更难发现。
+
+#### 4.6.4 分支 B：某家只能填一个 IP（维护窗，约 10–30 分钟）
+
+**先说不能做的事**：不存在"先切 rolex66 一家、本机继续跑其余三家、过几天再搬库"这种
+灰度。搬库是整库覆盖 —— 晚搬就丢掉本机这几天写的所有数据；先搬库又意味着本机不能再跑。
+**分支 B 只有停机窗口，没有灰度。**
+
+1. 停本机 Node（互斥时点，从此不再启动）
+2. 搬库（4.6.5）+ 在 VPS 上跑 `node scripts/audit-data-integrity.js`
+3. 逐家改白名单，**每改完一家立刻只测那一家**：`--company=rolex66`。
+   OK 才改下一家 —— 出现 `DENIED` 就停在这家排查，别继续改剩下的，否则四家一起红，
+   分不清是谁的问题
+4. 四家全 OK（不带 `--company` 跑一次，退出码 0）→ `systemctl start`
+5. 验收同分支 A 第 6 步
+
+中断期间盘方那边不丢数据，启动后 fast-recovery 会补 —— **前提是 `sync-state-*.json`
+一起搬过去了**。若某家的改动要人工审批或隔天生效，那家在审批期内完全不同步，而且
+**本机也顶不上**（库已经搬走）。**别在周五晚上切。**
+
+#### 4.6.5 搬库与 sync-state
+
+首次迁移必须把库搬过去，**不能指望新库重新同步补齐**：`bank_ledger`（人工录的资金流水）、
+`bank_tx_pending`（待审批队列）、`audit_events` 这三张表**不在盘方 API 里**，重新同步拿不回来。
+
+1. 确认本机 Node 已停
+2. `PRAGMA integrity_check;` → 必须恰好 `ok`，不是就停下
+3. `PRAGMA wal_checkpoint(TRUNCATE);` → `VACUUM INTO` 导出（命令见 6.1）。
+   **绝不用 `Copy-Item`** —— 数据在 `.db` 和 `-wal` 两个文件里，只拷 `.db` 会静默丢掉
+   整个 WAL（见 6 章开头的警告）
+4. 校验产出物：`integrity_check=ok` + 五张表行数**不低于**基线（见 6.2 第 3 步）。
+   低于基线就是导错库了，停手
+5. 传到 `/var/lib/trader-dashboard/trader.db`，`chown trader:trader`、`chmod 0640`，
+   并**删掉该目录可能残留的 `-wal` / `-shm`**。产出物没有 `-wal` 是正常的（见 6.2 末尾）
+6. **传输后在 VPS 上再 `integrity_check` 一次** + 比 sha256（网络截断会产出坏文件）
+7. 四个 `sync-state-*.json`（本机在项目根目录）一并传到
+   `/var/lib/trader-dashboard/state/` 并 chown。**不搬 = 水位归零 = 触发最长 365 天 /
+   2000 页的全量重拉，且日志里不会说明原因**（见 6.1 表格）
+8. `config.json` 走 ssh stdin（见 4.3），不 scp；`platform.*` 整段删掉
+9. VPS 上跑两个只读自检：`audit-data-integrity.js`（业务体检）+ `check-api-access.js`
+   （后者读的就是这个库，顺带验证了"库搬成功且凭证在里面"）
+
+#### 4.6.6 验收与「看到什么就停手」
+
+| 现象 | 判定 | 动作 |
+|---|---|---|
+| 自检任一家 `DENIED` | 白名单未生效或填错（多空格、填成 CIDR、填了 IPv6、存的时候覆盖了） | **不启动服务**；拿盘方回显的源 IP 逐字比对 |
+| 自检报四家回显 IP 不一致 | 本机有多个出口 | 先把出口收敛成一个，否则必然时通时不通 |
+| 抬头 IPv6 有值 / DNS 列显示 `A+AAAA(v)`，而盘方只收 IPv4 | undici 可能走 IPv6 出口 | 加 `--dns-result-order=ipv4first` 或关掉 IPv6 出口，重测 |
+| 退出码 3（全是 `NET`） | 网络或防火墙，**不是白名单** | 看 `err.cause.code`：`ENOTFOUND` 查 DNS，`ETIMEDOUT` 查出网策略 |
+| `integrity_check ≠ ok` 或行数低于基线 | 库损坏或导错 | 停手重导 |
+| 启动后 `journalctl -u trader-dashboard \| grep '\[db\]'` 有任何 warn | migration 静默失败（9 处 `catch { warn }`） | 按部署失败处理 |
+| 日志出现 `ACCESS_DENIED` / `backoff` | 白名单其实没通 | **立刻 `stop`，别等**。改完白名单用 `restart` 清掉内存里的退避 |
+| 日志出现 `PRUNE BLOCKED` | 熔断拦下了一次批量删客户：这轮 API 结果残缺（`maxPages` 不够，或 `/users/getAllUsers` 模块权限没勾） | 立刻 `systemctl stop` 查原因。基线见 deploy/README.md |
+| 循环重启，日志有 `[startup] 拒绝启动` | 账号还在用默认密码，或 `sessionSecret` 不合格 | 按 4.3 改密或换 secret |
+
+观察期至少 30–60 分钟，覆盖一轮 slow lane（含全量用户导入与 prune）。
+
+#### 4.6.7 回滚
+
+**窗口由三件事决定**，按影响排序：
+
+1. **旧的 VPN IP 是否还在白名单里。** 分支 A 保留了 → 回滚基本即时；分支 B 覆盖掉了 →
+   回滚耗时 = 盘方生效 SLA × 出问题的公司数
+2. **能否重新拿到同一个 VPN 出口 IP。** 共享 IP 换节点就变，所以 4.6.2 记的节点名是回滚
+   资产；连回同一节点后**必须用自检确认**，不能假定
+3. **VPS 已经跑了多久、期间有多少人工录入。** VPS 一开始同步，本机那份库就过时了 ——
+   回滚**必须把 VPS 的库搬回来**，不能拿本机旧库接着跑，否则丢掉 VPS 期间的全部人工录入
+   （流水、审批、状态变更，盘方 API 拿不回来）和同步水位。**这是真正的回滚成本，也是
+   "越晚回滚越贵"的原因。** 建议明确设一个截止点：切换后 24 小时内且录入不多 → 回滚划算；
+   超过就改成"在 VPS 上修"而不是回滚
+
+**回滚要动六处：**
+
+1. `systemctl stop trader-dashboard`（先停，保证单实例）
+2. VPS 上 `VACUUM INTO` 导出当前库 + 取四个 `sync-state-*.json` → 传回本机覆盖
+   （省事的替代：用最近一份 hourly 备份，代价是最多丢 1 小时人工录入）
+3. 四家盘方后台把 `IP Address` 改回 / 补上 VPN 出口 IP
+4. 本机连回同一个 VPN 节点 → `node scripts\check-api-access.js` 退出码 0
+5. 本机 `npm start`，按同样三条日志验收
+6. **把 Cloudflare 隧道指向改回本机**（见 3.3 / 7.3）—— 这一步最容易漏。不改的话操盘手
+   访问的还是已经停掉的 VPS，表现为 502，会被误判成"回滚失败"
+
+> 生产 `config.json` 的 `admin.password` / `sessionSecret` 与本机不同（见 4.3），回滚后
+> 操盘手会用错密码 —— 提前准备一句通知。
+
+#### 4.6.8 稳定后的清理与本机护栏
+
+删旧 IP 的时机见 4.6.3 第 7 步。本机侧再做三件零成本的事：
+
+- 停掉本机 cloudflared
+- 把本机 `server/db/trader.db` 改名成 `trader.db.pre-vps-YYYYMMDD.bak`（留作冷回滚副本）
+- **删掉本机 `config.json` 的 `platform.*` 整段**
+
+第三件是必须的：否则有人误 `npm start`，`seedCompaniesFromConfig` 会用 config 里的
+`platform.*` 给 **aussiex6** 播种凭证，在一个空库上跑起同步 —— 不会污染 VPS 的库，但会
+造出第二个"看起来能用"的后台，**操盘手往里录的钱就丢了**。
 
 ---
 
@@ -388,9 +559,8 @@ Get-Process node, cloudflared -ErrorAction SilentlyContinue
 **VPS 检查：**
 
 ```bash
-curl -s -o /dev/null -w "%{http_code}" http://localhost:3000
-pm2 status
-systemctl status cloudflared
+curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:3000/login.html
+systemctl status trader-dashboard cloudflared
 ```
 
 ### 5.2 每周维护
@@ -405,8 +575,8 @@ systemctl status cloudflared
 **Windows：**
 
 ```powershell
-# 停 Node
-Get-Process node -ErrorAction SilentlyContinue | Stop-Process -Force
+# 停 Node（按端口精确定位，别 Get-Process node，那会连带杀掉编辑器和 Claude Code）
+Get-NetTCPConnection -LocalPort 3000 -State Listen | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force }
 
 # 重启应用
 cd C:\Users\junho\trader-dashboard
@@ -429,7 +599,7 @@ sudo systemctl restart trader-dashboard
 
 ### 5.4 Windows 计划任务（本机 24/7 自启）
 
-若应用不在 PM2 里，可用计划任务：
+本机开机自启可用计划任务：
 
 1. 任务计划程序 → 创建基本任务  
 2. 触发器：**计算机启动时**  
@@ -512,7 +682,7 @@ sqlite3 /目标路径/trader-*.db "PRAGMA integrity_check;"      # 验证产出�
 
 | 改什么 | 在哪里改 | 要不要重启 |
 |--------|----------|------------|
-| 管理员密码 | `config.json` → `admin` 或后台「账号管理」 | 改 config 要重启 |
+| 管理员密码 | `scripts/set-password.js`（`config.json` 对已有库不生效） | 不用，旧 session 立即失效 |
 | 盘方 API | `config.json` 或「公司 / API」页面 | 页面保存即时生效 |
 | 同步频率 | `config.json` 里 `syncIntervalSeconds` 等 | 要重启 |
 | 时区 | `config.json` → `timezone` | 要重启 |
@@ -530,17 +700,23 @@ cd C:\Users\junho\trader-dashboard
 node --check server/index.js
 
 # 改完后重启
-Get-Process node -ErrorAction SilentlyContinue | Stop-Process -Force
+Get-NetTCPConnection -LocalPort 3000 -State Listen | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force }
 npm start
 ```
 
-**VPS 更新流程（Git）：**
+**VPS 更新流程：**
+
+本机 commit 后按 4.2 重新 `git archive` 并上传，然后在 VPS 上：
 
 ```bash
 cd /opt/trader-dashboard
-git pull
-npm install --production
-pm2 restart trader-dashboard
+# 先删 public 和 server，否则已从仓库删除的文件会一直留在线上。
+# 不能清空整个目录：rclone 配置在 /opt/trader-dashboard/.config 里。
+sudo -u trader rm -rf public server
+sudo -u trader tar -xzf /tmp/trader-dashboard.tar.gz -C /opt/trader-dashboard
+rm /tmp/trader-dashboard.tar.gz
+sudo -u trader npm ci --omit=dev
+sudo systemctl restart trader-dashboard
 ```
 
 **注意：**
@@ -561,8 +737,10 @@ pm2 restart trader-dashboard
 | 现象 | 可能原因 | 处理 |
 |------|----------|------|
 | 公网打不开，本地可以 | cloudflared 挂了 | 重启 cloudflared / 检查隧道服务 |
-| 502 Bad Gateway | Node 没跑 | `npm start` 或 `pm2 restart` |
-| 同步全部失败 `Invalid Access!` | API Key 错或 IP 不在白名单 | 查 ifconfig.me，更新盘方白名单 |
+| 502 Bad Gateway | Node 没跑 | `npm start` 或 `systemctl restart trader-dashboard` |
+| 同步全部失败 `Invalid Access!` | API Key 错或 IP 不在白名单 | 跑 `scripts/check-api-access.js`，用它提取的**盘方回显源 IP** 逐字比对四家白名单；**改完白名单要 `systemctl restart` 清掉内存里的 backoff，不要干等** |
+| 时通时不通 / 换机房后必现 `Invalid Access` | 走了 IPv6 出口，而白名单只有 IPv4 | 自检抬头看 IPv6 与 DNS 列；加 `--dns-result-order=ipv4first` 或关 IPv6 出口 |
+| 自检报四家回显 IP 不一致 | 本机有多个出口（分流规则 / 多网卡 / VPN 部分接管） | 白名单按单一源 IP 授权，先把出口收敛成一个 |
 | 重启后今日数据为 0 | 正常，等 fast-recovery（约 1–2 分钟） | 或手动触发同步 |
 | `EADDRINUSE :3000` | 端口被占 | `netstat -ano \| findstr :3000` 杀 PID |
 | VPN 开着隧道不稳定 | Surfshark 等干扰 DNS | 关 VPN 或固定用 `--edge-ip-version 4` |
@@ -577,7 +755,7 @@ pm2 restart trader-dashboard
 
 ```bash
 # VPS
-pm2 logs trader-dashboard --lines 100
+journalctl -u trader-dashboard -n 100
 journalctl -u cloudflared -n 50
 ```
 
@@ -587,39 +765,40 @@ journalctl -u cloudflared -n 50
 
 **凭证**
 
-- [ ] 改掉默认 admin 密码（登录零限流 + 策略只要求 4 位，公网上是字典攻击面）
+- [ ] 所有账号都用 `scripts/set-password.js` 改过密码（改 `config.json` 对搬过来的库不生效）
+- [ ] 四家平台 token 能换就换：它们明文存在库里，也在本机配置中待过
 - [ ] `sessionSecret` 用全新 48 字节随机值（旧值可能出现在日志、截图或对话里）
 - [ ] 盘方 API Key 只开必要模块，IP 白名单只填 VPS 固定 IP
+- [ ] 切换后 24–48 小时内**把白名单里的 VPN 出口 IP 删掉**（见 4.6.3 第 7 步）——
+      消费级 VPN 是共享出口，留着等于白名单这道防线只剩 accessId/accessToken 在撑
 - [ ] `config.json` **不进 git**（已在 `.gitignore` 里，别用 `git add -f` 绕过）
 - [ ] `server/db/*.db` 也不进 git（237MB + 23 万客户的手机号）
 - [ ] 备份的 age **私钥离线保管**，VPS 上只放公钥
 
 **服务器**
 
-- [ ] `NODE_ENV=production`（否则 Express 把完整堆栈写进 HTTP 响应体）
+- [ ] SSH 仅密钥、禁 root 登录，`ufw` 默认拒绝入站（见 deploy/README.md「VPS 基线」）
+- [ ] `NODE_ENV=production`（否则 Express 把完整堆栈写进响应体，启动闸门也不生效）
 - [ ] 应用只监听 `127.0.0.1` —— `curl http://<VPS公网IP>:3000/` 必须连接被拒
 - [ ] `config.json` 里**没有** `host` 字段
 - [ ] 时区是 `Australia/Sydney`（`timedatectl` 确认）
 - [ ] session cookie 带 `Secure` + `HttpOnly` + `SameSite=Lax`（DevTools 里看）
 - [ ] 重启服务后登录态不丢（验证 session store 生效）
 
-**Cloudflare**（零代码，性价比最高的两项）
+**Cloudflare**（上线前必做，切 DNS 之前配好）
 
-- [ ] Rate Limiting Rule：`POST /api/auth/login` → 5 次/分钟/IP。免费 plan 有 1 条
-      额度，就用在这里 —— `bcrypt.compareSync` 阻塞事件循环，约 10 req/s 就能让
-      整个服务连同四家公司的同步一起不可用
 - [ ] Cloudflare Access 覆盖整个 hostname（Zero Trust，免费到 50 seats）
+- [ ] Rate Limiting Rule：`POST /api/auth/login` → 5 次/分钟/IP。免费 plan 有 1 条
+      额度，就用在这里。应用层有兜底（账号 10 次、IP 30 次/15 分钟），这条是在到达源站
+      之前就挡掉
 
-> Access **挡不住已经拿到 operator 账号的人**。相关提权路径（status-options 写操作
-> 与 color 校验）已在代码层修掉，不要用 Access 代替它。
+> Access **挡不住已经拿到 operator 账号的人**。相关提权路径已在代码层修掉，不要用
+> Access 代替它。
 
 **运维**
 
 - [ ] 备份 timer 已启用，且**至少完整走过一次恢复演练**（见 6.3）
-- [ ] 知道 `pruneStaleCustomers` 的风险：看到日志里 `pruned stale customers:` 跟着
-      四位数就立刻停服（客户数基线：14014 / 71601 / 74794 / 69739）
-- [ ] 前端 CDN 依赖 `lucide@latest` **没有版本锁** —— 上游一次 breaking change 就会
-      让所有页面图标同时消失。建议锁定具体版本（见 backlog）
+- [ ] 看到日志里的 `PRUNE BLOCKED` 就立刻停服查原因（客户数基线：14014 / 71601 / 74794 / 69739）
 
 ---
 
@@ -659,6 +838,10 @@ sqlite3 -readonly /var/lib/trader-dashboard/trader.db \
 # 数据体检（只读，不做任何订正）
 node /opt/trader-dashboard/scripts/audit-data-integrity.js
 
+# 白名单自检（只读，直连盘方，不经过应用；退出码 0 才允许 start）
+sudo -u trader TRADER_DB=/var/lib/trader-dashboard/trader.db \
+  node /opt/trader-dashboard/scripts/check-api-access.js
+
 # 手动跑一次备份
 systemctl start trader-backup.service && journalctl -u trader-backup -n 40 --no-pager
 ```
@@ -674,6 +857,7 @@ systemctl start trader-backup.service && journalctl -u trader-backup -n 40 --no-
 | `deploy/trader-backup.sh` | 每小时加密备份（VACUUM INTO → gzip → age → R2） |
 | [docs/pre-launch-review-2026-09-24.md](docs/pre-launch-review-2026-09-24.md) | 上线前缺陷清单，开头有修复状态表 |
 | [scripts/audit-data-integrity.js](scripts/audit-data-integrity.js) | 只读数据体检（七项检查，不做订正） |
+| [scripts/check-api-access.js](scripts/check-api-access.js) | 盘方白名单自检（只读，直连盘方，不经过应用）。退出码 0 全通 / 2 有公司被拒 / 3 网络层失败 / 4 没测起来 |
 | `config.example.json` | 生产配置模板（敏感字段为 `__FILL_ME__`） |
 | `config.json` | 全局配置。**不在 git 里**；生产放 `/etc/trader-dashboard/` |
 | `AGENTS.md` / `CLAUDE.md` | 开发约束与架构说明 |

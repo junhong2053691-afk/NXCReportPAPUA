@@ -21,6 +21,11 @@
 | B9 | **已修** | `.gitignore` 已排除 `config.json` 与 `server/db/*.db*` 等。仓库已初始化（此前 `.git` 是空目录），首个 commit 只含护栏，实测 93 个入库文件中九类危险模式零命中 |
 | B4 | **缓解，未拆除** | `config.json` 的 `maxPages` 由 500 提到 1200（覆盖约 24 万客户，pokies7bet 余量从 126 页变为 826 页）。**代码层的熔断仍未加**，仍在 backlog 第 1 项 |
 | H3 | **部分修复** | `/api/banks` 的 `requireCompany` 与 `banks.js` 的 session 回退**尚未处理** |
+| H3 补充（2026-10-31） | **已修** | `/api/banks` 挂 `requireCompany`，去掉 session 回退 |
+| H7（2026-10-31） | **已修** | 应用层限流 + 异步 bcrypt + 账号不存在时也跑哈希 |
+| B4（2026-10-31） | **已修** | `pruneStaleCustomers` 加熔断 |
+| B2（2026-10-31） | **路径已失效** | `startAdding` 无调用方，新增行从 UI 走不到。`commitRow` 的新增分支已补清空逻辑，但无法在页面验证 |
+| B3（2026-10-31） | **未修** | 全量 1 个 ID 跨公司重复（aussiex6 / ezspin68），未造成吞单 |
 | 其他 | 未处理 | 见文末 backlog |
 
 另外新增两项部署期加固：应用只监听 `127.0.0.1`（此前绑 0.0.0.0，VPS 公网 IP:3000

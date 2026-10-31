@@ -16,10 +16,9 @@ npm start
 
 首次启动自动创建，在 `config.json` 修改：
 
-- 账号：`admin`
-- 密码：`admin123`
+账号和初始密码取自 `config.json` 的 `admin`（只在新库首次启动时写入）。
 
-**请尽快改成你自己的密码。**
+**已有库改密码用 `scripts/set-password.js`；生产环境检测到默认密码会拒绝启动。**
 
 ## 给操盘手开账号
 

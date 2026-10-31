@@ -30,6 +30,9 @@ Environment=TZ=Australia/Sydney
 Environment=TRADER_CONFIG=/etc/trader-dashboard/config.json
 Environment=TRADER_DB=/var/lib/trader-dashboard/trader.db
 Environment=TRADER_STATE_DIR=/var/lib/trader-dashboard/state
+# 应用内备份在生产保持关闭（快照是明文的，加密备份走 trader-backup.sh）。这一行只是让
+# 备份设置页能打开：默认目录在只读的 /opt 下，mkdir 失败会让 GET /api/admin/backup 返回 500。
+Environment=TRADER_BACKUP_DIR=/var/lib/trader-dashboard/backups
 
 # 让 V8 先于 cgroup OOM killer 触发。routes/data.js 的 /deposits 与
 # /withdrawals 没有分页上限（limit=99999999 或 -1 会返回全表），打爆堆时

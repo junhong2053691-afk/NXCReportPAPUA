@@ -30,6 +30,26 @@ journald 自带轮转（可以顺手解决仓库根目录那 17 个无轮转 `.l
 
 ---
 
+## VPS 基线（第一次登录后立刻做）
+
+应用只绑 127.0.0.1，但服务器本身也在公网上。库里有全部客户数据，这几步不能省：
+
+```bash
+adduser deploy && usermod -aG sudo deploy
+mkdir -p /home/deploy/.ssh && cp ~/.ssh/authorized_keys /home/deploy/.ssh/
+chown -R deploy:deploy /home/deploy/.ssh && chmod 700 /home/deploy/.ssh
+# 另开一个窗口确认 ssh deploy@vps 能登录且能 sudo，再做下面这步，否则会把自己锁在外面
+
+sed -i 's/^#\?PasswordAuthentication.*/PasswordAuthentication no/; s/^#\?PermitRootLogin.*/PermitRootLogin no/' /etc/ssh/sshd_config
+sshd -t && systemctl reload ssh
+
+ufw default deny incoming && ufw default allow outgoing
+ufw allow OpenSSH && ufw enable       # cloudflared 是出站连接，不需要开 80/443
+apt install -y unattended-upgrades && dpkg-reconfigure -f noninteractive unattended-upgrades
+```
+
+---
+
 ## 目录约定
 
 unit 文件里的三个 `TRADER_*` 环境变量与这套目录对应（定义见 `server/lib/paths.js`）：
@@ -90,8 +110,19 @@ node -e "console.log(new Date('2026-09-15T12:34:54+00:00').toLocaleDateString('e
 
 ## 安装
 
+代码用 `git archive` 打包：它只含已提交的文件，**从机制上带不出** `config.json`、库、
+备份和日志。不要手写 `tar` —— 项目目录里有 `server/db/backup-*/` 明文全库。
+
 ```bash
-sudo -u trader git clone <私有库地址> /opt/trader-dashboard
+# 本机（必须已 commit，archive 只打包 HEAD）
+git archive --format=tar.gz -o trader-dashboard.tar.gz HEAD
+scp trader-dashboard.tar.gz deploy@vps:/tmp/
+```
+
+```bash
+# VPS（deploy 是下面「VPS 基线」里建的 sudo 用户）
+sudo -u trader tar -xzf /tmp/trader-dashboard.tar.gz -C /opt/trader-dashboard
+rm /tmp/trader-dashboard.tar.gz
 cd /opt/trader-dashboard
 sudo -u trader npm ci --omit=dev
 
@@ -112,24 +143,66 @@ sudo systemctl daemon-reload
 `config.json` **不要 scp、不要粘到聊天软件**：
 
 ```bash
-# 前导空格避开 shell history
- cat config.prod.json | ssh trader@vps 'sudo tee /etc/trader-dashboard/config.json > /dev/null'
+# 前导空格避开 shell history。trader 是 nologin 且无 sudo，这里必须用 deploy 用户
+ cat config.prod.json | ssh deploy@vps 'sudo tee /etc/trader-dashboard/config.json > /dev/null'
 sudo chown root:trader /etc/trader-dashboard/config.json
 sudo chmod 0640 /etc/trader-dashboard/config.json
 ```
 
-生产 `config.json` 相对本机必须改的：`sessionSecret`（全新 48 字节随机）、
-`admin.password`（全新强密码）、`maxPages`（已是 1200，别调回 500）。
+生产 `config.json` 相对本机必须改的：`sessionSecret`（全新 48 字节随机，≥32 字符）、
+`maxPages`（已是 1200，别调回 500）。
 `platform.*` 整段**可以删掉** —— `services/platform.js` 优先从 `companies` 表读凭证，
 config 里的回落只对 `aussiex6` 生效，留着等于多一份明文凭证。
 **不要**写 `host` 字段（留空即绑 127.0.0.1）。
+
+### 改账号密码（搬库之后、启动之前）
+
+**改 `config.json` 的 `admin.password` 对搬过来的库不生效**：`seedAdmin` 只在 users 表为空时
+写入。必须用脚本直接改库，新密码至少 12 位，不走命令行参数：
+
+```bash
+read -rs P; printf %s "$P" | sudo -u trader TRADER_DB=/var/lib/trader-dashboard/trader.db \
+  node /opt/trader-dashboard/scripts/set-password.js admin; unset P
+```
+
+operator 账号同样各改一次。`NODE_ENV=production` 下，服务发现任何账号还在用默认密码，或
+`sessionSecret` 是占位值、不足 32 字符，会打印 `[startup] 拒绝启动` 并退出 ——
+`systemctl status` 里循环重启时先看这一行。
+
+---
+
+## 启动之前：白名单自检
+
+**先验白名单，再启动服务。** 顺序反了会很难受：白名单没通就 start，`runLane` 会把该公司
+× 该 lane 退避 300s → 指数到 1800s，你会以为"起来了在等"，其实它在睡觉。
+
+```bash
+sudo -u trader TRADER_DB=/var/lib/trader-dashboard/trader.db \
+  node /opt/trader-dashboard/scripts/check-api-access.js
+echo "exit=$?"
+```
+
+| 退出码 | 含义 | 动作 |
+|---|---|---|
+| 0 | 四家全通 | **唯一允许 `systemctl start` 的状态** |
+| 2 | 有公司被拒（`Invalid Access`） | 不要启动。用脚本提取的**盘方回显源 IP** 逐字比对白名单 |
+| 3 | 网络或业务层失败，不是白名单 | 可重试；先排 IPv6、DNS、防火墙 |
+| 4 | 没测起来（DB 打不开、`--company` 写错） | 环境或参数错 —— VPS 上八成是忘了给 `TRADER_DB` |
+
+这个脚本只读开库、不跑 migration、不碰 state 目录、零写入，所以在服务没起来的时候跑是安全的；
+用 `sudo -u trader` 跑还顺带验证了服务用户对 0640 的库有读权限。逐家改白名单时用
+`--company=rolex66` 单测一家。完整切换流程见 [../DEPLOY.md](../DEPLOY.md) 的 4.6。
 
 ---
 
 ## 启动与验证
 
+`enable` 与 `start` 故意分开：先让 unit 装好并开机自启，`start` 留到上面的自检退出码为 0 之后。
+
 ```bash
-sudo systemctl enable --now trader-dashboard
+sudo systemctl enable trader-dashboard      # 只登记开机自启，不启动
+# —— 此处先跑白名单自检，退出码 0 才继续 ——
+sudo systemctl start trader-dashboard
 sudo journalctl -fu trader-dashboard
 ```
 
@@ -179,13 +252,16 @@ watch -n30 "sqlite3 -readonly /var/lib/trader-dashboard/trader.db \
 journalctl -u trader-dashboard --since "10 min ago" | grep -Ei 'ACCESS_DENIED|backoff|pruned|Invalid Access'
 ```
 
-**看到 `pruned stale customers:` 跟着四位数就立刻 `systemctl stop`** —— 正常应是 0
-或个位数。客户数基线：aussiex6 14014 / ezspin68 71601 / pokies7bet 74794 / rolex66 69739。
+**看到 `PRUNE BLOCKED` 就立刻 `systemctl stop`。** 这是熔断：待删客户超过
+`max(50, 5%)` 时一个都不删，说明这轮 API 结果是残缺的（`maxPages` 不够、
+`/users/getAllUsers` 权限没勾）。熔断生效期间每轮都会全量重拉一次，所以要尽快处理。
+`pruned stale customers:` 后面正常应是 0 或个位数。
+客户数基线：aussiex6 14014 / ezspin68 71601 / pokies7bet 74794 / rolex66 69739。
 
 不动 DNS 的浏览器验证：
 
 ```bash
-ssh -N -L 8080:127.0.0.1:3000 trader@vps   # 然后本机开 http://127.0.0.1:8080/login.html
+ssh -N -L 8080:127.0.0.1:3000 deploy@vps   # 然后本机开 http://127.0.0.1:8080/login.html
 ```
 
 `curl http://<VPS公网IP>:3000/` **必须连接被拒**（应用只绑 127.0.0.1）。
@@ -272,18 +348,17 @@ TRADER_DB=$R/trader.db TRADER_STATE_DIR=$R/state TRADER_CONFIG=$R/config.json \
 
 ---
 
-## Cloudflare 侧（零代码，性价比最高的两项）
+## Cloudflare 侧（上线前必做，两项都是零代码）
 
-1. **Rate Limiting Rule** on `POST /api/auth/login` → 5 次/分钟/IP → Block 10 分钟。
-   免费 plan 有 1 条额度，就用在这里。`routes/auth.js` 用同步 `bcrypt.compareSync`
-   （纯 JS，cost 10 约 100ms，**阻塞事件循环**）且零限流 —— 约 10 req/s 就能让整个
-   服务连同四家公司的同步一起不可用。
-2. **Cloudflare Access** 覆盖整个 hostname（Zero Trust，免费到 50 seats）。未通过身份
-   校验的请求根本到不了源站，一并解决上面的 DoS、字典攻击，以及 `auth.js` 里
-   "用户不存在时不跑 bcrypt" 造成的用户名枚举时序侧信道。
+1. **Cloudflare Access** 覆盖整个 hostname（Zero Trust，免费到 50 seats）。未通过身份
+   校验的请求根本到不了源站。这是 23 万客户数据前面的第一道门，**没配好不要把 DNS 切过来**。
+2. **Rate Limiting Rule** on `POST /api/auth/login` → 5 次/分钟/IP → Block 10 分钟。
+   免费 plan 有 1 条额度，就用在这里。应用层已有兜底（`lib/loginLimiter.js`：账号 10 次、
+   IP 30 次/15 分钟），这条规则是在流量到达源站之前就挡掉。
 
-> Access 挡不住**已经拿到 operator 账号的人**。相关的提权路径（status-options 写操作
-> 与 color 校验）已在代码层修掉，不要依赖 Access 代替它。
+> Access 挡不住**已经拿到 operator 账号的人**。相关的提权路径已在代码层修掉，不要依赖
+> Access 代替它。应用层限流按 `CF-Connecting-IP` 计数，前提是源站只绑 127.0.0.1 ——
+> 这也是不能写 `host` 字段的又一个原因。
 
 ---
 
