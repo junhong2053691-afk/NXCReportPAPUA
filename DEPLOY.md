@@ -302,7 +302,7 @@ chmod 0640 /etc/trader-dashboard/config.json
 | `host` | **不要写这个字段** | 留空即绑 127.0.0.1。写了会让服务暴露在公网 IP 上，绕过隧道和 Access，登录限流用的 `CF-Connecting-IP` 也变成可伪造 |
 
 **`admin.password` 改了也不生效。** `seedAdmin` 只在 users 表为空时写入，而这里是整库搬过来
-的。搬库之后、启动之前，用 `scripts/set-password.js` 逐个账号改密（至少 12 位），命令见
+的。搬库之后、启动之前，用 `scripts/set-password.js` 逐个账号改密（至少 6 位），命令见
 [deploy/README.md](deploy/README.md) 的「改账号密码」。还有账号在用默认密码时，
 `NODE_ENV=production` 下服务会打印 `[startup] 拒绝启动` 并退出。
 

@@ -90,6 +90,7 @@ $env:TUNNEL_EDGE_IP_VERSION="4"
 | `scripts/vacuumSnapshot.js` | `VACUUM INTO` 打一致快照。库是 WAL，**别直接拷 `.db`**（会丢未 checkpoint 的 WAL） |
 | `scripts/skipAllPending.js` | 批量清空 `bank_tx_pending` 积压。默认 dry-run，`--yes` 才写 |
 | `scripts/preview-telegram.js` | 把 `/balance` `/blocked` `/today` 各分支渲一遍并打印每行显示宽度，肉眼查排版。只读内存库 |
+| `scripts/reset-ledger-for-cutover.js` | 上线切换一次性：清 `bank_ledger`+回收站、待审批标 `expired`（**不删**，否则同步会重新入队）、余额归零。保留 `bank_balance_log`。默认 dry-run，`--yes` 才写；先停服、先 `vacuumSnapshot` |
 | `scripts/set-password.js` | 直接改库里的账号密码，密码只从 stdin 读。**搬库后改 `config.json` 不生效**，这是唯一入口 |
 
 `skipAllPending.js` 有三条不可回避的前提，详见其文件头注释：**skip 掉的钱永远不进账本**；

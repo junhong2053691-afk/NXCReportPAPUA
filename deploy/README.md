@@ -158,7 +158,7 @@ config 里的回落只对 `aussiex6` 生效，留着等于多一份明文凭证�
 ### 改账号密码（搬库之后、启动之前）
 
 **改 `config.json` 的 `admin.password` 对搬过来的库不生效**：`seedAdmin` 只在 users 表为空时
-写入。必须用脚本直接改库，新密码至少 12 位，不走命令行参数：
+写入。必须用脚本直接改库，新密码至少 6 位，不走命令行参数：
 
 ```bash
 read -rs P; printf %s "$P" | sudo -u trader TRADER_DB=/var/lib/trader-dashboard/trader.db \
