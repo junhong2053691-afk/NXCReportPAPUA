@@ -812,6 +812,7 @@ const I18N_PHRASES = [
   [/^推荐人榜加载失败：(.+)$/, "Failed to load the referrer leaderboard: $1"],
   [/^推荐人报表加载失败：(.+)$/, "Failed to load the referrer report: $1"],
   [/^回流报表加载失败：(.+)$/, "Failed to load the return report: $1"],
+  [/^月报加载失败：(.+)$/, "Failed to load the monthly report: $1"],
   [/^活动领取加载失败：(.+)$/, "Failed to load promo claims: $1"],
 ];
 const I18N_PHRASES_ZH = [
@@ -1894,6 +1895,56 @@ Object.assign(I18N.zh, {
 Object.assign(I18N.en, {
   "使用已分配的账号安全登录": "Sign in securely with the account you were given",
   "数据与支付操作按公司隔离": "Data and payment operations are isolated per company",
+});
+
+// batch F: MONTHLY REPORT
+Object.assign(I18N.zh, {
+  "月报": "月报",
+  "只算已审批的账单流水 · 合计行为每日相加": "只算已审批的账单流水 · 合计行为每日相加",
+  "视图": "视图",
+  "月": "月",
+  "年": "年",
+  "← 上个月": "← 上个月",
+  "下个月 →": "下个月 →",
+  "← 上一年": "← 上一年",
+  "下一年 →": "下一年 →",
+  "本月": "本月",
+  "今年": "今年",
+  "复制表格": "复制表格",
+  "下载 CSV": "下载 CSV",
+  "点击月份查看当月每日明细": "点击月份查看当月每日明细",
+  "日期": "日期",
+  "月份": "月份",
+  "DEP单": "DEP单",
+  "WD单": "WD单",
+  "总单": "总单",
+  "已复制，可直接粘贴到 Google Sheet": "已复制，可直接粘贴到 Google Sheet",
+  "复制失败，请重试": "复制失败，请重试",
+  "开发中": "开发中",
+});
+Object.assign(I18N.en, {
+  "月报": "Monthly Report",
+  "只算已审批的账单流水 · 合计行为每日相加": "Approved ledger entries only · totals are the sum of daily rows",
+  "视图": "View",
+  "月": "Month",
+  "年": "Year",
+  "← 上个月": "← Previous month",
+  "下个月 →": "Next month →",
+  "← 上一年": "← Previous year",
+  "下一年 →": "Next year →",
+  "本月": "This month",
+  "今年": "This year",
+  "复制表格": "Copy table",
+  "下载 CSV": "Download CSV",
+  "点击月份查看当月每日明细": "Click a month to see its daily breakdown",
+  "日期": "Date",
+  "月份": "Month",
+  "DEP单": "DEP #",
+  "WD单": "WD #",
+  "总单": "Total #",
+  "已复制，可直接粘贴到 Google Sheet": "Copied — paste it straight into Google Sheets",
+  "复制失败，请重试": "Copy failed, please try again",
+  "开发中": "Under development",
 });
 
 // ---------------------------------------------------------------------------

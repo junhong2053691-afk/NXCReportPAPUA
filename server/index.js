@@ -151,6 +151,13 @@ function pageLayout(title, active, body, script) {
     ["promos", "/promo-claims.html", "\u6d3b\u52a8\u9886\u53d6", "ticket-percent"],
     ["customer-return", "/customer-return.html", "\u56de\u6d41\u62a5", "rotate-ccw"],
   ];
+  // MONTHLY REPORT 菜单组，仅 admin（HTML 默认 hidden，app.js 的 loadUser 按角色放出；
+  // 三个页面都在 ADMIN_ONLY_PAGES 里）。
+  const monthlyNav = [
+    ["monthly-report", "/monthly-report.html", "REPORT", "calendar-range"],
+    ["company-expenses", "/company-expenses.html", "COMPANY EXPENSES", "receipt"],
+    ["top-referral", "/top-referral.html", "TOP REFERRAL", "award"],
+  ];
   const settingsNav = [
     ["audit-history", "/audit-history.html", "\u64cd\u4f5c\u5386\u53f2", "history"],
     ["admin", "/admin-users.html", "\u8d26\u53f7\u7ba1\u7406", "shield-check"],
@@ -158,7 +165,7 @@ function pageLayout(title, active, body, script) {
     ["telegram-settings", "/telegram-settings.html", "Telegram", "send"],
     ["company-settings", "/company-settings.html", "\u516c\u53f8 / API", "settings"],
   ];
-  const nav = [...primaryNav, ...insightNav, ...settingsNav];
+  const nav = [...primaryNav, ...insightNav, ...monthlyNav, ...settingsNav];
   const activeItem = nav.find(([key]) => key === active) || nav[0];
   const navLink = ([key, href, label, icon], id) => {
     const cls = key === active ? ' class="active"' : "";
@@ -170,10 +177,12 @@ function pageLayout(title, active, body, script) {
   const settingsLinks = settingsNav
     .map((item) => navLink(item, item[0] === "admin" ? "nav-admin" : `nav-${item[0]}`))
     .join("");
+  const monthlyLinks = monthlyNav.map((item) => navLink(item)).join("");
   const insightOpen = insightNav.some(([key]) => key === active) ? " open" : "";
+  const monthlyOpen = monthlyNav.some(([key]) => key === active) ? " open" : "";
   const settingsOpen = settingsNav.some(([key]) => key === active) ? " open" : "";
   const extra = script ? `<script src="${script}"></script>` : "";
-  return `<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="color-scheme" content="light dark"><title>${title} - \u64cd\u76d8\u624b\u540e\u53f0</title><link rel="stylesheet" href="/css/style.css?v=20260812transferfix1"></head><body><a class="skip-link" href="#main-content">\u8df3\u5230\u4e3b\u5185\u5bb9</a><div class="ambient-field" aria-hidden="true"><span></span><span></span></div><div class="sidebar-backdrop" id="sidebar-backdrop"></div><button type="button" class="mobile-menu-btn icon-btn" id="mobile-menu-btn" aria-label="\u6253\u5f00\u5bfc\u822a" aria-controls="sidebar" aria-expanded="false"><i data-lucide="menu"></i><span class="icon-fallback" aria-hidden="true">Menu</span></button><div class="layout"><aside class="sidebar" id="sidebar" aria-label="\u4e3b\u5bfc\u822a"><div class="brand-mark"><span class="brand-symbol" aria-hidden="true">T</span><div><h2>Trader</h2><p>Command Center</p></div></div><div class="company-bar glass-control" id="company-bar"><label for="company-select">\u5f53\u524d\u516c\u53f8</label><select id="company-select" aria-describedby="company-sync"></select><span id="company-sync" class="company-sync-hint" aria-live="polite">\u6b63\u5728\u8bfb\u53d6...</span></div><nav class="nav-stack" aria-label="\u5de5\u4f5c\u533a"><div class="nav-section nav-primary">${primaryLinks}</div><details class="nav-group"${insightOpen}><summary><span class="nav-summary-label"><i data-lucide="sparkles"></i><span>\u6d1e\u5bdf</span></span><i data-lucide="chevron-down" class="nav-chevron"></i></summary><div class="nav-children">${insightLinks}</div></details><details class="nav-group" id="nav-settings-group"${settingsOpen} hidden><summary><span class="nav-summary-label"><i data-lucide="sliders-horizontal"></i><span>\u8bbe\u7f6e</span></span><i data-lucide="chevron-down" class="nav-chevron"></i></summary><div class="nav-children">${settingsLinks}</div></details></nav><div class="sidebar-footer"><div class="user-info"><div class="user-avatar" aria-hidden="true">OP</div><div class="user-copy"><span class="user-label">Operator</span><strong id="current-user" translate="no">-</strong></div><button type="button" class="logout-btn icon-btn" id="logout-btn" aria-label="\u9000\u51fa\u767b\u5f55" title="\u9000\u51fa\u767b\u5f55"><i data-lucide="log-out"></i></button></div></div></aside><main class="main" id="main-content" tabindex="-1"><header class="topbar glass-panel"><div class="topbar-heading"><div class="topbar-kicker">Trader Dashboard</div><div class="topbar-title">${activeItem[2]}</div></div><div class="topbar-actions"><div class="sync-state" id="global-sync-state" data-state="loading" role="status" aria-live="polite"><span class="sync-indicator" aria-hidden="true"></span><span class="sync-copy"><strong id="global-sync-text">\u6b63\u5728\u8bfb\u53d6\u540c\u6b65\u72b6\u6001</strong><small id="global-sync-time"></small></span></div><button type="button" class="lang-toggle" id="lang-toggle" translate="no" aria-label="\u5207\u6362\u8bed\u8a00" title="\u5207\u6362\u8bed\u8a00"><span data-lang-choice="zh">中</span><span data-lang-choice="en">EN</span></button><button type="button" class="theme-toggle icon-btn" id="theme-toggle" aria-label="\u5207\u6362\u4e3b\u9898" title="\u5207\u6362\u4e3b\u9898"><i data-lucide="moon"></i></button></div></header><section class="page-shell">${body}</section></main></div><script src="/vendor/lucide-1.65.0.min.js"></script><script src="/vendor/gsap-3.12.5.min.js"></script><script src="/js/alarm.js?v=20260930alarm1"></script><script src="/js/app.js?v=20260802platformsound3"></script><script src="/js/customer-detail.js?v=20260731bankfix4"></script>${extra}</body></html>`;
+  return `<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="color-scheme" content="light dark"><title>${title} - \u64cd\u76d8\u624b\u540e\u53f0</title><link rel="stylesheet" href="/css/style.css?v=20260812transferfix1"></head><body><a class="skip-link" href="#main-content">\u8df3\u5230\u4e3b\u5185\u5bb9</a><div class="ambient-field" aria-hidden="true"><span></span><span></span></div><div class="sidebar-backdrop" id="sidebar-backdrop"></div><button type="button" class="mobile-menu-btn icon-btn" id="mobile-menu-btn" aria-label="\u6253\u5f00\u5bfc\u822a" aria-controls="sidebar" aria-expanded="false"><i data-lucide="menu"></i><span class="icon-fallback" aria-hidden="true">Menu</span></button><div class="layout"><aside class="sidebar" id="sidebar" aria-label="\u4e3b\u5bfc\u822a"><div class="brand-mark"><span class="brand-symbol" aria-hidden="true">T</span><div><h2>Trader</h2><p>Command Center</p></div></div><div class="company-bar glass-control" id="company-bar"><label for="company-select">\u5f53\u524d\u516c\u53f8</label><select id="company-select" aria-describedby="company-sync"></select><span id="company-sync" class="company-sync-hint" aria-live="polite">\u6b63\u5728\u8bfb\u53d6...</span></div><nav class="nav-stack" aria-label="\u5de5\u4f5c\u533a"><div class="nav-section nav-primary">${primaryLinks}</div><details class="nav-group"${insightOpen}><summary><span class="nav-summary-label"><i data-lucide="sparkles"></i><span>\u6d1e\u5bdf</span></span><i data-lucide="chevron-down" class="nav-chevron"></i></summary><div class="nav-children">${insightLinks}</div></details><details class="nav-group" id="nav-monthly-group"${monthlyOpen} hidden><summary><span class="nav-summary-label"><i data-lucide="calendar-range"></i><span>MONTHLY REPORT</span></span><i data-lucide="chevron-down" class="nav-chevron"></i></summary><div class="nav-children">${monthlyLinks}</div></details><details class="nav-group" id="nav-settings-group"${settingsOpen} hidden><summary><span class="nav-summary-label"><i data-lucide="sliders-horizontal"></i><span>\u8bbe\u7f6e</span></span><i data-lucide="chevron-down" class="nav-chevron"></i></summary><div class="nav-children">${settingsLinks}</div></details></nav><div class="sidebar-footer"><div class="user-info"><div class="user-avatar" aria-hidden="true">OP</div><div class="user-copy"><span class="user-label">Operator</span><strong id="current-user" translate="no">-</strong></div><button type="button" class="logout-btn icon-btn" id="logout-btn" aria-label="\u9000\u51fa\u767b\u5f55" title="\u9000\u51fa\u767b\u5f55"><i data-lucide="log-out"></i></button></div></div></aside><main class="main" id="main-content" tabindex="-1"><header class="topbar glass-panel"><div class="topbar-heading"><div class="topbar-kicker">Trader Dashboard</div><div class="topbar-title">${activeItem[2]}</div></div><div class="topbar-actions"><div class="sync-state" id="global-sync-state" data-state="loading" role="status" aria-live="polite"><span class="sync-indicator" aria-hidden="true"></span><span class="sync-copy"><strong id="global-sync-text">\u6b63\u5728\u8bfb\u53d6\u540c\u6b65\u72b6\u6001</strong><small id="global-sync-time"></small></span></div><button type="button" class="lang-toggle" id="lang-toggle" translate="no" aria-label="\u5207\u6362\u8bed\u8a00" title="\u5207\u6362\u8bed\u8a00"><span data-lang-choice="zh">中</span><span data-lang-choice="en">EN</span></button><button type="button" class="theme-toggle icon-btn" id="theme-toggle" aria-label="\u5207\u6362\u4e3b\u9898" title="\u5207\u6362\u4e3b\u9898"><i data-lucide="moon"></i></button></div></header><section class="page-shell">${body}</section></main></div><script src="/vendor/lucide-1.65.0.min.js"></script><script src="/vendor/gsap-3.12.5.min.js"></script><script src="/js/alarm.js?v=20260930alarm1"></script><script src="/js/app.js?v=20260802platformsound3"></script><script src="/js/customer-detail.js?v=20260731bankfix4"></script>${extra}</body></html>`;
 }
 
 const pageRoutes = {
@@ -575,6 +584,33 @@ const pageRoutes = {
     '<div class="page-toolbar"><h1>\u8d26\u53f7\u7ba1\u7406</h1><button class="btn btn-success btn-sm" id="create-btn">+ \u65b0\u5efa\u8d26\u53f7</button></div><p class="page-description">\u81ea\u5b9a\u4e49\u8d26\u53f7 ID \u548c\u5bc6\u7801\uff0c\u521b\u5efa\u540e\u590d\u5236\u53d1\u7ed9\u64cd\u76d8\u624b</p><div class="table-wrap data-surface"><table><thead><tr><th>\u8d26\u53f7 ID</th><th>\u540d\u79f0</th><th>\u89d2\u8272</th><th>\u72b6\u6001</th><th>\u64cd\u4f5c</th></tr></thead><tbody id="rows"></tbody></table></div><div class="modal-overlay" id="create-modal"><div class="modal"><h2>\u65b0\u5efa\u64cd\u76d8\u624b\u8d26\u53f7</h2><div class="form-group"><label>\u8d26\u53f7 ID</label><input id="new-username"></div><div class="form-group"><label>\u663e\u793a\u540d\u79f0</label><input id="new-name"></div><div class="form-group"><label>\u5bc6\u7801</label><input id="new-password" type="password"></div><div class="actions"><button class="btn btn-outline btn-sm" id="cancel-btn">\u53d6\u6d88</button><button class="btn btn-success btn-sm" id="save-btn">\u521b\u5efa</button></div></div></div><div class="modal-overlay" id="share-modal"><div class="modal"><h2>\u53d1\u7ed9\u64cd\u76d8\u624b</h2><div class="copy-box" id="share-text"></div><div class="actions"><button class="btn btn-primary btn-sm" id="copy-btn">\u590d\u5236</button><button class="btn btn-outline btn-sm" id="close-share">\u5173\u95ed</button></div></div></div>',
     "/js/admin-users.js?v=20260817modalux2"
   ),
+  "/monthly-report.html": pageLayout(
+    "月报",
+    "monthly-report",
+    `<div class="page-toolbar"><div><h1>月报</h1><p class="page-description">只算已审批的账单流水 · 合计行为每日相加</p></div><div id="mr-period" class="panel-note" translate="no"></div></div>
+<div class="filters control-strip mr-controls">
+<div class="segment-tabs mr-view-tabs" id="mr-view-tabs" role="group" aria-label="视图"><button type="button" class="seg-btn active" data-view="month">月</button><button type="button" class="seg-btn" data-view="year">年</button></div>
+<button type="button" class="btn btn-outline btn-sm" id="mr-prev"></button>
+<button type="button" class="btn btn-outline btn-sm" id="mr-next"></button>
+<button type="button" class="btn btn-primary btn-sm" id="mr-current"></button>
+<span class="mr-spacer"></span>
+<button type="button" class="btn btn-outline btn-sm" id="mr-copy"><i data-lucide="copy"></i>复制表格</button>
+<button type="button" class="btn btn-outline btn-sm" id="mr-csv"><i data-lucide="download"></i>下载 CSV</button>
+</div>
+<p class="panel-note page-hint" id="mr-hint" hidden>点击月份查看当月每日明细</p>
+<div class="table-wrap data-surface"><table class="monthly-table" id="mr-table"><thead><tr><th id="mr-first-col">日期</th><th>DEP</th><th>WD</th><th>WIN/LOSE</th><th>WIN RATE</th><th>UNCLAIM</th><th>WRONG</th><th>EXPENSES</th><th>DEP单</th><th>WD单</th><th>总单</th><th>UNIQUE CUST</th></tr></thead><tbody id="mr-rows"></tbody><tfoot id="mr-total"></tfoot></table></div>`,
+    "/js/monthly-report.js?v=20261104monthly1"
+  ),
+  "/company-expenses.html": pageLayout(
+    "COMPANY EXPENSES",
+    "company-expenses",
+    '<div class="page-toolbar"><h1>COMPANY EXPENSES</h1></div><div class="empty-state">开发中</div>'
+  ),
+  "/top-referral.html": pageLayout(
+    "TOP REFERRAL",
+    "top-referral",
+    '<div class="page-toolbar"><h1>TOP REFERRAL</h1></div><div class="empty-state">开发中</div>'
+  ),
 };
 pageRoutes["/index.html"] = pageRoutes["/"];
 
@@ -584,7 +620,7 @@ const globalFeedbackHtml = '<div class="app-toast-stack" id="app-toast-stack" ar
 // i18n.js holds the dictionary + translation engine. It is injected into <head> (ahead of the
 // render-blocking stylesheet) so the first paint is already in the saved language, instead of
 // painting Chinese and rewriting it after the two vendored scripts at the end of <body> load.
-const i18nHeadHtml = '<script src="/js/i18n.js?v=20261003nocharts1"></script>';
+const i18nHeadHtml = '<script src="/js/i18n.js?v=20261104monthly1"></script>';
 // One full translation pass at the end of <body>, where the whole document
 // exists but the two vendored scripts below have not been fetched yet. Anything
 // painted while they load is already in the right language. Must come after
@@ -597,10 +633,10 @@ for (const route of Object.keys(pageRoutes)) {
     .replace('<link rel="stylesheet" href="/css/style.css?v=20260812transferfix1">', i18nHeadHtml + '<link rel="stylesheet" href="/css/style.css?v=20260812transferfix1">')
     .replace('<div class="company-bar glass-control" id="company-bar">', '<div class="company-bar glass-control" id="company-bar">' + companyCompactEntryHtml)
     .replace('<script src="/vendor/lucide-1.65.0.min.js"></script>', globalFeedbackHtml + i18nBootHtml + '<script src="/vendor/lucide-1.65.0.min.js"></script>')
-    .replace('/css/style.css?v=20260812transferfix1', '/css/style.css?v=20261003nocharts1')
+    .replace('/css/style.css?v=20260812transferfix1', '/css/style.css?v=20261104monthly1')
     .replace('/js/customer-detail.js?v=20260731bankfix4', '/js/customer-detail.js?v=20260817customerhistory1')
     .replace('/css/style.css?v=20260802topbarflow1', '/css/style.css?v=20261001archive1')
-    .replace('/js/app.js?v=20260802platformsound3', '/js/app.js?v=20261001archive1');
+    .replace('/js/app.js?v=20260802platformsound3', '/js/app.js?v=20261104monthly1');
 }
 
 function requireAdminPage(req, res, next) {
@@ -626,6 +662,9 @@ const ADMIN_ONLY_PAGES = new Set([
   "/bank-settings.html",
   "/telegram-settings.html",
   "/audit-history.html",
+  "/monthly-report.html",
+  "/company-expenses.html",
+  "/top-referral.html",
 ]);
 
 for (const [route, html] of Object.entries(pageRoutes)) {

@@ -2,7 +2,8 @@ const fs = require("fs");
 const express = require("express");
 const { syncStatePath } = require("../lib/paths");
 const { getDb } = require("../db/init");
-const { requireLogin, resolveCompany, requireCompany, requireDataAccess } = require("../middleware");
+const { requireLogin, requireAdmin, resolveCompany, requireCompany, requireDataAccess } = require("../middleware");
+const { computeMonthlyReport, computeYearlyReport } = require("../lib/monthlyReport");
 const {
   todayKey,
   parseReportDate,
@@ -376,6 +377,22 @@ router.get("/referrer-report", (req, res) => {
     res.json(computeReferrerReport(db, key, dateFrom, dateTo, { segment, companyId: cid }));
   } catch (e) {
     console.error("[referrer-report]", e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// 月报含盈亏，仅 admin。requireDataAccess 已挡掉 operator，这里再显式要求一次，
+// 免得以后加新角色时被默认放行。?year=YYYY 返回年视图，否则 ?month=YYYY-MM。
+router.get("/monthly-report", requireAdmin, (req, res) => {
+  try {
+    const db = getDb();
+    const cid = req.companyId;
+    const report = req.query.year
+      ? computeYearlyReport(db, cid, { year: req.query.year })
+      : computeMonthlyReport(db, cid, { month: req.query.month });
+    res.json({ companyId: cid, ...report });
+  } catch (e) {
+    console.error("[monthly-report]", e.message);
     res.status(500).json({ error: e.message });
   }
 });

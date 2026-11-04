@@ -316,6 +316,8 @@ async function loadUser() {
     if (csLink) csLink.hidden = user.role !== "admin";
     const settingsGroup = document.getElementById("nav-settings-group");
     if (settingsGroup) settingsGroup.hidden = user.role !== "admin";
+    const monthlyGroup = document.getElementById("nav-monthly-group");
+    if (monthlyGroup) monthlyGroup.hidden = user.role !== "admin";
     if (companyId) activeCompanyId = companyId;
     await loadCompanies();
     return user;
