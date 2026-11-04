@@ -267,10 +267,12 @@ Remove-Item trader-dashboard.tar.gz
 sudo -u trader tar -xzf /tmp/trader-dashboard.tar.gz -C /opt/trader-dashboard
 rm /tmp/trader-dashboard.tar.gz
 cd /opt/trader-dashboard
-sudo -u trader npm ci --omit=dev
+sudo -u trader npm ci --omit=dev --ignore-scripts
 ```
 
-> better-sqlite3 自带 `prebuilds/linux-x64.node`，**零编译零联网**即可用。
+> better-sqlite3 自带 `prebuilds/linux-x64.node`，不需要编译。但它带 `binding.gyp`，npm 默认
+> 会自作主张跑 `node-gyp rebuild`，没装 make/g++ 就报 `gyp ERR! not found: make`——所以
+> **`--ignore-scripts` 不能省**。其余依赖（bcryptjs / express / express-session）都是纯 JS。
 
 ### 4.3 配置文件
 
@@ -715,7 +717,7 @@ cd /opt/trader-dashboard
 sudo -u trader rm -rf public server
 sudo -u trader tar -xzf /tmp/trader-dashboard.tar.gz -C /opt/trader-dashboard
 rm /tmp/trader-dashboard.tar.gz
-sudo -u trader npm ci --omit=dev
+sudo -u trader npm ci --omit=dev --ignore-scripts
 sudo systemctl restart trader-dashboard
 ```
 

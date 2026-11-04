@@ -124,9 +124,11 @@ scp trader-dashboard.tar.gz deploy@vps:/tmp/
 sudo -u trader tar -xzf /tmp/trader-dashboard.tar.gz -C /opt/trader-dashboard
 rm /tmp/trader-dashboard.tar.gz
 cd /opt/trader-dashboard
-sudo -u trader npm ci --omit=dev
+sudo -u trader npm ci --omit=dev --ignore-scripts
 
-# better-sqlite3 自带 prebuilds/linux-x64.node，零编译零联网。验证两个驱动都能开：
+# --ignore-scripts 不能省：better-sqlite3 带 binding.gyp，npm 默认会跑 node-gyp rebuild，
+# 没装 make/g++ 就报 `gyp ERR! not found: make`。它自带 prebuilds/linux-x64.node，跳过
+# 编译直接用即可；其余依赖都是纯 JS。验证两个驱动都能开：
 sudo -u trader node -e "const D=require('better-sqlite3');new D(':memory:');console.log('better-sqlite3 OK')"
 sudo -u trader node -e "const {DatabaseSync}=require('node:sqlite');new DatabaseSync(':memory:');console.log('node:sqlite OK')"
 
