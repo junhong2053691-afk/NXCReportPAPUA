@@ -34,3 +34,20 @@
 | UNIQUE CUST | 当天任何带 username 的流水（含提现）去重 | 只数 DEP 那组状态 |
 
 同一天两个页面的 DEPOSIT 数字不一样是**对的**。要统一须先和运营对齐 Excel。
+
+## 往来账（MONTHLY REPORT › COMPANY EXPENSES）
+
+名字叫 EXPENSES，但**和状态 `expenses` 无关**：记的是本公司与各 C STATUS 往来方之间「欠来欠去」的账。
+不做对平、不读对方公司的数据（对平归「支付渠道」页的巡检）。只看当前公司，仅 admin 可见。
+口径实现只有一份：`server/lib/companyExpenses.js`。
+
+| 术语 | 定义 |
+|---|---|
+| **往来方** | 流水的 `c_status`（`TRIM` 后原样）。不按 status 过滤，`c_status` 为空的流水不进来 |
+| **IN / OUT / NET** | 与「支付渠道」日报的 C STATUS 表**逐格同口径**：IN = `amount_in + |help_amount|`，OUT = `|amount_out| + |trf_amount|`，NET = IN − OUT（HELP TRF 与余额方向对调，见 `CLAUDE.md`） |
+| **正负号** | NET **正 = 我方欠对方**，负 = 对方欠我方 |
+| **列** | C STATUS 选项按 `sort_order`，再补上流水里出现过但不在选项里的名字。整列为 0 也照样显示（列位固定，粘到 Sheet 对得齐） |
+| **本公司自己的名字** | `target_company_id` = 本公司的选项。该期间没有数据时隐藏这一列；不靠名字缩写去猜 |
+| **合计行** | 每日 NET 相加；只给本期合计，**不给累计**（上线切换清过账本，切换前的欠款不在库里） |
+
+月视图每天一行（当月所有日子），年视图每月一行，末行 TOTAL。导出表头用往来方原名。

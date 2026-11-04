@@ -144,55 +144,17 @@ function exportMatrix() {
   return [header].concat(body, [total]);
 }
 
-async function copyTable() {
+function copyTable() {
   const matrix = exportMatrix();
-  if (!matrix) return;
-  const tsv = matrix.map(function (r) { return r.join("\t"); }).join("\n");
-  const ok = await writeClipboard(tsv);
-  showToast(ok ? "已复制，可直接粘贴到 Google Sheet" : "复制失败，请重试", { tone: ok ? "success" : "error" });
-}
-
-// navigator.clipboard 只在安全上下文（https / localhost）可用；直接用 http://<VPS IP> 打开
-// 后台时它是 undefined，退回 execCommand。
-async function writeClipboard(text) {
-  if (navigator.clipboard && window.isSecureContext) {
-    try {
-      await navigator.clipboard.writeText(text);
-      return true;
-    } catch (e) {}
-  }
-  const ta = document.createElement("textarea");
-  ta.value = text;
-  ta.setAttribute("readonly", "");
-  ta.style.position = "fixed";
-  ta.style.opacity = "0";
-  document.body.appendChild(ta);
-  ta.select();
-  let ok = false;
-  try { ok = document.execCommand("copy"); } catch (e) {}
-  ta.remove();
-  return ok;
+  if (matrix) copyTableMatrix(matrix);
 }
 
 function downloadCsv() {
   const matrix = exportMatrix();
   if (!matrix) return;
-  const csv = matrix
-    .map(function (r) {
-      return r.map(function (v) { return /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; }).join(",");
-    })
-    .join("\r\n");
   const period = mrState.view === "year" ? mrState.data.year : mrState.data.month;
   const company = String(activeCompanyId || "company").replace(/[^\w-]+/g, "_");
-  const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = "monthly-report-" + company + "-" + period + ".csv";
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+  downloadTableCsv(matrix, "monthly-report-" + company + "-" + period + ".csv");
 }
 
 function step(delta) {

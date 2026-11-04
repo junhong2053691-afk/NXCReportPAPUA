@@ -453,6 +453,54 @@ function guardCompanyPayload(data) {
   return data.companyId === activeCompanyId;
 }
 
+// 报表导出（MONTHLY REPORT 下各页共用）。matrix 是字符串二维数组，第一行为表头。
+// 值应为不带千分位的原始数字，否则粘到 Google Sheet 后被当成文本。
+async function copyTableMatrix(matrix) {
+  const tsv = matrix.map(function (r) { return r.join("\t"); }).join("\n");
+  const ok = await writeClipboardText(tsv);
+  showToast(ok ? "已复制，可直接粘贴到 Google Sheet" : "复制失败，请重试", { tone: ok ? "success" : "error" });
+}
+
+// navigator.clipboard 只在安全上下文（https / localhost）可用；直接用 http://<VPS IP> 打开
+// 后台时它是 undefined，退回 execCommand。
+async function writeClipboardText(text) {
+  if (navigator.clipboard && window.isSecureContext) {
+    try {
+      await navigator.clipboard.writeText(text);
+      return true;
+    } catch (e) {}
+  }
+  const ta = document.createElement("textarea");
+  ta.value = text;
+  ta.setAttribute("readonly", "");
+  ta.style.position = "fixed";
+  ta.style.opacity = "0";
+  document.body.appendChild(ta);
+  ta.select();
+  let ok = false;
+  try { ok = document.execCommand("copy"); } catch (e) {}
+  ta.remove();
+  return ok;
+}
+
+function downloadTableCsv(matrix, filename) {
+  const csv = matrix
+    .map(function (r) {
+      return r.map(function (v) { return /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; }).join(",");
+    })
+    .join("\r\n");
+  // BOM 让 Excel 按 UTF-8 打开。
+  const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+}
+
 function startSyncWatcher(reloadFn) {
   if (typeof reloadFn !== "function") return;
   setInterval(function () {

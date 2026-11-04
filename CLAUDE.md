@@ -270,7 +270,8 @@ C STATUS 表记的是**我方相对这家对方公司的净收支**，不是资�
 即 `bankReport.js` 的 `cStatusTotalsForCompany`（SQL）和 `companyMap`（逐行累加）两处，
 help/trf 与 `NET_EXPR` 是**对调**的。**BANK ACC 填不填只决定余额，不改变这里的方向。**
 两处必须同口径：一个喂页面 `companyRows`，一个喂跨公司对平；只改一处会让
-`reconcileAlerts` 凭空冒出差额。对平判据 `current.total + counterparty.total === 0`
+`reconcileAlerts` 凭空冒出差额。月报的往来账页（`lib/companyExpenses.js`，COMPANY EXPENSES）
+是第三份同口径的 SQL，`company-expenses.test.js` 断言它逐格等于 `companyRows`——翻转口径时三处一起改。对平判据 `current.total + counterparty.total === 0`
 在双方同步翻转后不受影响。
 
 REPORT 的 STATUS 汇总（WITHDRAW / CASH OUT / DEPOSIT …）**照常计入 HELP TRF**，

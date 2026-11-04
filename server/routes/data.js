@@ -4,6 +4,7 @@ const { syncStatePath } = require("../lib/paths");
 const { getDb } = require("../db/init");
 const { requireLogin, requireAdmin, resolveCompany, requireCompany, requireDataAccess } = require("../middleware");
 const { computeMonthlyReport, computeYearlyReport } = require("../lib/monthlyReport");
+const { computeCompanyExpenses, computeCompanyExpensesYear } = require("../lib/companyExpenses");
 const {
   todayKey,
   parseReportDate,
@@ -393,6 +394,22 @@ router.get("/monthly-report", requireAdmin, (req, res) => {
     res.json({ companyId: cid, ...report });
   } catch (e) {
     console.error("[monthly-report]", e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// 往来账（COMPANY EXPENSES）：本公司与各 C STATUS 往来方的按日 NET，仅 admin、只读本公司。
+// 口径见 CONTEXT.md「往来账」。?year=YYYY 返回年视图，否则 ?month=YYYY-MM。
+router.get("/company-expenses", requireAdmin, (req, res) => {
+  try {
+    const db = getDb();
+    const cid = req.companyId;
+    const report = req.query.year
+      ? computeCompanyExpensesYear(db, cid, { year: req.query.year })
+      : computeCompanyExpenses(db, cid, { month: req.query.month });
+    res.json({ companyId: cid, ...report });
+  } catch (e) {
+    console.error("[company-expenses]", e.message);
     res.status(500).json({ error: e.message });
   }
 });

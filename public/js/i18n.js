@@ -813,6 +813,7 @@ const I18N_PHRASES = [
   [/^推荐人报表加载失败：(.+)$/, "Failed to load the referrer report: $1"],
   [/^回流报表加载失败：(.+)$/, "Failed to load the return report: $1"],
   [/^月报加载失败：(.+)$/, "Failed to load the monthly report: $1"],
+  [/^往来账加载失败：(.+)$/, "Failed to load company expenses: $1"],
   [/^活动领取加载失败：(.+)$/, "Failed to load promo claims: $1"],
 ];
 const I18N_PHRASES_ZH = [
@@ -1945,6 +1946,18 @@ Object.assign(I18N.en, {
   "已复制，可直接粘贴到 Google Sheet": "Copied — paste it straight into Google Sheets",
   "复制失败，请重试": "Copy failed, please try again",
   "开发中": "Under development",
+});
+
+// batch G: MONTHLY REPORT › COMPANY EXPENSES
+Object.assign(I18N.zh, {
+  "本公司与各 C STATUS 往来方的每日净额 · 合计行为每日相加": "本公司与各 C STATUS 往来方的每日净额 · 合计行为每日相加",
+  "正数 = 我方欠对方，负数 = 对方欠我方": "正数 = 我方欠对方，负数 = 对方欠我方",
+  "没有往来方：请先在「支付渠道」页设置 C STATUS": "没有往来方：请先在「支付渠道」页设置 C STATUS",
+});
+Object.assign(I18N.en, {
+  "本公司与各 C STATUS 往来方的每日净额 · 合计行为每日相加": "Daily net with each C STATUS counterparty · totals are the sum of daily rows",
+  "正数 = 我方欠对方，负数 = 对方欠我方": "Positive = we owe them, negative = they owe us",
+  "没有往来方：请先在「支付渠道」页设置 C STATUS": "No counterparties yet: set up C STATUS on the Payment Channels page",
 });
 
 // ---------------------------------------------------------------------------

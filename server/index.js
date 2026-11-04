@@ -599,12 +599,24 @@ const pageRoutes = {
 </div>
 <p class="panel-note page-hint" id="mr-hint" hidden>点击月份查看当月每日明细</p>
 <div class="table-wrap data-surface"><table class="monthly-table" id="mr-table"><thead><tr><th id="mr-first-col">日期</th><th>DEP</th><th>WD</th><th>WIN/LOSE</th><th>WIN RATE</th><th>UNCLAIM</th><th>WRONG</th><th>EXPENSES</th><th>DEP单</th><th>WD单</th><th>总单</th><th>UNIQUE CUST</th></tr></thead><tbody id="mr-rows"></tbody><tfoot id="mr-total"></tfoot></table></div>`,
-    "/js/monthly-report.js?v=20261104monthly1"
+    "/js/monthly-report.js?v=20261104expenses1"
   ),
   "/company-expenses.html": pageLayout(
     "COMPANY EXPENSES",
     "company-expenses",
-    '<div class="page-toolbar"><h1>COMPANY EXPENSES</h1></div><div class="empty-state">开发中</div>'
+    `<div class="page-toolbar"><div><h1>COMPANY EXPENSES</h1><p class="page-description">本公司与各 C STATUS 往来方的每日净额 · 合计行为每日相加</p><p class="page-description ce-legend">正数 = 我方欠对方，负数 = 对方欠我方</p></div><div id="ce-period" class="panel-note" translate="no"></div></div>
+<div class="filters control-strip mr-controls">
+<div class="segment-tabs mr-view-tabs" id="ce-view-tabs" role="group" aria-label="视图"><button type="button" class="seg-btn active" data-view="month">月</button><button type="button" class="seg-btn" data-view="year">年</button></div>
+<button type="button" class="btn btn-outline btn-sm" id="ce-prev"></button>
+<button type="button" class="btn btn-outline btn-sm" id="ce-next"></button>
+<button type="button" class="btn btn-primary btn-sm" id="ce-current"></button>
+<span class="mr-spacer"></span>
+<button type="button" class="btn btn-outline btn-sm" id="ce-copy"><i data-lucide="copy"></i>复制表格</button>
+<button type="button" class="btn btn-outline btn-sm" id="ce-csv"><i data-lucide="download"></i>下载 CSV</button>
+</div>
+<p class="panel-note page-hint" id="ce-hint" hidden>点击月份查看当月每日明细</p>
+<div class="table-wrap data-surface"><table class="monthly-table" id="ce-table"><thead id="ce-head"></thead><tbody id="ce-rows"></tbody><tfoot id="ce-total"></tfoot></table></div>`,
+    "/js/company-expenses.js?v=20261104expenses2"
   ),
   "/top-referral.html": pageLayout(
     "TOP REFERRAL",
@@ -633,10 +645,10 @@ for (const route of Object.keys(pageRoutes)) {
     .replace('<link rel="stylesheet" href="/css/style.css?v=20260812transferfix1">', i18nHeadHtml + '<link rel="stylesheet" href="/css/style.css?v=20260812transferfix1">')
     .replace('<div class="company-bar glass-control" id="company-bar">', '<div class="company-bar glass-control" id="company-bar">' + companyCompactEntryHtml)
     .replace('<script src="/vendor/lucide-1.65.0.min.js"></script>', globalFeedbackHtml + i18nBootHtml + '<script src="/vendor/lucide-1.65.0.min.js"></script>')
-    .replace('/css/style.css?v=20260812transferfix1', '/css/style.css?v=20261104monthly1')
+    .replace('/css/style.css?v=20260812transferfix1', '/css/style.css?v=20261104expenses1')
     .replace('/js/customer-detail.js?v=20260731bankfix4', '/js/customer-detail.js?v=20260817customerhistory1')
     .replace('/css/style.css?v=20260802topbarflow1', '/css/style.css?v=20261001archive1')
-    .replace('/js/app.js?v=20260802platformsound3', '/js/app.js?v=20261104monthly1');
+    .replace('/js/app.js?v=20260802platformsound3', '/js/app.js?v=20261104expenses1');
 }
 
 function requireAdminPage(req, res, next) {

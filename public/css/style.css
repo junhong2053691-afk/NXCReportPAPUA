@@ -3965,6 +3965,9 @@ body[data-user-role="admin"] .bkv2 .sheet-table .col-act { width: 86px; }
 .monthly-table .mr-clickable { cursor: pointer; }
 .monthly-table .mr-clickable:hover td, .monthly-table .mr-clickable:focus-visible td { background: var(--green-soft); }
 .monthly-table tfoot td { font-weight: 700; border-top: 2px solid var(--border-strong); }
+/* 往来账：0 格淡化，有往来的格子才跳出来；正负号本身就是方向，不再用红绿暗示好坏。 */
+.monthly-table .ce-zero { color: var(--muted-2); }
+.ce-legend { margin-top: 2px; }
 @media (max-width: 720px) {
   .mr-spacer { display: none; }
 }
