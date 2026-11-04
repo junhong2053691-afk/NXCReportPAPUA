@@ -1586,6 +1586,10 @@ Object.assign(I18N.zh, {
     "Access Token 里填的是 Telegram Bot Token（形如 123456:AA...）。平台 Access Token 不含冒号——请检查是不是粘错了输入框。",
   "Access Token 里填的是 Telegram Bot Token（形如 123456:AA...）。Bot Token 请在公司创建后于卡片里单独填写。":
     "Access Token 里填的是 Telegram Bot Token（形如 123456:AA...）。Bot Token 请在公司创建后于卡片里单独填写。",
+  "Access Token 应为 64 位十六进制。可能是浏览器自动填入了登录密码——清空该框（留空即保持原 token 不变）。":
+    "Access Token 应为 64 位十六进制。可能是浏览器自动填入了登录密码——清空该框（留空即保持原 token 不变）。",
+  "Access Token 应为 64 位十六进制，请检查是否粘贴完整、是否被浏览器自动填入了登录密码。":
+    "Access Token 应为 64 位十六进制，请检查是否粘贴完整、是否被浏览器自动填入了登录密码。",
   "Telegram Bot Token 格式不对，应形如 123456789:AAxxxxxxxx（向 @BotFather 索取）。":
     "Telegram Bot Token 格式不对，应形如 123456789:AAxxxxxxxx（向 @BotFather 索取）。",
   "重试耗尽，需要检查 token 或 chat": "重试耗尽，需要检查 token 或 chat",
@@ -1801,6 +1805,10 @@ Object.assign(I18N.en, {
     "That Access Token is a Telegram Bot Token (it looks like 123456:AA...). A platform Access Token never contains a colon — check whether it went into the wrong box.",
   "Access Token 里填的是 Telegram Bot Token（形如 123456:AA...）。Bot Token 请在公司创建后于卡片里单独填写。":
     "That Access Token is a Telegram Bot Token (it looks like 123456:AA...). Enter the Bot Token on the company card after the company is created.",
+  "Access Token 应为 64 位十六进制。可能是浏览器自动填入了登录密码——清空该框（留空即保持原 token 不变）。":
+    "The Access Token must be 64 hex characters. Your browser may have autofilled your login password — clear the box (leaving it blank keeps the saved token).",
+  "Access Token 应为 64 位十六进制，请检查是否粘贴完整、是否被浏览器自动填入了登录密码。":
+    "The Access Token must be 64 hex characters. Check that it was pasted in full and was not autofilled with your login password.",
   "Telegram Bot Token 格式不对，应形如 123456789:AAxxxxxxxx（向 @BotFather 索取）。":
     "That Telegram Bot Token is malformed; it should look like 123456789:AAxxxxxxxx (request one from @BotFather).",
   "重试耗尽，需要检查 token 或 chat": "Retries exhausted; check the token or the chat",

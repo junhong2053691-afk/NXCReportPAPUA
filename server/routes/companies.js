@@ -26,12 +26,19 @@ const ID_RE = /^[a-z0-9][a-z0-9_-]{0,31}$/;
 // "API 拒绝访问"，看起来像网络问题而不是填错了栏。两种 token 的形状差别很大
 // （平台 token 是 64 位十六进制，Telegram 是 <bot_id>:<35+ 字符>），直接按形状拦。
 const TELEGRAM_TOKEN_RE = /^\d{5,}:[A-Za-z0-9_-]{20,}$/;
+// 浏览器会把保存的后台登录密码自动填进 Access Token 这个 password 框（Access ID 被当成用户名），
+// 点保存就静默覆盖掉真 token。按形状拦：平台 token 只能是 64 位十六进制。
+// public/js/company-settings.js 有同一条前端校验。
+const ACCESS_TOKEN_RE = /^[0-9a-f]{64}$/i;
 
 function checkTokenSwap(body) {
   const access = String(body.access_token || "").trim();
   const tg = String(body.telegram_bot_token || "").trim();
   if (access && TELEGRAM_TOKEN_RE.test(access)) {
     return "Access Token 里填的是 Telegram Bot Token（形如 123456:AA...）。平台 Access Token 不含冒号——请检查是不是粘错了输入框。";
+  }
+  if (access && !ACCESS_TOKEN_RE.test(access)) {
+    return "Access Token 应为 64 位十六进制。可能是浏览器自动填入了登录密码——清空该框（留空即保持原 token 不变）。";
   }
   if (tg && !TELEGRAM_TOKEN_RE.test(tg)) {
     return "Telegram Bot Token 格式不对，应形如 123456789:AAxxxxxxxx（向 @BotFather 索取）。";

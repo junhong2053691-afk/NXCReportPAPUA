@@ -13,6 +13,13 @@
   // 平台 Access Token 是 64 位十六进制，Telegram 是 <bot_id>:<35+ 字符>，按形状拦。
   // server/routes/companies.js 有同一条后端校验兜底。
   const TELEGRAM_TOKEN_RE = /^\d{5,}:[A-Za-z0-9_-]{20,}$/;
+  // 浏览器会把保存的后台登录密码自动填进 Access Token 框（截图里的浅蓝底），点保存就把真 token
+  // 覆盖掉。输入框已加 autocomplete="new-password" 阻止填充，这里再按形状兜底。
+  const ACCESS_TOKEN_RE = /^[0-9a-f]{64}$/i;
+  const BAD_ACCESS_TOKEN_MSG = "Access Token 应为 64 位十六进制。可能是浏览器自动填入了登录密码——清空该框（留空即保持原 token 不变）。";
+  // 这几个框都不是登录表单，一律不让浏览器自动填充 / 记住。
+  const NO_FILL = ' autocomplete="off" data-lpignore="true" data-1p-ignore';
+  const NO_FILL_SECRET = ' autocomplete="new-password" data-lpignore="true" data-1p-ignore';
   const wrap = document.getElementById("company-cards");
   const createModal = document.getElementById("create-modal");
   const deleteModal = document.getElementById("delete-modal");
@@ -66,19 +73,19 @@
         '<p class="company-id-note">公司 ID：<code>' +
         esc(co.id) +
         "</code>（创建后不可改）</p>" +
-        '<div class="form-group"><label>API URL</label><input data-f="api_url" value="' +
+        '<div class="form-group"><label>API URL</label><input data-f="api_url"' + NO_FILL + ' value="' +
         esc(co.api_url) +
         '" placeholder="https://.../api/v1/index.php"></div>' +
-        '<div class="form-group"><label>Access ID</label><input data-f="access_id" value="' +
+        '<div class="form-group"><label>Access ID</label><input data-f="access_id"' + NO_FILL + ' value="' +
         esc(co.access_id) +
         '"></div>' +
-        '<div class="form-group"><label>Access Token</label><input data-f="access_token" type="password" placeholder="' +
+        '<div class="form-group"><label>Access Token</label><input data-f="access_token" type="password"' + NO_FILL_SECRET + ' placeholder="' +
         (co.access_token_set ? "已保存 " + esc(co.access_token_masked) + "，留空则保持不变" : "必填") +
         '"></div>' +
         '<label class="export-check"><input type="checkbox" data-f="enabled" ' +
         (co.enabled ? "checked" : "") +
         "> 启用同步</label>" +
-        '<div class="form-group"><label>Telegram Bot Token</label><input data-f="telegram_bot_token" type="password" placeholder="' +
+        '<div class="form-group"><label>Telegram Bot Token</label><input data-f="telegram_bot_token" type="password"' + NO_FILL_SECRET + ' placeholder="' +
         (co.telegram_bot_token_set
           ? "已保存 " + esc(co.telegram_bot_token_masked) + "，留空则保持不变"
           : "向 @BotFather 申请，留空则不启用") +
@@ -130,6 +137,11 @@
       card.querySelector('[data-f="access_token"]')?.focus();
       return;
     }
+    if (body.access_token && !ACCESS_TOKEN_RE.test(body.access_token)) {
+      setMessage(hint, BAD_ACCESS_TOKEN_MSG, "error");
+      card.querySelector('[data-f="access_token"]')?.focus();
+      return;
+    }
     if (body.telegram_bot_token && !TELEGRAM_TOKEN_RE.test(body.telegram_bot_token)) {
       setMessage(hint, "Telegram Bot Token 格式不对，应形如 123456789:AAxxxxxxxx（向 @BotFather 索取）。", "error");
       card.querySelector('[data-f="telegram_bot_token"]')?.focus();
@@ -166,6 +178,11 @@
     }
     if (!body.access_token && !co.access_token_set) {
       setMessage(card.querySelector(".company-hint"), "请先填写 Access Token", "error");
+      card.querySelector('[data-f="access_token"]')?.focus();
+      return;
+    }
+    if (body.access_token && !ACCESS_TOKEN_RE.test(body.access_token)) {
+      setMessage(card.querySelector(".company-hint"), BAD_ACCESS_TOKEN_MSG, "error");
       card.querySelector('[data-f="access_token"]')?.focus();
       return;
     }
@@ -252,6 +269,11 @@
     }
     if (body.access_token && TELEGRAM_TOKEN_RE.test(body.access_token)) {
       setMessage(document.getElementById("create-hint"), "Access Token 里填的是 Telegram Bot Token（形如 123456:AA...）。Bot Token 请在公司创建后于卡片里单独填写。", "error");
+      document.getElementById("new-access-token")?.focus();
+      return;
+    }
+    if (body.access_token && !ACCESS_TOKEN_RE.test(body.access_token)) {
+      setMessage(document.getElementById("create-hint"), "Access Token 应为 64 位十六进制，请检查是否粘贴完整、是否被浏览器自动填入了登录密码。", "error");
       document.getElementById("new-access-token")?.focus();
       return;
     }
