@@ -5,6 +5,7 @@ const { getDb } = require("../db/init");
 const { requireLogin, requireAdmin, resolveCompany, requireCompany, requireDataAccess } = require("../middleware");
 const { computeMonthlyReport, computeYearlyReport } = require("../lib/monthlyReport");
 const { computeCompanyExpenses, computeCompanyExpensesYear } = require("../lib/companyExpenses");
+const { computeTopReferral, computeReferrerDetail } = require("../lib/topReferral");
 const {
   todayKey,
   parseReportDate,
@@ -410,6 +411,39 @@ router.get("/company-expenses", requireAdmin, (req, res) => {
     res.json({ companyId: cid, ...report });
   } catch (e) {
     console.error("[company-expenses]", e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// TOP REFERRAL：按推荐人汇总下线的注册 / 首充 / 充值 / 提现，仅 admin、只读本公司。
+// 口径见 CONTEXT.md「推荐人月报」。?year=YYYY 返回年视图，否则 ?month=YYYY-MM。
+router.get("/top-referral", requireAdmin, (req, res) => {
+  try {
+    const cid = req.companyId;
+    const report = computeTopReferral(getDb(), cid, {
+      month: req.query.month,
+      year: req.query.year,
+      sort: req.query.sort,
+    });
+    res.json({ companyId: cid, ...report });
+  } catch (e) {
+    console.error("[top-referral]", e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// 抽屉：单个推荐人的指标 + 本期有动静的下线名单。?referrer=__organic__ 打开自然流量。
+router.get("/top-referral/referrer", requireAdmin, (req, res) => {
+  try {
+    const cid = req.companyId;
+    const detail = computeReferrerDetail(getDb(), cid, {
+      month: req.query.month,
+      year: req.query.year,
+      referrer: req.query.referrer,
+    });
+    res.json({ companyId: cid, ...detail });
+  } catch (e) {
+    console.error("[top-referral/referrer]", e.message);
     res.status(500).json({ error: e.message });
   }
 });

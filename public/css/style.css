@@ -3971,3 +3971,23 @@ body[data-user-role="admin"] .bkv2 .sheet-table .col-act { width: 86px; }
 @media (max-width: 720px) {
   .mr-spacer { display: none; }
 }
+
+/* MONTHLY REPORT › TOP REFERRAL：第二列是推荐人名，左对齐；名次列不用等宽。 */
+.tr-field { display: inline-flex; align-items: center; gap: 6px; color: var(--text-soft); font-size: 13px; }
+.tr-field select { min-height: 32px; }
+.tr-search { width: 200px; min-height: 32px; }
+#tr-table th:nth-child(2), #tr-table td:nth-child(2) { text-align: left; }
+#tr-table td:first-child { font-family: inherit; color: var(--text-soft); }
+#tr-table .tr-organic td { color: var(--text-soft); font-weight: 600; border-top: 2px solid var(--border-strong); }
+/* 抽屉压在客户详情抽屉（+20）下面：从下线名单点开客户时，客户详情叠在上层。 */
+.tr-drawer-backdrop { z-index: calc(var(--z-modal) + 10); }
+.tr-drawer { width: min(680px, 100vw); }
+.tr-drawer .cd-cards { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
+.tr-drawer .cd-card .value { font-size: 17px; }
+.tr-drawer .cd-tx-table table { min-width: 520px; width: 100%; }
+.tr-drawer .cd-tx-table td:first-child { min-width: 96px; white-space: normal; overflow-wrap: anywhere; }
+.tr-drawer .cd-tx-table td:not(:first-child), .tr-drawer .cd-tx-table th:not(:first-child) { text-align: right; }
+body.tr-drawer-open { overflow: hidden; }
+@media (max-width: 720px) {
+  .tr-search { width: 100%; }
+}

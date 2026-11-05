@@ -621,7 +621,27 @@ const pageRoutes = {
   "/top-referral.html": pageLayout(
     "TOP REFERRAL",
     "top-referral",
-    '<div class="page-toolbar"><h1>TOP REFERRAL</h1></div><div class="empty-state">开发中</div>'
+    `<div class="page-toolbar"><div><h1>TOP REFERRAL</h1><p class="page-description">平台同步数据 · 按推荐人汇总下线 · 点一行看详情</p></div><div id="tr-period" class="panel-note" translate="no"></div></div>
+<div class="filters control-strip mr-controls">
+<div class="segment-tabs mr-view-tabs" id="tr-view-tabs" role="group" aria-label="视图"><button type="button" class="seg-btn active" data-view="month">月</button><button type="button" class="seg-btn" data-view="year">年</button></div>
+<button type="button" class="btn btn-outline btn-sm" id="tr-prev"></button>
+<button type="button" class="btn btn-outline btn-sm" id="tr-next"></button>
+<button type="button" class="btn btn-primary btn-sm" id="tr-current"></button>
+<label class="tr-field" for="tr-sort"><span>排序</span><select id="tr-sort"><option value="newMember">NEW MEMBER</option><option value="firstDep">首充人数</option><option value="dep">TOTAL DEPOSIT</option><option value="net">TOTAL NET</option></select></label>
+<input type="search" id="tr-search" class="tr-search" list="tr-referrers" placeholder="搜索推荐人" aria-label="搜索推荐人" autocomplete="off"><datalist id="tr-referrers" translate="no"></datalist>
+<span class="mr-spacer"></span>
+<button type="button" class="btn btn-outline btn-sm" id="tr-copy"><i data-lucide="copy"></i>复制表格</button>
+<button type="button" class="btn btn-outline btn-sm" id="tr-csv"><i data-lucide="download"></i>下载 CSV</button>
+</div>
+<div class="table-wrap data-surface"><table class="monthly-table" id="tr-table"><thead><tr><th>#</th><th>推荐人</th><th>NEW MEMBER</th><th>首充人数</th><th>TOTAL DEPOSIT</th><th>TOTAL NET</th></tr></thead><tbody id="tr-rows"></tbody><tfoot id="tr-total"></tfoot></table></div>
+<div class="pager" id="tr-pager"></div>
+<div id="tr-drawer-backdrop" class="customer-drawer-backdrop tr-drawer-backdrop" aria-hidden="true">
+<div id="tr-drawer" class="customer-drawer tr-drawer" role="dialog" aria-modal="true" aria-labelledby="tr-drawer-title" tabindex="-1">
+<div class="customer-drawer-head"><div><h2 id="tr-drawer-title">推荐人</h2><p id="tr-drawer-sub" class="cd-sub" translate="no"></p></div><button type="button" class="cd-close icon-btn" id="tr-drawer-close" aria-label="关闭">&times;</button></div>
+<div class="customer-drawer-body" id="tr-drawer-body"></div>
+</div>
+</div>`,
+    "/js/top-referral.js?v=20261105referral1"
   ),
 };
 pageRoutes["/index.html"] = pageRoutes["/"];
@@ -632,7 +652,7 @@ const globalFeedbackHtml = '<div class="app-toast-stack" id="app-toast-stack" ar
 // i18n.js holds the dictionary + translation engine. It is injected into <head> (ahead of the
 // render-blocking stylesheet) so the first paint is already in the saved language, instead of
 // painting Chinese and rewriting it after the two vendored scripts at the end of <body> load.
-const i18nHeadHtml = '<script src="/js/i18n.js?v=20261104monthly1"></script>';
+const i18nHeadHtml = '<script src="/js/i18n.js?v=20261105referral1"></script>';
 // One full translation pass at the end of <body>, where the whole document
 // exists but the two vendored scripts below have not been fetched yet. Anything
 // painted while they load is already in the right language. Must come after
@@ -645,7 +665,7 @@ for (const route of Object.keys(pageRoutes)) {
     .replace('<link rel="stylesheet" href="/css/style.css?v=20260812transferfix1">', i18nHeadHtml + '<link rel="stylesheet" href="/css/style.css?v=20260812transferfix1">')
     .replace('<div class="company-bar glass-control" id="company-bar">', '<div class="company-bar glass-control" id="company-bar">' + companyCompactEntryHtml)
     .replace('<script src="/vendor/lucide-1.65.0.min.js"></script>', globalFeedbackHtml + i18nBootHtml + '<script src="/vendor/lucide-1.65.0.min.js"></script>')
-    .replace('/css/style.css?v=20260812transferfix1', '/css/style.css?v=20261104expenses1')
+    .replace('/css/style.css?v=20260812transferfix1', '/css/style.css?v=20261105referral1')
     .replace('/js/customer-detail.js?v=20260731bankfix4', '/js/customer-detail.js?v=20260817customerhistory1')
     .replace('/css/style.css?v=20260802topbarflow1', '/css/style.css?v=20261001archive1')
     .replace('/js/app.js?v=20260802platformsound3', '/js/app.js?v=20261104expenses1');

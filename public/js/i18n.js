@@ -814,6 +814,7 @@ const I18N_PHRASES = [
   [/^回流报表加载失败：(.+)$/, "Failed to load the return report: $1"],
   [/^月报加载失败：(.+)$/, "Failed to load the monthly report: $1"],
   [/^往来账加载失败：(.+)$/, "Failed to load company expenses: $1"],
+  [/^推荐人月报加载失败：(.+)$/, "Failed to load the top referral report: $1"],
   [/^活动领取加载失败：(.+)$/, "Failed to load promo claims: $1"],
 ];
 const I18N_PHRASES_ZH = [
@@ -1958,6 +1959,28 @@ Object.assign(I18N.en, {
   "本公司与各 C STATUS 往来方的每日净额 · 合计行为每日相加": "Daily net with each C STATUS counterparty · totals are the sum of daily rows",
   "正数 = 我方欠对方，负数 = 对方欠我方": "Positive = we owe them, negative = they owe us",
   "没有往来方：请先在「支付渠道」页设置 C STATUS": "No counterparties yet: set up C STATUS on the Payment Channels page",
+});
+
+// batch H: MONTHLY REPORT › TOP REFERRAL
+Object.assign(I18N.zh, {
+  "平台同步数据 · 按推荐人汇总下线 · 点一行看详情": "平台同步数据 · 按推荐人汇总下线 · 点一行看详情",
+  "自然流量": "自然流量",
+  "本期没有推荐人有动静": "本期没有推荐人有动静",
+  "本期有动静的下线": "本期有动静的下线",
+  "本期没有动静": "本期没有动静",
+  "首充额": "首充额",
+  "本期充值": "本期充值",
+  "本期提现": "本期提现",
+});
+Object.assign(I18N.en, {
+  "平台同步数据 · 按推荐人汇总下线 · 点一行看详情": "Platform-synced data · downlines grouped by referrer · click a row for details",
+  "自然流量": "Organic",
+  "本期没有推荐人有动静": "No referrer activity in this period",
+  "本期有动静的下线": "Downlines active in this period",
+  "本期没有动静": "No activity in this period",
+  "首充额": "First deposit amount",
+  "本期充值": "Deposits this period",
+  "本期提现": "Withdrawals this period",
 });
 
 // ---------------------------------------------------------------------------

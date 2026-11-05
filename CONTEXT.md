@@ -50,3 +50,39 @@
 | **合计行** | 每日 NET 相加；只给本期合计，**不给累计**（上线切换清过账本，切换前的欠款不在库里） |
 
 月视图每天一行（当月所有日子），年视图每月一行，末行 TOTAL。导出表头用往来方原名。
+
+## 推荐人月报（MONTHLY REPORT › TOP REFERRAL）
+
+对照的是平台自己的 **Top Referrer Report**，所以数据源是平台同步的 `customers` + `transactions`，
+**不是** `bank_ledger`（与 REPORT / COMPANY EXPENSES 不同源，数字不必对得上）。只看当前公司，仅 admin 可见。
+周期是月 / 年（年 = 全年合计），日界按 `register_date_key` / `created_date` 日期键。
+口径实现只有一份：`server/lib/topReferral.js`。
+
+| 术语 | 定义 |
+|---|---|
+| **推荐人** | 下线客户的 `customers.referrer`（`TRIM` 后原样，区分大小写）。它存的是**名字**，不是 username；推荐人本人的手机号、上级推荐人刻意不显示（同名客户多，对不准） |
+| **自然流量** | `referrer` 为空的客户。不参与排名，固定在列表底部单独一行 |
+| **NEW MEMBER** | 本期注册的下线人数。**含** test 账号 |
+| **FIRST DEPOSIT 人数 / 金额** | 首笔充值落在本期的下线；金额是**首笔那一单**。首笔看库里全部历史（按 `created_at`），不只看本期 |
+| **FIRST DAY DEPOSIT 笔数 / 金额** | 上面这些人首充**当天**的全部充值 |
+| **SAME DAY DEPOSIT 人数 / 金额** | 注册当天就首充、且那天在本期内的下线；金额是他们那一天的全部充值 |
+| **REGULAR DEPOSIT 笔数 / 金额** | 本期充值中除首充当天以外的部分 |
+| **TOTAL DEPOSIT 笔数 / 金额** | 本期全部充值 = FIRST DAY + REGULAR |
+| **TOTAL WITHDRAW 笔数 / 金额** | 本期全部提现，**照平台显示为负数**（REPORT 页的 WD 是正数，别统一） |
+| **TOTAL NET** | TOTAL DEPOSIT + TOTAL WITHDRAW |
+| **test 账号** | username 或姓名含 `test`（不分大小写）的充值提现全部排除，判据与全站 WIN/LOSE（`winLoss.testUsernameSql`）同一份 |
+| **交易归属** | 与全站 WIN/LOSE 同口径（`winLoss.customerJoin`）：先认 `customer_id`，为空时按手机号回退到客户 |
+| **有动静** | 本期注册，或本期有充值 / 提现。没动静的推荐人不进排行，但搜索框里照样能选到（抽屉显示全 0） |
+
+排行默认按 NEW MEMBER 从高到低，可切 首充人数 / TOTAL DEPOSIT / TOTAL NET；并列时依次比 NEW MEMBER、
+首充人数、TOTAL DEPOSIT，最后按名字。TOTAL 行 = 全部推荐人 + 自然流量。平台的 MOBILE、AVG DAILY MEMBER
+两列不做（后者算法反推不出来）。
+
+**已知局限（首充）**：首充只能看库里有的交易。EZSPIN68 / POKIES7BET / ROLEX66 的客户最早 2023 年注册，
+交易却 2026-05/06 才开始同步，所以同步开始前就充过值的老客户回来再充，会被算成本期首充（平台的 `dep_count`
+大多是 0，没法校正）。AUSSIEX6 的客户与交易同期开始，不受影响。「推荐人榜」有同样的问题。
+
+### 与「推荐人榜」（洞察 › 推荐人榜）的关系
+
+推荐人定义相同（`customers.referrer`），其余都不同：推荐人榜是任意日期区间（≤ 90 天）、首充按日期而非首笔
+那一单、净额走 `referrerNetTotals`。两页暂时并存，TOP REFERRAL 用顺手后再决定是否删推荐人榜。
