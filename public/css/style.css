@@ -4519,3 +4519,50 @@ body.tr-drawer-open { overflow: hidden; }
   .bkv2 .sheet-table-wrap tfoot .sheet-total-row td:nth-child(4)::before { content: "HELP "; }
   .bkv2 .sheet-table-wrap tfoot .sheet-total-row td::before { color: var(--muted); font-size: 11px; }
 }
+/* ===== 报表首列钉住 + 首页两列 KPI (≤700) =====
+   手机上报表都是 .table-wrap 横滚；一滑就看不到这行是谁。钉住第一列（时间/日期/姓名/账号）。
+   第一列是「排名」的表（server/index.js 里加了 .sticky-2）光钉一个数字没用，
+   排名列定宽 44px，第二列（姓名/推荐人/活动名）从 44px 处一起钉住。
+   钉住的格子要实底、最宽 128px 并允许换行，否则一个长名字就占掉 360 屏的大半。
+   带 colspan 的格子（空状态行、合计行）不钉：max-width 会把它们压窄。 */
+@media (max-width: 700px) {
+  .table-wrap > table > thead > tr:first-child > th:first-child,
+  .table-wrap > table > tbody > tr > td:first-child:not([colspan]),
+  .table-wrap > table > tfoot > tr > td:first-child:not([colspan]),
+  .table-wrap > table.sticky-2 > thead > tr:first-child > th:nth-child(2),
+  .table-wrap > table.sticky-2 > tbody > tr > td:nth-child(2):not([colspan]),
+  .table-wrap > table.sticky-2 > tfoot > tr > td:nth-child(2):not([colspan]) {
+    position: sticky;
+    left: 0;
+    z-index: 1;
+    max-width: 128px;
+    background: var(--surface-solid);
+    box-shadow: 1px 0 0 var(--border-strong);
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+  .table-wrap > table > thead > tr:first-child > th:first-child,
+  .table-wrap > table.sticky-2 > thead > tr:first-child > th:nth-child(2) { z-index: 2; background: var(--surface-2); }
+  .table-wrap > table.sticky-2 > thead > tr:first-child > th:first-child,
+  .table-wrap > table.sticky-2 > tbody > tr > td:first-child:not([colspan]) {
+    width: 44px;
+    min-width: 44px;
+    max-width: 44px;
+    box-shadow: none;
+    text-align: center;
+  }
+  .table-wrap > table.sticky-2 > thead > tr:first-child > th:nth-child(2),
+  .table-wrap > table.sticky-2 > tbody > tr > td:nth-child(2):not([colspan]),
+  .table-wrap > table.sticky-2 > tfoot > tr > td:nth-child(2):not([colspan]) { left: 44px; }
+  .table-wrap > table.sticky-2 > tfoot > tr > td:first-child:not([colspan]) { width: 44px; min-width: 44px; max-width: 44px; box-shadow: none; }
+  /* 待处理弹窗在手机上是卡片，不是横滚表格。 */
+  #pending-modal .table-wrap th,
+  #pending-modal .table-wrap td { position: static; max-width: none; box-shadow: none; }
+}
+@media (max-width: 460px) {
+  /* 首页：充值 / 提现并排，总客户占一整行；净输赢本来就独占。 */
+  .hero-core-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .hero-core-grid > :nth-child(3) { grid-column: 1 / -1; }
+  .hero-core { min-height: 92px; }
+  .hero-core .value { font-size: 18px; }
+}
