@@ -355,7 +355,7 @@ const pageRoutes = {
 <div class="form-group"><label>Label Color</label><input id="status-color" type="color" value="#64748b"></div>
 <button type="button" class="btn btn-success btn-sm" id="status-add">\u6dfb\u52a0 STATUS</button>
 </div>
-<div class="table-wrap data-surface"><table class="bank-table"><thead><tr><th>VALUE</th><th>TITLE</th><th>COLOR</th><th>PREVIEW</th><th></th></tr></thead><tbody id="status-rows"></tbody></table></div>
+<div class="table-wrap data-surface"><table class="bank-table m-cards m-status"><thead><tr><th>VALUE</th><th>TITLE</th><th>COLOR</th><th>PREVIEW</th><th></th></tr></thead><tbody id="status-rows"></tbody></table></div>
 </section>
 <section class="data-panel">
 <h2>C STATUS</h2>
@@ -364,7 +364,7 @@ const pageRoutes = {
 <div class="form-group"><label>\u5173\u8054\u516c\u53f8</label><select id="cs-company"><option value="">-</option></select></div>
 <button type="button" class="btn btn-success btn-sm" id="cs-add">\u6dfb\u52a0 C STATUS</button>
 </div>
-<div class="table-wrap data-surface"><table class="bank-table"><thead><tr><th>NAME</th><th>COMPANY</th><th>对平</th><th></th></tr></thead><tbody id="cstatus-rows"></tbody></table></div>
+<div class="table-wrap data-surface"><table class="bank-table m-cards m-cstatus"><thead><tr><th>NAME</th><th>COMPANY</th><th>对平</th><th></th></tr></thead><tbody id="cstatus-rows"></tbody></table></div>
 </section>
 </div>`,
     "/js/bank-settings.js?v=20261001reconcile1"
@@ -593,8 +593,8 @@ const pageRoutes = {
   "/admin-users.html": pageLayout(
     "\u8d26\u53f7\u7ba1\u7406",
     "admin",
-    '<div class="page-toolbar"><h1>\u8d26\u53f7\u7ba1\u7406</h1><button class="btn btn-success btn-sm" id="create-btn">+ \u65b0\u5efa\u8d26\u53f7</button></div><p class="page-description">\u81ea\u5b9a\u4e49\u8d26\u53f7 ID \u548c\u5bc6\u7801\uff0c\u521b\u5efa\u540e\u590d\u5236\u53d1\u7ed9\u64cd\u76d8\u624b</p><div class="table-wrap data-surface"><table><thead><tr><th>\u8d26\u53f7 ID</th><th>\u540d\u79f0</th><th>\u89d2\u8272</th><th>\u72b6\u6001</th><th>\u64cd\u4f5c</th></tr></thead><tbody id="rows"></tbody></table></div><div class="modal-overlay" id="create-modal"><div class="modal"><h2>\u65b0\u5efa\u64cd\u76d8\u624b\u8d26\u53f7</h2><div class="form-group"><label>\u8d26\u53f7 ID</label><input id="new-username"></div><div class="form-group"><label>\u663e\u793a\u540d\u79f0</label><input id="new-name"></div><div class="form-group"><label>\u5bc6\u7801</label><input id="new-password" type="password"></div><div class="actions"><button class="btn btn-outline btn-sm" id="cancel-btn">\u53d6\u6d88</button><button class="btn btn-success btn-sm" id="save-btn">\u521b\u5efa</button></div></div></div><div class="modal-overlay" id="share-modal"><div class="modal"><h2>\u53d1\u7ed9\u64cd\u76d8\u624b</h2><div class="copy-box" id="share-text"></div><div class="actions"><button class="btn btn-primary btn-sm" id="copy-btn">\u590d\u5236</button><button class="btn btn-outline btn-sm" id="close-share">\u5173\u95ed</button></div></div></div>',
-    "/js/admin-users.js?v=20260817modalux2"
+    '<div class="page-toolbar"><h1>\u8d26\u53f7\u7ba1\u7406</h1><button class="btn btn-success btn-sm" id="create-btn">+ \u65b0\u5efa\u8d26\u53f7</button></div><p class="page-description">\u81ea\u5b9a\u4e49\u8d26\u53f7 ID \u548c\u5bc6\u7801\uff0c\u521b\u5efa\u540e\u590d\u5236\u53d1\u7ed9\u64cd\u76d8\u624b</p><div class="table-wrap data-surface"><table class="m-cards m-users"><thead><tr><th>\u8d26\u53f7 ID</th><th>\u540d\u79f0</th><th>\u89d2\u8272</th><th>\u72b6\u6001</th><th>\u64cd\u4f5c</th></tr></thead><tbody id="rows"></tbody></table></div><div class="modal-overlay" id="create-modal"><div class="modal"><h2>\u65b0\u5efa\u64cd\u76d8\u624b\u8d26\u53f7</h2><div class="form-group"><label>\u8d26\u53f7 ID</label><input id="new-username"></div><div class="form-group"><label>\u663e\u793a\u540d\u79f0</label><input id="new-name"></div><div class="form-group"><label>\u5bc6\u7801</label><input id="new-password" type="password"></div><div class="actions"><button class="btn btn-outline btn-sm" id="cancel-btn">\u53d6\u6d88</button><button class="btn btn-success btn-sm" id="save-btn">\u521b\u5efa</button></div></div></div><div class="modal-overlay" id="share-modal"><div class="modal"><h2>\u53d1\u7ed9\u64cd\u76d8\u624b</h2><div class="copy-box" id="share-text"></div><div class="actions"><button class="btn btn-primary btn-sm" id="copy-btn">\u590d\u5236</button><button class="btn btn-outline btn-sm" id="close-share">\u5173\u95ed</button></div></div></div>',
+    "/js/admin-users.js?v=20261105cols1"
   ),
   "/monthly-report.html": pageLayout(
     "月报",
@@ -677,7 +677,7 @@ for (const route of Object.keys(pageRoutes)) {
     .replace('<link rel="stylesheet" href="/css/style.css?v=20260812transferfix1">', i18nHeadHtml + '<link rel="stylesheet" href="/css/style.css?v=20260812transferfix1">')
     .replace('<div class="company-bar glass-control" id="company-bar">', '<div class="company-bar glass-control" id="company-bar">' + companyCompactEntryHtml)
     .replace('<script src="/vendor/lucide-1.65.0.min.js"></script>', globalFeedbackHtml + i18nBootHtml + '<script src="/vendor/lucide-1.65.0.min.js"></script>')
-    .replace('/css/style.css?v=20260812transferfix1', '/css/style.css?v=20261105sticky2')
+    .replace('/css/style.css?v=20260812transferfix1', '/css/style.css?v=20261105admin2')
     .replace('/js/customer-detail.js?v=20260731bankfix4', '/js/customer-detail.js?v=20260817customerhistory1')
     .replace('/css/style.css?v=20260802topbarflow1', '/css/style.css?v=20261001archive1')
     .replace('/js/app.js?v=20260802platformsound3', '/js/app.js?v=20261105tabbar1');

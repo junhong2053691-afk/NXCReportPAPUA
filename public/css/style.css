@@ -4566,3 +4566,92 @@ body.tr-drawer-open { overflow: hidden; }
   .hero-core { min-height: 92px; }
   .hero-core .value { font-size: 18px; }
 }
+/* ===== admin 写操作页 · 手机卡片 (≤700) =====
+   支付设置的 STATUS / C STATUS、账号管理三张表加了 .m-cards（server/index.js），手机上每行一张卡片，
+   行内的输入框 / 勾选 / 按钮原样保留，页面脚本一行不改。
+   td 选择器带 :nth-child(n) 是为了压过上面「报表首列钉住」那组 (0,3,4) 的规则，并显式取消 sticky。 */
+@media (max-width: 700px) {
+  .table-wrap:has(> table.m-cards) { overflow: visible; border: 0; background: transparent; box-shadow: none; }
+  .table-wrap > table.m-cards { display: block; width: 100%; min-width: 0; }
+  .table-wrap > table.m-cards > thead { display: none; }
+  .table-wrap > table.m-cards > tbody { display: block; }
+  .table-wrap > table.m-cards > tbody > tr {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 8px 12px;
+    align-items: center;
+    margin: 0 0 10px;
+    padding: 12px;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm);
+    background: var(--surface-solid);
+  }
+  .table-wrap > table.m-cards > tbody > tr > td:nth-child(n) {
+    position: static;
+    display: block;
+    width: auto;
+    min-width: 0;
+    max-width: none;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+    font-size: 14px;
+    text-align: left;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+  .table-wrap > table.m-cards > tbody > tr > td[colspan] { grid-column: 1 / -1; text-align: center; }
+  .table-wrap > table.m-cards > tbody > tr > td.m-label::before,
+  .table-wrap > table.m-cards > tbody > tr > td:nth-child(n)::before {
+    color: var(--muted);
+    font-size: 11px;
+    font-weight: var(--weight-bold);
+    letter-spacing: .04em;
+  }
+  /* 操作格：按钮平铺、等宽、44px。 */
+  .table-wrap > table.m-cards > tbody > tr > td:last-child:not([colspan]) {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding-top: 8px;
+    border-top: 1px solid var(--border);
+  }
+  .table-wrap > table.m-cards > tbody > tr > td:last-child .btn { flex: 1 1 0; min-height: 44px; margin: 0; }
+
+  /* 支付设置 · STATUS：VALUE | 预览 / TITLE / COLOR / 按钮 */
+  .table-wrap > table.m-status > tbody > tr { grid-template-areas: "value preview" "label label" "color color" "act act"; }
+  .table-wrap > table.m-status > tbody > tr > td:nth-child(1) { grid-area: value; font-weight: var(--weight-bold); }
+  .table-wrap > table.m-status > tbody > tr > td:nth-child(2) { grid-area: label; }
+  .table-wrap > table.m-status > tbody > tr > td:nth-child(3) { grid-area: color; display: flex; align-items: center; gap: 10px; }
+  .table-wrap > table.m-status > tbody > tr > td:nth-child(4) { grid-area: preview; }
+  .table-wrap > table.m-status > tbody > tr > td:nth-child(5) { grid-area: act; }
+  .table-wrap > table.m-status > tbody > tr > td:nth-child(2)::before { content: "TITLE"; display: block; margin-bottom: 4px; }
+  .table-wrap > table.m-status > tbody > tr > td:nth-child(3)::before { content: "COLOR"; }
+  .table-wrap > table.m-status .setting-input { min-width: 0; }
+  .table-wrap > table.m-status .setting-color { width: 64px; height: 44px; }
+
+  /* 支付设置 · C STATUS：NAME / COMPANY / 对平 + 移除 */
+  .table-wrap > table.m-cstatus > tbody > tr { grid-template-areas: "name name" "company company" "rec act"; }
+  .table-wrap > table.m-cstatus > tbody > tr > td:nth-child(1) { grid-area: name; font-size: 15px; font-weight: var(--weight-bold); }
+  .table-wrap > table.m-cstatus > tbody > tr > td:nth-child(2) { grid-area: company; color: var(--text-soft); }
+  .table-wrap > table.m-cstatus > tbody > tr > td:nth-child(3) { grid-area: rec; display: flex; align-items: center; gap: 10px; min-height: 44px; }
+  .table-wrap > table.m-cstatus > tbody > tr > td:nth-child(4):not([colspan]) { grid-area: act; padding-top: 0; border-top: 0; }
+  .table-wrap > table.m-cstatus > tbody > tr > td:nth-child(2)::before { content: "COMPANY  "; white-space: pre; }
+  .table-wrap > table.m-cstatus > tbody > tr > td:nth-child(3)::before { content: "RECONCILE"; }
+  .table-wrap > table.m-cstatus .cs-reconcile { width: 22px; height: 22px; min-height: 0; }
+
+  /* 账号管理：账号 | 角色 / 名称 | 状态 / 授权公司 / 按钮 */
+  .table-wrap > table.m-users > tbody > tr { grid-template-areas: "user role" "name status" "company company" "act act"; }
+  .table-wrap > table.m-users > tbody > tr > td:nth-child(1) { grid-area: user; font-size: 15px; }
+  .table-wrap > table.m-users > tbody > tr > td:nth-child(2) { grid-area: name; color: var(--text-soft); }
+  .table-wrap > table.m-users > tbody > tr > td:nth-child(3) { grid-area: role; justify-self: end; }
+  .table-wrap > table.m-users > tbody > tr > td:nth-child(4) { grid-area: status; justify-self: end; color: var(--muted); font-size: 12px; }
+  .table-wrap > table.m-users > tbody > tr > td:nth-child(5) { grid-area: company; }
+  .table-wrap > table.m-users > tbody > tr > td:nth-child(6) { grid-area: act; }
+
+  /* Telegram 设置的推送状态表只差 40px：全局 .table-wrap table 是 width:max-content，
+     把「说明」列撑到 td 上限 220px。这张表只有三列短文本，改按容器宽排，说明列换行。 */
+  .table-wrap > table:has(> #tg-status-rows) { width: 100%; }
+  #tg-status-rows td { white-space: normal; overflow-wrap: anywhere; }
+}

@@ -87,7 +87,9 @@ async function loadUsers() {
       const ops = user.role === "admin"
         ? "-"
         : `<button class="btn btn-outline btn-sm" data-edit="${user.id}">权限</button><button class="btn btn-outline btn-sm" data-reset="${user.id}" data-name="${escapeHtml(user.username)}">改密</button><button class="btn btn-danger btn-sm" data-toggle="${user.id}" data-status="${user.status === "active" ? "disabled" : "active"}">${user.status === "active" ? "停用" : "启用"}</button>`;
-      return `<tr><td><b>${escapeHtml(user.username)}</b></td><td>${escapeHtml(user.name)}</td><td><span class="role-pill role-${escapeHtml(user.role)}">${roleLabel(user.role)}</span></td><td>${companyLabel(user)}</td><td>${escapeHtml(user.status)}</td><td>${ops}</td></tr>`;
+      // 列序必须与表头一致：账号 ID | 名称 | 角色 | 状态 | 授权公司 | 操作。「授权公司」表头是
+      // 上面 insertBefore(最后一列) 插进去的，落在「状态」之后；这里原来先输出公司再输出状态，两列对调了。
+      return `<tr><td><b>${escapeHtml(user.username)}</b></td><td>${escapeHtml(user.name)}</td><td><span class="role-pill role-${escapeHtml(user.role)}">${roleLabel(user.role)}</span></td><td>${escapeHtml(user.status)}</td><td>${companyLabel(user)}</td><td>${ops}</td></tr>`;
     })
     .join("");
 
