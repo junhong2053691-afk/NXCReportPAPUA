@@ -1983,6 +1983,18 @@ Object.assign(I18N.en, {
   "本期提现": "Withdrawals this period",
 });
 
+// batch I: 手机底部标签栏 + 支付渠道页手机折叠
+Object.assign(I18N.zh, {
+  "快捷操作": "快捷操作",
+  "菜单": "菜单",
+  "渠道列表": "渠道列表",
+});
+Object.assign(I18N.en, {
+  "快捷操作": "Quick actions",
+  "菜单": "Menu",
+  "渠道列表": "Channel list",
+});
+
 // ---------------------------------------------------------------------------
 // Translation engine.
 //

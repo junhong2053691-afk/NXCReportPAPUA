@@ -12,6 +12,9 @@
   let companyOptions = [];
   const ALL_BANKS = "all";
   let activeBankId = ALL_BANKS;
+  // 手机上渠道列表默认折叠（CSS 只在 ≤700 认这个类）。放模块级是因为渠道栏每 5 秒
+  // 随 refreshSharedWorkspace 整块重渲染，存在 DOM 上会被冲掉。
+  let directoryOpen = false;
   let sheetDate = "";
   let dailyReport = null;
   let saveLock = false;
@@ -1269,9 +1272,10 @@
     // 只数封禁中的。归档账户已经退役清零，把它们算进「已封渠道」就等于把这个入口
     // 变回一个只会越堆越大的数字——那正是要消灭的东西。
     const bannedCount = bankRows.filter(LC.isBanned).length;
-    box.innerHTML = `<section class="bk-directory" aria-label="Payment channels">
+    box.innerHTML = `<section class="bk-directory${directoryOpen ? " is-open" : ""}" aria-label="Payment channels">
+<button type="button" class="bk-directory-toggle" aria-expanded="${directoryOpen ? "true" : "false"}" aria-controls="bk-channel-list"><span>渠道列表</span><i data-lucide="chevron-down"></i></button>
 <button type="button" class="bk-directory-summary${activeBankId === ALL_BANKS ? " active" : ""}" data-bank-select="all" aria-pressed="${activeBankId === ALL_BANKS ? "true" : "false"}"><span class="bk-summary-kicker">ALL CHANNELS</span><span class="bk-summary-copy"><strong>全部渠道</strong><span>点击渠道行可筛选流水</span></span><span class="bk-summary-balance"><small>总余额</small><strong>${fmt(totalBalance())}</strong></span><span class="bk-summary-count">${railBanks.length} 个渠道</span></button>
-<div class="bk-channel-list" role="list" aria-label="Payment channel list"><div class="bk-channel-list-head" aria-hidden="true"><span class="bk-col-order">排序</span><span class="bk-col-channel">BANK BRANCH / NAME</span><span class="bk-col-info">BSB / ACCOUNT / PAYID</span><span class="bk-col-balance">BALANCE / COUNT / TOTAL OUTFLOW</span><span class="bk-col-actions">操作</span></div>${railBanks.map((b, i) => bankDirectoryRowHtml(b, i)).join("")}</div>
+<div class="bk-channel-list" id="bk-channel-list" role="list" aria-label="Payment channel list"><div class="bk-channel-list-head" aria-hidden="true"><span class="bk-col-order">排序</span><span class="bk-col-channel">BANK BRANCH / NAME</span><span class="bk-col-info">BSB / ACCOUNT / PAYID</span><span class="bk-col-balance">BALANCE / COUNT / TOTAL OUTFLOW</span><span class="bk-col-actions">操作</span></div>${railBanks.map((b, i) => bankDirectoryRowHtml(b, i)).join("")}</div>
 ${bannedCount > 0 ? `<button type="button" class="bk-banned-summary" id="rail-banned-btn"><span class="bk-flag bk-flag-banned">封禁</span><span>已封渠道</span><strong>${bannedCount}</strong><small>点击查看详情</small></button>` : ""}
 </section>`;
     renderIcons(box);
@@ -2478,6 +2482,21 @@ ${bannedCount > 0 ? `<button type="button" class="bk-banned-summary" id="rail-ba
       .finally(() => { sharedRefreshInFlight = false; });
   }
 
+  const MOBILE_TAB_ACTIONS = ["pending", "ledger", "transfer", "channels"];
+  function runMobileTab(action) {
+    if (action === "pending") openPendingModal();
+    else if (action === "transfer") openTransferModal();
+    else if (action === "channels") openBanksListModal({ tab: "operating" });
+    else if (action === "ledger") document.querySelector(".bkv2 .bk-grid-head")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+  function runMobileTabFromHash() {
+    const action = String(location.hash || "").slice(1);
+    if (!MOBILE_TAB_ACTIONS.includes(action)) return;
+    // 先清掉 hash：否则刷新页面会再弹一次，关掉弹窗后地址栏也还挂着它。
+    try { history.replaceState(null, "", location.pathname + location.search); } catch (_) {}
+    runMobileTab(action);
+  }
+
   function applyUpperCollapsed(collapsed) {
     const wrap = document.getElementById("sheet-upper-wrap");
     const btn = document.getElementById("sheet-collapse-btn");
@@ -2508,7 +2527,10 @@ ${bannedCount > 0 ? `<button type="button" class="bk-banned-summary" id="rail-ba
     populateStatusFilter();
     setupAC("f-bankbranch", "ac-bankbranch", "bank_branch");
 
-    reloadAll();
+    // 手机底部标签栏：在本页直接执行；从别的页点过来带着 #pending 之类的 hash，
+    // 等首轮数据（渠道列表）到齐再执行——调钱表单的 BANK 下拉要靠它填。
+    window.bankMobileTab = runMobileTab;
+    reloadAll().then(runMobileTabFromHash, runMobileTabFromHash);
 
     if (typeof startSyncWatcher === "function") {
       startSyncWatcher(() => reloadAll());
@@ -2557,6 +2579,11 @@ ${bannedCount > 0 ? `<button type="button" class="bk-banned-summary" id="rail-ba
     document.getElementById("sheet-status-filter")?.addEventListener("change", renderGrid);
 
     document.getElementById("sheet-tabs")?.addEventListener("click", (e) => {
+      if (e.target.closest(".bk-directory-toggle")) {
+        directoryOpen = !directoryOpen;
+        renderTabs();
+        return;
+      }
       const bannedBtn = e.target.closest("#rail-banned-btn");
       if (bannedBtn) { openBanksListModal({ tab: "banned" }); return; }
       const copyBankBtn = e.target.closest("[data-copy-bank-id]");

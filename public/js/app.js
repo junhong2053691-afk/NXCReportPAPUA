@@ -536,11 +536,41 @@ function setActiveNav(page) {
   });
 }
 
+function updateMobileTabbarBadge(n) {
+  const badge = document.getElementById("mobile-tabbar-badge");
+  if (!badge) return;
+  badge.hidden = n <= 0;
+  badge.textContent = n > 99 ? "99+" : String(n);
+}
+
+// 底部标签栏：支付渠道页注册了 window.bankMobileTab，就地执行；其他页面不拦，
+// <a href="/bank-accounts.html#动作"> 照常跳过去，由那边读 hash 执行。
+function setupMobileTabbar() {
+  const bar = document.getElementById("mobile-tabbar");
+  if (!bar) return;
+  bar.addEventListener("click", function (e) {
+    const el = e.target.closest("[data-tab-action]");
+    if (!el) return;
+    const action = el.dataset.tabAction;
+    if (action === "menu") {
+      e.preventDefault();
+      const menuBtn = document.getElementById("mobile-menu-btn");
+      if (menuBtn) menuBtn.click();
+      return;
+    }
+    if (typeof window.bankMobileTab === "function") {
+      e.preventDefault();
+      window.bankMobileTab(action);
+    }
+  });
+}
+
 function updateBankPendingBadge(total) {
+  const n = Number(total || 0);
+  updateMobileTabbarBadge(n);
   const link = document.querySelector('.sidebar nav a[data-page="bank-accounts"]');
   if (!link) return;
   let badge = link.querySelector(".nav-pending-badge");
-  const n = Number(total || 0);
   if (n <= 0) {
     if (badge) badge.remove();
     return;
@@ -622,6 +652,7 @@ function startBankPendingWatcher() {
 if (typeof document !== "undefined") {
   document.addEventListener("DOMContentLoaded", function () {
     startBankPendingWatcher();
+    setupMobileTabbar();
   });
 }
 

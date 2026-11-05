@@ -4193,3 +4193,102 @@ body.tr-drawer-open { overflow: hidden; }
 @media (max-width: 720px) {
   .tr-search { width: 100%; }
 }
+
+/* ===== 手机底部标签栏 + 支付渠道页手机排序 (≤700) =====
+   标签栏的 HTML 在 server/index.js 的 MOBILE_TABBAR。层级压在侧栏遮罩（--z-nav - 1）之下：
+   打开汉堡菜单时它被盖住；弹窗（--z-modal）当然更在它上面。 */
+.mobile-tabbar { display: none; }
+.bk-directory-toggle { display: none; }
+@media (max-width: 700px) {
+  .mobile-tabbar {
+    position: fixed;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    z-index: calc(var(--z-nav) - 2);
+    display: grid;
+    grid-auto-columns: minmax(0, 1fr);
+    grid-auto-flow: column;
+    gap: 2px;
+    padding: 6px max(6px, env(safe-area-inset-right)) max(6px, env(safe-area-inset-bottom)) max(6px, env(safe-area-inset-left));
+    border-top: 1px solid var(--border);
+    background: var(--surface-solid);
+    box-shadow: 0 -6px 18px rgba(15, 23, 42, .08);
+  }
+  .mobile-tabbar > a,
+  .mobile-tabbar > button {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    min-width: 0;
+    min-height: 52px;
+    padding: 4px 2px;
+    border: 0;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--text-soft);
+    font-size: 11px;
+    font-weight: var(--weight-bold);
+    line-height: 1.1;
+    text-decoration: none;
+  }
+  .mobile-tabbar > a:active,
+  .mobile-tabbar > button:active { background: var(--surface-2); }
+  .mobile-tabbar svg { width: 22px; height: 22px; }
+  .mobile-tabbar span { overflow: hidden; max-width: 100%; text-overflow: ellipsis; white-space: nowrap; }
+  .mobile-tabbar-badge {
+    position: absolute;
+    top: 2px;
+    left: calc(50% + 6px);
+    min-width: 18px;
+    height: 18px;
+    padding: 0 5px;
+    border-radius: 999px;
+    background: var(--red);
+    color: #fff;
+    font-size: 10px;
+    font-weight: var(--weight-black);
+    line-height: 18px;
+    text-align: center;
+  }
+  .mobile-tabbar-badge[hidden] { display: none; }
+  /* app.js 登录后写 body[data-user-role]；operator 没有别的页面可去，不给「菜单」。 */
+  body:not([data-user-role="admin"]) .mobile-tabbar [data-tab-action="menu"] { display: none; }
+  /* 给标签栏让出底部，最后一行内容不被盖住。 */
+  .main { padding-bottom: calc(76px + env(safe-area-inset-bottom)); }
+
+  /* 支付渠道页：待处理 → KPI → 渠道（折叠）→ 筛选 → 流水。.bkv2 本身是 flex column。 */
+  .bkv2 > .bk-pending-summary { order: 1; }
+  .bkv2 > .reconcile-alert { order: 2; }
+  .bkv2 > .bk-kpis { order: 3; }
+  .bkv2 > .bk-context-strip { order: 4; }
+  .bkv2 > .bk-rail { order: 5; }
+  .bkv2 > .bk-toolbar { order: 6; }
+  .bkv2 > .bk-report-wrap { order: 7; }
+  .bkv2 > .bk-grid-head { order: 8; }
+  .bkv2 > .sheet-table-wrap { order: 9; }
+  .bkv2 > datalist { order: 10; }
+
+  /* 渠道列表默认折叠，只留「全部渠道」汇总；状态在 bank-accounts.js 的 directoryOpen。 */
+  .bk-directory:not(.is-open) .bk-channel-list,
+  .bk-directory:not(.is-open) .bk-banned-summary { display: none; }
+  .bk-directory-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    min-height: 44px;
+    padding: 0 14px;
+    border: 0;
+    border-bottom: 1px solid var(--border);
+    background: transparent;
+    color: var(--text-soft);
+    font-size: 13px;
+    font-weight: var(--weight-bold);
+  }
+  .bk-directory-toggle svg { width: 18px; height: 18px; transition: transform var(--motion-fast) var(--ease); }
+  .bk-directory.is-open .bk-directory-toggle svg { transform: rotate(180deg); }
+}
