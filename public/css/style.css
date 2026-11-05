@@ -3948,6 +3948,7 @@ tr:hover .bank-bal-btns { opacity: 1; }
   .bk-channel-list-head { display: none; }
   .bk-bank-row {
     grid-template-columns: 42px minmax(0, 1fr);
+    min-width: 0;   /* 上面五列布局的 795px 下限在两列堆叠下没意义，不解开平板/手机就一直横滚 */
     border-bottom: 1px solid var(--border);
   }
   .bk-bank-row > div { border-bottom: 0; padding: 7px 10px; }
@@ -3969,6 +3970,12 @@ tr:hover .bank-bal-btns { opacity: 1; }
   .bk-metric-balance > strong { font-size: 16px; }
   .bk-copy-btn { min-width: 44px; width: auto; padding: 0 11px; }
   .bk-copy-btn span { display: inline; }
+}
+/* 渠道排序是 HTML5 drag，触屏上根本拖不动；手机上把手藏掉，排序在电脑上做。只留序号。 */
+@media (max-width: 700px) {
+  .bk-order-handle { display: none; }
+  .bk-bank-row { grid-template-columns: 30px minmax(0, 1fr); }
+  .bk-bank-row > .bk-col-order { padding: 12px 0 0 8px; }
 }
 
 :root[data-theme="dark"] .bk-directory-summary { background: linear-gradient(105deg, color-mix(in srgb, var(--primary-soft) 70%, var(--surface)), var(--surface)); }
