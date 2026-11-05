@@ -3164,6 +3164,139 @@ tr:hover .bank-bal-btns { opacity: 1; }
   overflow: visible;
   text-align: center;
 }
+
+/* USER（账号 / 姓名）不截断：审批时要核对姓名，省略号会把「Harmanjot Singh Jhamant」
+   切成半个名字。只换行，不加宽列，其他列不受影响。全宽度生效。 */
+#pending-modal .bank-table td:nth-child(4) {
+  white-space: normal;
+  overflow: visible;
+  overflow-wrap: anywhere;
+  line-height: 1.35;
+}
+
+/* ===== 待处理 · 手机卡片 (≤700) =====
+   员工只靠手机审批：表格 1222px 宽时「审批」按钮在三屏以外。这里只用 CSS 把每个 <tr>
+   排成一张卡片，DOM、类名、事件全部不动——审批/跳过/拆分的逻辑都是 tr.querySelector(...)，
+   换成别的结构就得两份渲染。列靠 nth-child 定位，改 server/index.js 里的表头顺序时这里要跟着改。
+   标签文字用 ::before 写死英文列名（与表头一致），不进 i18n 字典。 */
+@media (max-width: 700px) {
+  #pending-modal .table-wrap {
+    overflow-x: hidden;
+    overflow-y: auto;
+    scrollbar-gutter: auto;
+    border: 0;
+    background: transparent;
+  }
+  #pending-modal .bank-table,
+  #pending-skipped-panel .bank-table { display: block; width: 100%; min-width: 0; table-layout: auto; background: transparent; }
+  #pending-modal .bank-table thead { display: none; }
+  #pending-modal .bank-table tbody { display: block; }
+  #pending-modal .bank-table tbody tr {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 8px 12px;
+    margin: 0 0 10px;
+    padding: 12px;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm);
+    background: var(--surface-solid);
+  }
+  #pending-modal .bank-table tbody td,
+  #pending-modal .bank-table tbody tr:hover td {
+    display: block;
+    width: auto;
+    min-width: 0;
+    max-width: none;          /* 解开 ≤768 全局那条 td { max-width:220px } */
+    padding: 0;
+    border: 0;
+    background: transparent;
+    white-space: normal;
+    overflow: visible;
+    text-align: left;
+  }
+  /* 空状态那一行（colspan）照常占满。 */
+  #pending-modal .bank-table tbody td[colspan] { grid-column: 1 / -1; text-align: center; }
+
+  /* iOS 输入框字号 < 16px 会在聚焦时整页放大。 */
+  #pending-modal select,
+  #pending-modal input { min-height: 44px; font-size: 16px; }
+
+  /* 平台订单：TYPE | AMT / USER / TRANS ID / DATE·TIME / MODE / BANK / REMARK / 按钮 */
+  #pending-modal #pending-tx-rows tr[data-txid] {
+    grid-template-areas:
+      "type amt"
+      "user user"
+      "txid txid"
+      "dt dt"
+      "mode mode"
+      "bank bank"
+      "remark remark"
+      "act act";
+  }
+  #pending-modal #pending-tx-rows td:nth-child(1) { grid-area: type; align-self: center; font-size: 12px; font-weight: var(--weight-black); letter-spacing: .04em; color: var(--text-soft); }
+  #pending-modal #pending-tx-rows td:nth-child(2) { grid-area: dt; }
+  #pending-modal #pending-tx-rows td:nth-child(3) { grid-area: txid; color: var(--muted); font-size: 12px; }
+  #pending-modal #pending-tx-rows td:nth-child(4) { grid-area: user; font-size: 15px; font-weight: var(--weight-bold); color: var(--text); }
+  #pending-modal #pending-tx-rows td:nth-child(5) { grid-area: amt; align-self: center; text-align: right; font-size: 18px; font-weight: var(--weight-black); }
+  #pending-modal #pending-tx-rows td:nth-child(6) { grid-area: mode; }
+  #pending-modal #pending-tx-rows td:nth-child(7) { grid-area: bank; }
+  #pending-modal #pending-tx-rows td:nth-child(8) { grid-area: remark; }
+  #pending-modal #pending-tx-rows td:nth-child(9) { grid-area: act; display: flex; gap: 10px; padding-top: 4px; }
+  #pending-modal #pending-tx-rows td:nth-child(3)::before { content: "TRANS ID  "; white-space: pre; font-weight: var(--weight-bold); }
+  #pending-modal #pending-tx-rows td:nth-child(6)::before,
+  #pending-modal #pending-tx-rows td:nth-child(7)::before,
+  #pending-modal #pending-tx-rows td:nth-child(8)::before {
+    display: block;
+    margin-bottom: 4px;
+    color: var(--muted);
+    font-size: 11px;
+    font-weight: var(--weight-bold);
+    letter-spacing: .04em;
+  }
+  #pending-modal #pending-tx-rows td:nth-child(6)::before { content: "MODE"; }
+  #pending-modal #pending-tx-rows td:nth-child(7)::before { content: "BANK / C STATUS"; }
+  #pending-modal #pending-tx-rows td:nth-child(8)::before { content: "REMARK"; }
+  #pending-modal .pend-remark { width: 100%; }
+  #pending-modal .pend-split-row { grid-template-columns: minmax(0, 1fr) 96px 44px; }
+  #pending-modal .pend-split-self,
+  #pending-modal .pend-split-self-columns { grid-template-columns: minmax(0, 1fr) 96px; }
+  #pending-modal .pend-split-columns { grid-template-columns: minmax(0, 1fr) 96px 44px; }
+  #pending-modal .pend-split-row input,
+  #pending-modal .pend-split-self-bank,
+  #pending-modal .pend-split-self-amount { min-height: 44px; font-size: 16px; }
+  #pending-modal .pend-split-remove { width: 44px; height: 44px; border-color: var(--border-strong); color: var(--red); }
+  #pending-modal .pend-split-remove svg { width: 18px; height: 18px; }
+  #pending-modal .pend-split-add { min-height: 44px; width: 100%; }
+
+  /* 已跳过：TYPE | AMT / USER / TRANS ID / TIME / SKIPPED AT · BY / 按钮 */
+  #pending-modal #pending-skipped-rows tr[data-txid] {
+    grid-template-areas:
+      "type amt"
+      "user user"
+      "txid txid"
+      "time time"
+      "at by"
+      "act act";
+  }
+  #pending-modal #pending-skipped-rows td:nth-child(1) { grid-area: type; font-size: 12px; font-weight: var(--weight-black); color: var(--text-soft); }
+  #pending-modal #pending-skipped-rows td:nth-child(2) { grid-area: time; font-size: 12px; }
+  #pending-modal #pending-skipped-rows td:nth-child(3) { grid-area: txid; color: var(--muted); font-size: 12px; }
+  #pending-modal #pending-skipped-rows td:nth-child(4) { grid-area: user; font-size: 15px; font-weight: var(--weight-bold); overflow-wrap: anywhere; }
+  #pending-modal #pending-skipped-rows td:nth-child(5) { grid-area: amt; text-align: right; font-size: 18px; font-weight: var(--weight-black); }
+  #pending-modal #pending-skipped-rows td:nth-child(6) { grid-area: at; color: var(--muted); font-size: 12px; }
+  #pending-modal #pending-skipped-rows td:nth-child(7) { grid-area: by; color: var(--muted); font-size: 12px; text-align: right; }
+  #pending-modal #pending-skipped-rows td:nth-child(8) { grid-area: act; display: flex; gap: 10px; padding-top: 4px; }
+  #pending-modal #pending-skipped-rows td:nth-child(3)::before { content: "TRANS ID  "; white-space: pre; font-weight: var(--weight-bold); }
+  #pending-modal #pending-skipped-rows td:nth-child(6)::before { content: "SKIPPED  "; white-space: pre; font-weight: var(--weight-bold); }
+
+  #pending-modal #pending-tx-rows td:nth-child(9) .btn,
+  #pending-modal #pending-skipped-rows td:nth-child(8) .btn {
+    flex: 1 1 0;
+    min-height: 48px;
+    margin: 0;
+    font-size: 15px;
+  }
+}
 .sheet-edit, .sheet-save, .sheet-cancel, .sheet-del {
   display: inline-grid;
   place-items: center;
