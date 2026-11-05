@@ -72,19 +72,17 @@ test("一个 C STATUS 选项都没有时，列回退到与日报相同的默认�
   assert.deepEqual(report.columns, ["EZ68", "PK7", "RX66", "AuX6", "LH", "ZZ9"]);
 });
 
-test("本公司自己的名字（target = 本公司）在本期没有数据时隐藏；target 为空的 LH 整月为 0 也照样显示", () => {
+test("列完全照本公司的 C STATUS 选项：整月为 0、指向本公司自己的选项都照样显示；别家的选项不进来", () => {
   const db = bankDatabase();
-  const acc = addAccount(db);
+  addAccount(db);
   addCStatusOption(db, "alpha", "EZ68", "beta", { sort_order: 1 });
   addCStatusOption(db, "alpha", "AuX6", "alpha", { sort_order: 2 });
   addCStatusOption(db, "alpha", "LH", "", { sort_order: 3 });
-  addCStatusOption(db, "beta", "XX", "", { sort_order: 1 }); // 别家的选项不进来
+  addCStatusOption(db, "beta", "XX", "", { sort_order: 1 });
 
-  assert.deepEqual(computeCompanyExpenses(db, "alpha", NOV).columns, ["EZ68", "LH"]);
-
-  addLedger(db, acc, 10, "2026-10-15", { status: "cash in", c_status: "AuX6" });
-  assert.deepEqual(computeCompanyExpenses(db, "alpha", NOV).columns, ["EZ68", "LH"], "上个月的数据不让本月出这一列");
-  assert.deepEqual(computeCompanyExpenses(db, "alpha", { month: "2026-10", today: "2026-11-04" }).columns, ["EZ68", "AuX6", "LH"]);
+  const report = computeCompanyExpenses(db, "alpha", NOV);
+  assert.deepEqual(report.columns, ["EZ68", "AuX6", "LH"]);
+  assert.deepEqual(report.columns, computeBankDailyReport(db, "alpha", { date: "2026-11-03" }).companyRows.map((r) => r.name));
 });
 
 test("每月每天一行（没数据为 0），未来日期标 future；月末 23:59:59 算本月，下月 1 日不算", () => {
@@ -142,15 +140,15 @@ test("年视图：12 行每月一行，月行 = 当月合计，末行年合计�
 
   const year = computeCompanyExpensesYear(db, "alpha", { year: "2026", today: "2026-11-04" });
   assert.equal(year.year, "2026");
-  assert.deepEqual(year.columns, ["EZ68", "ZZ9"]);
+  assert.deepEqual(year.columns, ["EZ68", "AuX6", "ZZ9"]);
   assert.equal(year.months.length, 12);
   assert.equal(year.months[1].month, "2026-02");
-  assert.deepEqual(year.months[1].nets, [70, 0]);
+  assert.deepEqual(year.months[1].nets, [70, 0, 0]);
   assert.equal(year.months[10].future, false);
   assert.equal(year.months[11].future, true);
-  assert.deepEqual(year.total, [70, 5]);
+  assert.deepEqual(year.total, [70, 0, 5]);
 
   const feb = computeCompanyExpenses(db, "alpha", { month: "2026-02", today: "2026-11-04" });
-  assert.deepEqual(feb.total, [70]);
+  assert.deepEqual(feb.total, [70, 0]);
   assert.equal(computeCompanyExpensesYear(db, "alpha", { year: "abc", today: "2026-11-04" }).year, "2026");
 });

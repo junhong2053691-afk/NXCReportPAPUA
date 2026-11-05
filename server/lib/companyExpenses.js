@@ -8,10 +8,6 @@ const { todayKey } = require("./dates");
 const { isDemoTenant } = require("./readConfig");
 const { C_STATUS_DEFAULTS } = require("./bankReport");
 
-function hasAnyOption(db, companyId) {
-  return Boolean(db.prepare("SELECT 1 FROM bank_c_status_options WHERE company_id = ? LIMIT 1").get(companyId));
-}
-
 const MONTH_RE = /^(\d{4})-(0[1-9]|1[0-2])$/;
 const YEAR_RE = /^\d{4}$/;
 
@@ -43,22 +39,17 @@ function dailyNets(db, companyId, from, toExclusive) {
     .map((r) => ({ date: r.d, name: r.cs, net: cents(r.net) }));
 }
 
-// 列序与「支付渠道」日报 companyRows 一致：选项按 sort_order，再补上流水里出现过但不在
-// 选项里的名字（按首次出现）。唯一的差别：本公司自己的名字（target = 本公司）本期没有
-// 数据时隐藏——它通常整列是 0。只认 target，不靠名字缩写去猜；其余列全 0 也照样显示，
-// 列位固定，粘到 Google Sheet 才对得齐。
+// 列「C STATUS 是什么就是什么」，与「支付渠道」日报 companyRows 一致：选项按 sort_order
+// （一个都没有时与日报同样回退到默认名单，demo 租户除外），再补上流水里出现过但不在选项里
+// 的名字（按首次出现）。不做任何隐藏：全 0 的列、指向本公司自己的选项都照样显示——
+// 不想要的列去 C STATUS 设置里删。列位固定，粘到 Google Sheet 才对得齐。
 function columnsFor(db, companyId, rows) {
-  const used = new Set(rows.map((r) => r.name));
   const names = db
-    .prepare(
-      "SELECT name, target_company_id FROM bank_c_status_options WHERE company_id = ? ORDER BY sort_order ASC, name ASC"
-    )
+    .prepare("SELECT name FROM bank_c_status_options WHERE company_id = ? ORDER BY sort_order ASC, name ASC")
     .all(companyId)
-    .map((r) => ({ name: String(r.name || "").trim(), self: String(r.target_company_id || "").trim() === companyId }))
-    .filter((o) => o.name && (!o.self || used.has(o.name)))
-    .map((o) => o.name);
-  // 一个选项都没有时与日报同样回退到默认名单（demo 租户除外）。
-  if (!names.length && !hasAnyOption(db, companyId) && !isDemoTenant()) names.push(...C_STATUS_DEFAULTS);
+    .map((r) => String(r.name || "").trim())
+    .filter(Boolean);
+  if (!names.length && !isDemoTenant()) names.push(...C_STATUS_DEFAULTS);
   const seen = new Set(names);
   for (const r of rows) {
     if (!seen.has(r.name)) {
