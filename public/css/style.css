@@ -3307,14 +3307,17 @@ tr:hover .bank-bal-btns { opacity: 1; }
 .bkd-pair-label { color: var(--muted); font-weight: var(--weight-bold); white-space: nowrap; }
 .bkd-pair-val { color: var(--text); }
 
-.bkd-tx-wrap { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-@media (max-width: 700px) { .bkd-tx-wrap { grid-template-columns: 1fr; } }
+/* IN 在上、OUT 在下，刻意不并排：弹窗最宽 1100px，并排时每列约 530px，
+   装不下 6 列表，REMARK / USER 永远要横滚才看得到。
+   堆叠后每张表拿整宽；表的 min-width 640 是让 768 平板（列宽约 675）也一屏看全，
+   USER / REMARK 两列本就换行。只有手机宽度才退回横滚兜底。 */
+.bkd-tx-wrap { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; }
 .bkd-tx-col { min-width: 0; overflow-x: auto; }
 .bkd-tx-toolbar { display: flex; justify-content: flex-end; margin: -2px 0 2px; }
 .bkd-tx-title { font-size: 11px; font-weight: var(--weight-black); letter-spacing: .06em; text-transform: uppercase; padding: 4px 0 6px; }
 .bkd-tx-in-title { color: var(--green); }
 .bkd-tx-out-title { color: var(--red); }
-.bkd-tx-table { width: 100%; min-width: 760px; border-collapse: collapse; font-size: 11px; }
+.bkd-tx-table { width: 100%; min-width: 640px; border-collapse: collapse; font-size: 11px; }
 .bkd-tx-table th { text-align: left; padding: 3px 6px; background: var(--surface-3); color: var(--muted); font-weight: var(--weight-bold); border-bottom: 1px solid var(--border); white-space: nowrap; }
 .bkd-tx-table td { padding: 4px 6px; border-bottom: 1px solid var(--border); vertical-align: top; white-space: nowrap; }
 .bkd-tx-table .bkd-user-full,
