@@ -2722,6 +2722,7 @@ tr:hover .bank-bal-btns { opacity: 1; }
 .bkv2 .sheet-table .col-act { width: 56px; }
 .bkv2 .sheet-table .ro-cell.field-bank-acc,
 .bkv2 .sheet-table .ro-cell.field-name,
+.bkv2 .sheet-table .ro-cell.field-other,
 .bkv2 .sheet-table .ro-cell.field-remark {
   white-space: normal;
   overflow-wrap: anywhere;
@@ -4654,4 +4655,39 @@ body.tr-drawer-open { overflow: hidden; }
      把「说明」列撑到 td 上限 220px。这张表只有三列短文本，改按容器宽排，说明列换行。 */
   .table-wrap > table:has(> #tg-status-rows) { width: 100%; }
   #tg-status-rows td { white-space: normal; overflow-wrap: anywhere; }
+}
+/* ===== 遗留修补 ===== */
+
+/* 1280 笔记本：≤1500 那组收窄后仍要 1208px（加上 table min-width 1180），1280 下容器只有约 1127px。
+   再收一档；TRANS ID（11 位数字）、TIME 不动，否则只读格子会被省略号截断。合计约 1122px。 */
+@media (max-width: 1300px) {
+  .bkv2 .sheet-table { min-width: 1080px; }
+  .bkv2 .sheet-table .col-status { width: 88px; }   /* 「WITHDRAW」要 88px，再窄就被省略号截断 */
+  .bkv2 .sheet-table .col-bank { width: 112px; }
+  .bkv2 .sheet-table .col-user { width: 96px; }
+  .bkv2 .sheet-table .col-name { width: 116px; }
+  .bkv2 .sheet-table .col-cstatus { width: 76px; }
+  .bkv2 .sheet-table .col-other { width: 70px; }
+  .bkv2 .sheet-table .col-remark { width: 102px; }
+}
+
+@media (max-width: 768px) {
+  /* 汉堡按钮原是 fixed，顶栏却不是：一往下滚它就悬在内容上。改成跟着顶栏走；
+     要切公司 / 退出时滚回顶部即可（admin 另有底部标签栏的「菜单」）。 */
+  .mobile-menu-btn { position: absolute; }
+}
+
+@media (max-width: 700px) {
+  /* C STATUS 未对平：每条原是 999px 圆角的胶囊，手机上内容折成多行就被撑成大白椭圆。
+     改成整行的小卡片，名称独占一行，「查看流水」靠右。 */
+  .reconcile-alert-item {
+    display: flex;
+    width: 100%;
+    gap: 4px 10px;
+    padding: 8px 10px;
+    border-radius: var(--radius-sm);
+  }
+  .reconcile-alert-item > strong { flex-basis: 100%; overflow-wrap: anywhere; }
+  .reconcile-alert-item .reconcile-focus { margin-left: auto; min-height: 40px; }
+  .reconcile-alert .reconcile-ok { min-height: 44px; }
 }
