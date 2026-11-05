@@ -565,16 +565,9 @@
     if (allowAdd) rows.push({ v: PICKER_ADD, label: "+ 添加当前输入" });
     return rows;
   }
-  function showGridPicker(inp, options, allowAdd) {
-    let picker = document.getElementById("grid-picker");
-    if (!picker) {
-      picker = document.createElement("ul");
-      picker.id = "grid-picker";
-      picker.className = "ac-dropdown grid-picker";
-      document.body.appendChild(picker);
-    }
-    const field = inp.getAttribute("data-f");
-    const rows = buildPickerRows(options, allowAdd, field);
+  // 浮层是 fixed + 视口坐标，输入框一动它就得跟着重算。手机上点输入框会弹键盘、页面跟着滚，
+  // 不重算的话浮层会停在原处压住别的字段。
+  function placeGridPicker(picker, inp) {
     const rect = inp.getBoundingClientRect();
     const w = Math.max(rect.width, 180);
     picker.style.left = `${Math.max(4, rect.left)}px`;
@@ -589,6 +582,28 @@
     } else {
       picker.style.top = `${rect.bottom + 2}px`;
     }
+  }
+  function followGridPicker() {
+    if (!isGridPickerOpen() || !gridPickerInput) return;
+    const rect = gridPickerInput.getBoundingClientRect();
+    // 输入框整个滚出视口（或已被重渲染掉）就收起，别让浮层悬在不相干的内容上。
+    if (!gridPickerInput.isConnected || rect.bottom < 0 || rect.top > window.innerHeight) {
+      hideGridPicker();
+      return;
+    }
+    placeGridPicker(document.getElementById("grid-picker"), gridPickerInput);
+  }
+  function showGridPicker(inp, options, allowAdd) {
+    let picker = document.getElementById("grid-picker");
+    if (!picker) {
+      picker = document.createElement("ul");
+      picker.id = "grid-picker";
+      picker.className = "ac-dropdown grid-picker";
+      document.body.appendChild(picker);
+    }
+    const field = inp.getAttribute("data-f");
+    const rows = buildPickerRows(options, allowAdd, field);
+    placeGridPicker(picker, inp);
     picker.innerHTML = rows.map((o) =>
       `<li class="ac-item" data-v="${esc(o.v)}">${esc(o.label)}</li>`
     ).join("");
@@ -2908,6 +2923,9 @@ ${bannedCount > 0 ? `<button type="button" class="bk-banned-summary" id="rail-ba
     });
     window.addEventListener("resize", positionMorePopover);
     window.addEventListener("scroll", positionMorePopover, true);
+    window.addEventListener("resize", followGridPicker);
+    window.addEventListener("scroll", followGridPicker, true);
+    window.visualViewport?.addEventListener("resize", followGridPicker);
     document.getElementById("trf-amount")?.addEventListener("input", () => {
       syncTransferFormForAmount();
     });
