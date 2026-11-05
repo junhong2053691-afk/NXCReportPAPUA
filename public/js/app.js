@@ -653,6 +653,7 @@ if (typeof document !== "undefined") {
   document.addEventListener("DOMContentLoaded", function () {
     startBankPendingWatcher();
     setupMobileTabbar();
+    setupBackToTop();
   });
 }
 
@@ -752,19 +753,21 @@ function animateValue(el, to, opts) {
   requestAnimationFrame(frame);
 }
 
+var THEME_TOGGLE_SELECTOR = "#theme-toggle, .sidebar-theme-btn";
+
 function applyTheme(theme) {
   const normalizedTheme = theme === "dark" ? "dark" : "light";
   document.documentElement.setAttribute("data-theme", normalizedTheme);
   try { localStorage.setItem("dash-theme", normalizedTheme); } catch (e) {}
-  var btn = document.getElementById("theme-toggle");
-  if (btn) {
+  // \u9876\u680f\u6309\u94ae\uff08\u684c\u9762\uff09\u4e0e\u4fa7\u680f\u6309\u94ae\uff08\u624b\u673a\uff0c\u9876\u680f\u90a3\u4e2a\u5728 \u2264768 \u88ab\u85cf\u6389\uff09\u5171\u7528\u540c\u4e00\u4efd\u72b6\u6001\u3002
+  document.querySelectorAll(THEME_TOGGLE_SELECTOR).forEach(function (btn) {
     var icon = theme === "dark" ? "sun" : "moon";
     var label = theme === "dark" ? "\u5207\u6362\u5230\u65e5\u95f4\u6a21\u5f0f" : "\u5207\u6362\u5230\u591c\u95f4\u6a21\u5f0f";
     btn.innerHTML = '<i data-lucide="' + icon + '"></i>';
     btn.setAttribute("aria-label", label);
     btn.setAttribute("title", label);
     renderIcons(btn);
-  }
+  });
   window.dispatchEvent(new CustomEvent("theme-changed", { detail: { theme: normalizedTheme } }));
 }
 
@@ -774,11 +777,30 @@ function currentTheme() {
 
 function setupTheme() {
   applyTheme(currentTheme());
-  var btn = document.getElementById("theme-toggle");
-  if (!btn) return;
-  btn.addEventListener("click", function () {
-    applyTheme(currentTheme() === "dark" ? "light" : "dark");
+  document.querySelectorAll(THEME_TOGGLE_SELECTOR).forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      applyTheme(currentTheme() === "dark" ? "light" : "dark");
+    });
   });
+}
+
+// 手机上长列表（一天 150+ 条流水）滚远之后的回程。超过 1.5 屏才出现；CSS 只在 ≤700 显示。
+function setupBackToTop() {
+  var btn = document.getElementById("back-to-top");
+  if (!btn) return;
+  var ticking = false;
+  function sync() {
+    ticking = false;
+    btn.hidden = window.scrollY < window.innerHeight * 1.5;
+  }
+  window.addEventListener("scroll", function () {
+    if (!ticking) { ticking = true; window.requestAnimationFrame(sync); }
+  }, { passive: true });
+  btn.addEventListener("click", function () {
+    var reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    window.scrollTo({ top: 0, behavior: reduce ? "auto" : "smooth" });
+  });
+  sync();
 }
 
 function renderIcon(name, options) {

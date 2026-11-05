@@ -15,6 +15,9 @@
   // 手机上渠道列表默认折叠（CSS 只在 ≤700 认这个类）。放模块级是因为渠道栏每 5 秒
   // 随 refreshSharedWorkspace 整块重渲染，存在 DOM 上会被冲掉。
   let directoryOpen = false;
+  // 手机上流水卡片默认只显示摘要，点开的那几张记在这里（同上，整块重渲染不能丢）。
+  const openLedgerCards = new Set();
+  const MOBILE_MQ = window.matchMedia ? window.matchMedia("(max-width: 700px)") : { matches: false };
   let sheetDate = "";
   let dailyReport = null;
   let saveLock = false;
@@ -659,7 +662,7 @@
     const id = r?.id;
     if (!isNew && editingRowId !== id) {
       const v = rowValues(r, false);
-      return `<tr class="sheet-grid-row sheet-row-ro" data-id="${id}">
+      return `<tr class="sheet-grid-row sheet-row-ro${openLedgerCards.has(id) ? " m-open" : ""}" data-id="${id}">
         <td class="col-no">${no}</td>
         ${GRID_FIELDS.map((f) => roCellHtml(f, v[f])).join("")}
         <td class="col-act"><a class="sheet-history admin-audit-link" href="/audit-history.html?ledger_id=${id}" title="\u67e5\u770b\u64cd\u4f5c\u5386\u53f2" aria-label="\u67e5\u770b\u6d41\u6c34\u64cd\u4f5c\u5386\u53f2">${renderIcon("history", { size: 15 })}<span class="icon-fallback">\u53f2</span></a><button type="button" class="sheet-edit" data-id="${id}" title="\u7f16\u8f91\u6d41\u6c34" aria-label="\u7f16\u8f91\u6d41\u6c34">${renderIcon("pencil", { size: 15 })}<span class="icon-fallback">\u7f16</span></button><button type="button" class="sheet-del" data-id="${id}" title="\u5220\u9664\u6d41\u6c34" aria-label="\u5220\u9664\u6d41\u6c34">${renderIcon("trash-2", { size: 15 })}<span class="icon-fallback">\u5220</span></button></td>
@@ -2740,6 +2743,18 @@ ${bannedCount > 0 ? `<button type="button" class="bk-banned-summary" id="rail-ba
             return loadBanks().then(loadSheet).then(loadDailyReport).then(refreshPendingBadge).then(loadPendingPanels);
           }).catch((error) => showToast(error.message || "删除失败", { tone: "error" }));
         });
+        return;
+      }
+      // 手机：点只读卡片的空白处展开 / 收起（按钮、链接、输入框上面已各自处理）。
+      if (MOBILE_MQ.matches && !e.target.closest("button, a, input")) {
+        const card = e.target.closest("tr.sheet-row-ro[data-id]");
+        if (card) {
+          const id = Number(card.dataset.id);
+          if (openLedgerCards.has(id)) openLedgerCards.delete(id);
+          else openLedgerCards.add(id);
+          card.classList.toggle("m-open", openLedgerCards.has(id));
+          card.setAttribute("aria-expanded", openLedgerCards.has(id) ? "true" : "false");
+        }
       }
     });
 

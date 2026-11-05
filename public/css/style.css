@@ -4281,8 +4281,7 @@ body.tr-drawer-open { overflow: hidden; }
     text-align: center;
   }
   .mobile-tabbar-badge[hidden] { display: none; }
-  /* app.js 登录后写 body[data-user-role]；operator 没有别的页面可去，不给「菜单」。 */
-  body:not([data-user-role="admin"]) .mobile-tabbar [data-tab-action="menu"] { display: none; }
+  /* 「菜单」对所有角色显示：≤700 已删掉左上角汉堡，operator 要靠它切换公司、退出登录、切主题。 */
   /* 给标签栏让出底部，最后一行内容不被盖住。 */
   .main { padding-bottom: calc(76px + env(safe-area-inset-bottom)); }
 
@@ -4690,4 +4689,92 @@ body.tr-drawer-open { overflow: hidden; }
   .reconcile-alert-item > strong { flex-basis: 100%; overflow-wrap: anywhere; }
   .reconcile-alert-item .reconcile-focus { margin-left: auto; min-height: 40px; }
   .reconcile-alert .reconcile-ok { min-height: 44px; }
+}
+/* ===== 手机：去汉堡 / 侧栏主题按钮 / 流水压缩卡片 / 固定筛选 / 回到顶部 ===== */
+.sidebar-theme-btn { display: none; }
+.back-to-top { display: none; }
+@media (max-width: 768px) {
+  /* 顶栏的 #theme-toggle 在这个宽度被藏掉了，主题切换挪进侧栏底部，退出登录旁。 */
+  .sidebar-theme-btn { display: inline-grid; width: 38px; min-width: 38px; height: 38px; border-color: transparent; background: transparent; }
+}
+@media (max-width: 700px) {
+  /* 底部标签栏有「菜单」了，汉堡删掉，顶栏左边也不用再给它留 60px。701–768 平板没有标签栏，汉堡保留。 */
+  .mobile-menu-btn { display: none; }
+  .topbar { padding-left: 14px; }
+
+  /* —— 流水压缩卡片 ——
+     一天 150+ 条，完整卡片约 225px 要滚 40 多屏。默认只留摘要：时间 · 金额 / 状态 · 账号 · 姓名，
+     点卡片空白处展开（bank-accounts.js 的 openLedgerCards 记住展开了哪几张）。 */
+  #sheet-grid > tr.sheet-row-ro { cursor: pointer; }
+  #sheet-grid > tr.sheet-row-ro:not(.m-open) { gap: 4px 8px; padding: 10px 12px; }
+  #sheet-grid > tr.sheet-row-ro:not(.m-open) > td:nth-child(3),
+  #sheet-grid > tr.sheet-row-ro:not(.m-open) > td:nth-child(8),
+  #sheet-grid > tr.sheet-row-ro:not(.m-open) > td:nth-child(11),
+  #sheet-grid > tr.sheet-row-ro:not(.m-open) > td:nth-child(12),
+  #sheet-grid > tr.sheet-row-ro:not(.m-open) > td:nth-child(13),
+  #sheet-grid > tr.sheet-row-ro:not(.m-open) > td.col-act { display: none; }
+  /* 收起时状态与账号 · 姓名同一行：去掉第二条强制换行，姓名单行省略。 */
+  #sheet-grid > tr.sheet-row-ro:not(.m-open)::after { display: none; }
+  #sheet-grid > tr.sheet-row-ro:not(.m-open) > td:nth-child(9),
+  #sheet-grid > tr.sheet-row-ro:not(.m-open) > td:nth-child(10) {
+    overflow: hidden;
+    font-size: 13px;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+  #sheet-grid > tr.sheet-row-ro:not(.m-open) > td:nth-child(10) { flex: 1 1 0; }
+  #sheet-grid > tr.sheet-row-ro:not(.m-open) > td:nth-child(5),
+  #sheet-grid > tr.sheet-row-ro:not(.m-open) > td:nth-child(6),
+  #sheet-grid > tr.sheet-row-ro:not(.m-open) > td:nth-child(7) { font-size: 16px; }
+  #sheet-grid > tr.sheet-row-ro.m-open { border-color: var(--primary); }
+
+  /* —— 筛选条钉在顶部 ——
+     「待处理」「渠道」与底部标签栏重复，手机上藏掉，剩日期 / 状态 / 搜索 / 更多，滚流水时一直可用。 */
+  #sheet-pending-btn,
+  #sheet-manage-banks { display: none; }
+  .bkv2 > .bk-toolbar {
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    background: var(--surface-solid);
+    box-shadow: 0 6px 14px rgba(15, 23, 42, .08);
+    /* 钉住的条要矮：两行搞定。「日期 | 状态」/「搜索 | ⋯」，「更多」缩成图标按钮。 */
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 52px;
+    gap: 8px;
+    padding: 8px;
+  }
+  .bkv2 > .bk-toolbar > .bk-tools,
+  .bkv2 > .bk-toolbar > .bk-actions { display: contents; }
+  .bkv2 > .bk-toolbar .sheet-date { grid-column: 1; }
+  .bkv2 > .bk-toolbar .sheet-filter { grid-column: 2 / 4; }
+  .bkv2 > .bk-toolbar .sheet-search { grid-column: 1 / 3; }
+  .bkv2 > .bk-toolbar .bk-more-menu { grid-column: 3; }
+  .bkv2 > .bk-toolbar .bk-more-menu > summary {
+    justify-content: center;
+    min-height: 44px;
+    padding: 0;
+    font-size: 0;           /* 只留 ⋯ 图标，文字「更多」仍在 DOM 里给读屏 */
+  }
+  .bkv2 > .bk-toolbar .bk-more-menu > summary::after { content: none; }
+  .bkv2 > .bk-toolbar .bk-more-menu > summary svg { width: 20px; height: 20px; }
+
+  /* —— 回到顶部：底部标签栏上方右侧；层级同标签栏，低于侧栏遮罩与弹窗 —— */
+  .back-to-top {
+    position: fixed;
+    right: max(14px, env(safe-area-inset-right));
+    bottom: calc(76px + env(safe-area-inset-bottom) + 12px);
+    z-index: calc(var(--z-nav) - 2);
+    display: inline-grid;
+    place-items: center;
+    width: 44px;
+    height: 44px;
+    padding: 0;
+    border: 1px solid var(--border-strong);
+    border-radius: 999px;
+    background: var(--surface-solid);
+    color: var(--text-soft);
+    box-shadow: 0 6px 18px rgba(15, 23, 42, .18);
+  }
+  .back-to-top[hidden] { display: none; }
+  .back-to-top svg { width: 20px; height: 20px; }
 }
