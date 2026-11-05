@@ -4727,6 +4727,29 @@ body.tr-drawer-open { overflow: hidden; }
   #sheet-grid > tr.sheet-row-ro:not(.m-open) > td:nth-child(6),
   #sheet-grid > tr.sheet-row-ro:not(.m-open) > td:nth-child(7) { font-size: 16px; }
   #sheet-grid > tr.sheet-row-ro.m-open { border-color: var(--primary); }
+  /* 底部「流水」用 scrollIntoView 跳到流水表头，筛选条钉在顶部 114px，不留边距会把表头和第一张卡片盖住。 */
+  .bkv2 > .bk-grid-head { scroll-margin-top: 126px; }
+
+  /* —— 最近删除弹窗：每条一张卡片，「恢复」在卡片底部 ——
+     列序 = server/index.js 表头：删除时间 | TIME | STATUS | TRANS ID | IN | OUT | HELP/TRF | BANK | USER/NAME | 操作 */
+  .table-wrap > table.m-deleted > tbody > tr {
+    grid-template-areas: "status amt" "user user" "bank bank" "time time" "deleted deleted" "txid txid" "act act";
+  }
+  .table-wrap > table.m-deleted > tbody > tr > td:nth-child(n):empty { display: none; }
+  .table-wrap > table.m-deleted > tbody > tr > td:nth-child(1) { grid-area: deleted; color: var(--muted); font-size: 12px; }
+  .table-wrap > table.m-deleted > tbody > tr > td:nth-child(2) { grid-area: time; color: var(--muted); font-size: 12px; }
+  .table-wrap > table.m-deleted > tbody > tr > td:nth-child(3) { grid-area: status; }
+  .table-wrap > table.m-deleted > tbody > tr > td:nth-child(4) { grid-area: txid; color: var(--muted); font-size: 12px; }
+  .table-wrap > table.m-deleted > tbody > tr > td:nth-child(5),
+  .table-wrap > table.m-deleted > tbody > tr > td:nth-child(6),
+  .table-wrap > table.m-deleted > tbody > tr > td:nth-child(7) { grid-area: amt; justify-self: end; font-family: var(--font-mono); font-size: 17px; font-weight: var(--weight-black); }
+  .table-wrap > table.m-deleted > tbody > tr > td:nth-child(8) { grid-area: bank; font-size: 13px; }
+  .table-wrap > table.m-deleted > tbody > tr > td:nth-child(9) { grid-area: user; font-weight: var(--weight-bold); }
+  .table-wrap > table.m-deleted > tbody > tr > td:nth-child(10) { grid-area: act; }
+  .table-wrap > table.m-deleted > tbody > tr > td:nth-child(1)::before { content: "DELETED  "; white-space: pre; }
+  .table-wrap > table.m-deleted > tbody > tr > td:nth-child(2)::before { content: "TIME  "; white-space: pre; }
+  .table-wrap > table.m-deleted > tbody > tr > td:nth-child(4)::before { content: "TRANS ID  "; white-space: pre; }
+  .table-wrap > table.m-deleted > tbody > tr > td:nth-child(8)::before { content: "BANK  "; white-space: pre; }
 
   /* —— 筛选条钉在顶部 ——
      「待处理」「渠道」与底部标签栏重复，手机上藏掉，剩日期 / 状态 / 搜索 / 更多，滚流水时一直可用。 */
