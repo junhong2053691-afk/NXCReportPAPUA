@@ -2710,7 +2710,23 @@ tr:hover .bank-bal-btns { opacity: 1; }
 .bkv2 .sheet-table .col-cstatus { width: 86px; }
 .bkv2 .sheet-table .col-other { width: 86px; }
 .bkv2 .sheet-table .col-remark { width: 160px; }
+/* 14 列合计 1334px，1366 笔记本上的容器只有约 1214px，最右几列永远要横滚。
+   ≤1500 时 BANK ACC / NAME / REMARK 各收 40–50px 并允许换行（下面 .field-*），1366 一屏放下；
+   长内容多占一行，完整值仍在 title 里。只在窄屏收：table-layout:fixed 按比例分宽，
+   全局收窄会让 1920 大屏的银行名也被迫折行。 */
+@media (max-width: 1500px) {
+  .bkv2 .sheet-table .col-bank { width: 120px; }
+  .bkv2 .sheet-table .col-name { width: 130px; }
+  .bkv2 .sheet-table .col-remark { width: 120px; }
+}
 .bkv2 .sheet-table .col-act { width: 56px; }
+.bkv2 .sheet-table .ro-cell.field-bank-acc,
+.bkv2 .sheet-table .ro-cell.field-name,
+.bkv2 .sheet-table .ro-cell.field-remark {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  text-overflow: clip;
+}
 .bkv2 .sheet-table thead th {
   background: color-mix(in srgb, var(--surface-strong) 97%, var(--primary) 3%);
   color: color-mix(in srgb, var(--text-soft) 84%, var(--muted) 16%);
@@ -4117,7 +4133,9 @@ body[data-user-role="admin"] .admin-audit-link { display: inline-flex; }
 .sheet-history { align-items: center; justify-content: center; width: 36px; height: 36px; border-radius: var(--radius-xs); color: var(--muted); text-decoration: none; }
 .sheet-history:hover, .sheet-history:focus-visible { background: var(--primary-soft); color: var(--primary-text); }
 .sheet-history svg { width: 15px; height: 15px; }
-body[data-user-role="admin"] .bkv2 .sheet-table .col-act { width: 86px; }
+/* admin 多一个 36px 的「历史」链接：历史 + 编辑 + 删除 86px 装不下，删除钮顶出表格 5px，
+   1366 上整张流水表因此横滚。operator 只有两个按钮，仍用上面的 56px。 */
+body[data-user-role="admin"] .bkv2 .sheet-table .col-act { width: 100px; }
 
 .reason-modal { max-width: 500px; }
 .reason-target { margin: 10px 0 14px; padding: 9px 10px; border-left: 3px solid var(--orange); border-radius: var(--radius-xs); background: var(--orange-soft); color: var(--text-soft); font-size: 12px; }
