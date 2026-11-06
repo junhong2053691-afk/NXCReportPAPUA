@@ -2923,6 +2923,15 @@ tr:hover .bank-bal-btns { opacity: 1; }
   -webkit-backdrop-filter: none;
   backdrop-filter: none;
 }
+/* 待处理：搜索 / 类型筛选 / 显示更多（见 pending-filter.js）。 */
+#pending-modal .pending-toolbar { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 8px; }
+#pending-modal .pending-toolbar input { flex: 1 1 220px; min-width: 0; }
+#pending-modal .pending-toolbar select { flex: 0 0 auto; width: auto; }
+#pending-modal .pending-more { display: flex; align-items: center; justify-content: center; gap: 10px; padding: 8px 0 0; color: var(--text-soft); font-size: 12px; }
+#pending-modal .pending-more:has(#pending-more-count:empty) { display: none; }
+/* 面板里多了工具栏和「显示更多」，表格不能再占 100% 高，否则底下那条被 overflow:hidden 切掉。 */
+#pending-modal #pending-tx-panel { display: flex; flex-direction: column; }
+#pending-modal #pending-tx-panel .table-wrap { flex: 1 1 auto; min-height: 0; height: auto; }
 #pending-modal {
   background: rgba(15, 23, 42, .18);
   -webkit-backdrop-filter: none;

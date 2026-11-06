@@ -521,7 +521,7 @@ const pageRoutes = {
 <div class="modal-overlay" id="pending-modal"><div class="modal modal-lg">
 <h2>待处理</h2>
 <div class="pending-tabs"><button type="button" class="btn btn-outline btn-xs pending-tab active" data-tab="tx" aria-controls="pending-tx-panel">平台订单</button><button type="button" class="btn btn-outline btn-xs pending-tab" data-tab="skipped" aria-controls="pending-skipped-panel">已跳过</button></div>
-<div id="pending-tx-panel"><div class="table-wrap data-surface"><table class="bank-table"><thead><tr><th>TYPE</th><th>DATE / TIME</th><th>TRANS ID</th><th>USER</th><th>AMT</th><th>MODE</th><th>BANK / C STATUS</th><th>REMARK</th><th></th></tr></thead><tbody id="pending-tx-rows"></tbody></table></div></div>
+<div id="pending-tx-panel"><div class="pending-toolbar"><input type="search" id="pending-search" class="sheet-search" placeholder="搜索 TRANS ID / 用户 / 金额" aria-label="搜索平台单" autocomplete="off"><select id="pending-type" aria-label="平台单类型"><option value="">全部类型</option><option value="DEPOSIT">DEPOSIT</option><option value="WITHDRAW">WITHDRAW</option></select></div><div class="table-wrap data-surface"><table class="bank-table"><thead><tr><th>TYPE</th><th>DATE / TIME</th><th>TRANS ID</th><th>USER</th><th>AMT</th><th>MODE</th><th>BANK / C STATUS</th><th>REMARK</th><th></th></tr></thead><tbody id="pending-tx-rows"></tbody></table></div><div class="pending-more"><span id="pending-more-count" translate="no"></span><button type="button" class="btn btn-outline btn-xs" id="pending-more-btn" hidden>显示更多</button></div></div>
 <div id="pending-skipped-panel" hidden><div class="table-wrap data-surface"><table class="bank-table"><thead><tr><th>TYPE</th><th>TIME</th><th>TRANS ID</th><th>USER</th><th>AMT</th><th>SKIPPED AT</th><th>BY</th><th></th></tr></thead><tbody id="pending-skipped-rows"></tbody></table></div></div>
 <div class="actions"><button class="btn btn-outline btn-sm" id="pending-close">关闭</button></div>
 </div></div>
@@ -573,7 +573,7 @@ const pageRoutes = {
 <p id="reason-modal-error" class="form-error" role="alert" aria-live="polite"></p>
 <div class="actions"><button class="btn btn-outline btn-sm" id="reason-modal-cancel" type="button">取消</button><button class="btn btn-danger btn-sm" id="reason-modal-confirm" type="button">确认</button></div>
 </div></div>`,
-    ["/js/ledger-bank-pick.js?v=20261106drill3", "/js/operation-target.js?v=20261106drill1", "/js/render-gate.js?v=20261106drill1", "/js/bank-accounts.js?v=20261106drill12"]
+    ["/js/ledger-bank-pick.js?v=20261106drill3", "/js/operation-target.js?v=20261106drill1", "/js/render-gate.js?v=20261106drill1", "/js/pending-filter.js?v=20261106drill1", "/js/bank-accounts.js?v=20261106drill13"]
   ),
   "/audit-history.html": pageLayout(
     "\u64cd\u4f5c\u5386\u53f2",
@@ -683,7 +683,7 @@ const globalFeedbackHtml = '<div class="app-toast-stack" id="app-toast-stack" ar
 // i18n.js holds the dictionary + translation engine. It is injected into <head> (ahead of the
 // render-blocking stylesheet) so the first paint is already in the saved language, instead of
 // painting Chinese and rewriting it after the two vendored scripts at the end of <body> load.
-const i18nHeadHtml = '<script src="/js/i18n.js?v=20261106drill10"></script>';
+const i18nHeadHtml = '<script src="/js/i18n.js?v=20261106drill11"></script>';
 // One full translation pass at the end of <body>, where the whole document
 // exists but the two vendored scripts below have not been fetched yet. Anything
 // painted while they load is already in the right language. Must come after
@@ -696,7 +696,7 @@ for (const route of Object.keys(pageRoutes)) {
     .replace('<link rel="stylesheet" href="/css/style.css?v=20260812transferfix1">', i18nHeadHtml + '<link rel="stylesheet" href="/css/style.css?v=20260812transferfix1">')
     .replace('<div class="company-bar glass-control" id="company-bar">', '<div class="company-bar glass-control" id="company-bar">' + companyCompactEntryHtml)
     .replace('<script src="/vendor/lucide-1.65.0.min.js"></script>', globalFeedbackHtml + i18nBootHtml + '<script src="/vendor/lucide-1.65.0.min.js"></script>')
-    .replace('/css/style.css?v=20260812transferfix1', '/css/style.css?v=20261106drill2')
+    .replace('/css/style.css?v=20260812transferfix1', '/css/style.css?v=20261106drill3')
     .replace('/js/customer-detail.js?v=20260731bankfix4', '/js/customer-detail.js?v=20260817customerhistory1')
     .replace('/css/style.css?v=20260802topbarflow1', '/css/style.css?v=20261001archive1')
     .replace('/js/app.js?v=20260802platformsound3', '/js/app.js?v=20261106drill2');

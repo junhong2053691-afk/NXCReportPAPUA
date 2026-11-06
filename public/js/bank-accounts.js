@@ -2196,6 +2196,135 @@ ${bannedCount > 0 ? `<button type="button" class="bk-banned-summary" id="rail-ba
   function pendingBankOptionsHtml() {
     return window.bankSelectOptionsHtml(usableBanks(), tabLabel);
   }
+  // 待处理平台单：先画一批，「显示更多」往后追加，不重画已有的行（员工填了一半的不丢）。
+  // 搜索与类型筛选规则见 pending-filter.js（有测试）。2026-11-06 员工演练：400+ 行一次全画、
+  // 没有搜索和分页。
+  let pendingTxAll = [];
+  let pendingTxView = [];
+  let pendingTxShown = 0;
+  function pendingTxRowHtml(r, defaultPendTime) {
+    const isWd = r.tx_type === "WITHDRAW";
+    const pendTime = timeFromSql(r.tx_time, defaultPendTime);
+    const pendDate = dateFromSql(r.tx_time, sheetDate || todaySydney());
+    const pendName = ledgerNameText(r.name);
+    return `<tr data-txid="${esc(r.tx_id)}" data-tx-time="${esc(r.tx_time || "")}" data-pending-amount="${esc(r.amount)}">
+      <td translate="no">${esc(r.tx_type)}</td>
+      <td><div class="pend-datetime"><label class="pend-date" title="调整入账日期（平台日期 ${esc(pendDate)}）"><span class="pend-date-label" aria-hidden="true">${esc(compactDateLabel(pendDate))}</span><input class="pend-date-input" type="date" value="${esc(pendDate)}" aria-label="入账日期，平台原始日期 ${esc(pendDate)}"></label><input class="pend-time" type="time" step="60" value="${esc(pendTime)}" title="${esc(r.tx_time || "")}" aria-label="入账时间"></div></td>
+      <td class="mono" translate="no">${esc(r.tx_id)}</td>
+      <td translate="no">${esc(r.username)} / ${esc(pendName)}</td>
+      <td>${fmt(r.amount)}</td>
+      <td>${isWd
+         ? `<select class="pend-mode"><option value="bank">本户</option><option value="help">调钱</option><option value="split">拆分调钱</option><option value="redeposit">REDEP</option></select>
+           <div class="pend-help-summary" hidden role="status" aria-label="调钱方向和状态"><strong>IN</strong><span translate="no">${esc(statusLabel("withdraw") || "WITHDRAW")}</span></div>`
+        : `<select class="pend-mode"><option value="bank">本户</option><option value="redeposit">REDEP</option></select>`}</td>
+      <td>${isWd
+         ? `<select class="pend-bank">${pendingBankOptionsHtml()}</select>
+           <input class="pend-cstatus" list="cstatus-datalist" aria-label="调钱 C STATUS" placeholder="C STATUS / multiple ok" hidden>
+           <div class="pend-split-panel" hidden>
+             <div class="pend-split-summary"><span>已分配 <b class="pend-split-total">0.00</b> / ${esc(fmt(r.amount))}</span><span class="pend-split-remaining">剩余 ${esc(fmt(r.amount))}</span></div>
+             <div class="pend-split-self-label">本户自付</div>
+             <div class="pend-split-columns pend-split-self-columns"><span>BANK</span><span>AMT</span></div>
+             <div class="pend-split-self">
+               <select class="pend-split-self-bank" aria-label="本户自付银行账户">${bankOptionsHtml()}</select>
+               <input class="pend-split-self-amount" inputmode="decimal" aria-label="本户自付金额" placeholder="0.00">
+             </div>
+             <div class="pend-split-columns"><span>C STATUS</span><span>AMT</span><span></span></div>
+             <div class="pend-split-rows"></div>
+             <button type="button" class="btn btn-outline btn-xs pend-split-add">+ 添加协助方</button>
+             <p class="pend-split-error" role="alert" aria-live="polite"></p>
+           </div>`
+        : `<select class="pend-bank">${pendingBankOptionsHtml()}</select>`}</td>
+      <td><input class="pend-remark" placeholder="REMARK"></td>
+      <td>
+        <button type="button" class="btn btn-success btn-xs pend-approve">审批</button>
+        <button type="button" class="btn btn-outline btn-xs pend-skip">跳过</button>
+      </td>
+    </tr>`;
+  }
+  function bindPendingTxRow(tr) {
+    tr.dataset.bound = "1";
+    const mode = tr.querySelector(".pend-mode");
+    const dateInput = tr.querySelector(".pend-date-input");
+    const syncPendingDateLabel = () => {
+      const date = dateInput?.value || dateFromSql(tr.dataset.txTime, sheetDate || todaySydney());
+      const label = tr.querySelector(".pend-date-label");
+      if (label) label.textContent = compactDateLabel(date);
+      const control = tr.querySelector(".pend-date");
+      if (control) control.title = `调整入账日期（平台日期 ${dateFromSql(tr.dataset.txTime, date)}）`;
+    };
+    dateInput?.addEventListener("input", syncPendingDateLabel);
+    dateInput?.addEventListener("change", syncPendingDateLabel);
+    // 改成今天时时间跳到现在：留着平台单的时间（如 16:55）会落成一笔未来流水，服务端会拒（员工演练发现）。
+    dateInput?.addEventListener("change", () => {
+      const timeInput = tr.querySelector(".pend-time");
+      if (timeInput && dateInput.value === todaySydney()) timeInput.value = nowTime();
+    });
+    const syncHelp = () => {
+      const help = mode && mode.value === "help";
+      const split = mode && mode.value === "split";
+      const redeposit = mode && mode.value === "redeposit";
+      tr.querySelector(".pend-help-summary")?.toggleAttribute("hidden", !help);
+      tr.querySelector(".pend-cstatus")?.toggleAttribute("hidden", !help);
+      const bank = tr.querySelector(".pend-bank");
+      if (bank) bank.hidden = help || split || redeposit;
+      const splitPanel = tr.querySelector(".pend-split-panel");
+      if (splitPanel) splitPanel.hidden = !split;
+      if (split) {
+        const splitRows = tr.querySelector(".pend-split-rows");
+        if (splitRows && !splitRows.children.length) {
+          addPendingSplitRow(tr);
+        }
+        updatePendingSplitState(tr);
+      } else {
+        const approve = tr.querySelector(".pend-approve");
+        if (approve) approve.disabled = false;
+      }
+    };
+    mode?.addEventListener("change", syncHelp);
+    tr.querySelector(".pend-split-add")?.addEventListener("click", () => {
+      addPendingSplitRow(tr);
+      updatePendingSplitState(tr);
+    });
+    tr.querySelector(".pend-split-self-amount")?.addEventListener("input", () => updatePendingSplitState(tr));
+    tr.querySelector(".pend-split-self-bank")?.addEventListener("change", () => updatePendingSplitState(tr));
+    tr.querySelector(".pend-split-rows")?.addEventListener("input", () => updatePendingSplitState(tr));
+    tr.querySelector(".pend-split-rows")?.addEventListener("click", (event) => {
+      if (!event.target.closest(".pend-split-remove")) return;
+      event.target.closest(".pend-split-row")?.remove();
+      updatePendingSplitState(tr);
+    });
+    syncHelp();
+  }
+  function updatePendingMore() {
+    const count = document.getElementById("pending-more-count");
+    if (count) count.textContent = pendingTxView.length ? `${pendingTxShown} / ${pendingTxView.length}` : "";
+    document.getElementById("pending-more-btn")?.toggleAttribute("hidden", pendingTxShown >= pendingTxView.length);
+  }
+  function appendPendingTxRows(count) {
+    const txBody = document.getElementById("pending-tx-rows");
+    if (!txBody) return;
+    const next = pendingTxView.slice(pendingTxShown, pendingTxShown + count);
+    if (next.length) {
+      const defaultPendTime = nowTime();
+      txBody.insertAdjacentHTML("beforeend", next.map((r) => pendingTxRowHtml(r, defaultPendTime)).join(""));
+      txBody.querySelectorAll("tr[data-txid]:not([data-bound])").forEach(bindPendingTxRow);
+      pendingTxShown += next.length;
+    }
+    updatePendingMore();
+  }
+  function renderPendingTx() {
+    const txBody = document.getElementById("pending-tx-rows");
+    if (!txBody) return;
+    pendingTxView = window.filterPendingRows(pendingTxAll, {
+      q: document.getElementById("pending-search")?.value || "",
+      type: document.getElementById("pending-type")?.value || "",
+    });
+    pendingTxShown = 0;
+    txBody.innerHTML = pendingTxView.length
+      ? ""
+      : `<tr><td colspan="9" class="sheet-empty">${pendingTxAll.length ? "没有匹配的平台单" : "暂无待审批平台单"}</td></tr>`;
+    appendPendingTxRows(window.PENDING_PAGE_SIZE || 50);
+  }
   function loadPendingPanels() {
     return Promise.all([
       api("/api/banks/pending-tx", { bg: true }),
@@ -2208,101 +2337,8 @@ ${bannedCount > 0 ? `<button type="button" class="bk-banned-summary" id="rail-ba
       if (!activeTab) switchPendingTab(txRows.length ? "tx" : (skippedRows.length ? "skipped" : "tx"));
       else switchPendingTab(activeTab);
 
-      const txBody = document.getElementById("pending-tx-rows");
-      const defaultPendTime = nowTime();
-      txBody.innerHTML = txRows.map((r) => {
-        const isWd = r.tx_type === "WITHDRAW";
-        const pendTime = timeFromSql(r.tx_time, defaultPendTime);
-        const pendDate = dateFromSql(r.tx_time, sheetDate || todaySydney());
-        const pendName = ledgerNameText(r.name);
-        return `<tr data-txid="${esc(r.tx_id)}" data-tx-time="${esc(r.tx_time || "")}" data-pending-amount="${esc(r.amount)}">
-          <td translate="no">${esc(r.tx_type)}</td>
-          <td><div class="pend-datetime"><label class="pend-date" title="调整入账日期（平台日期 ${esc(pendDate)}）"><span class="pend-date-label" aria-hidden="true">${esc(compactDateLabel(pendDate))}</span><input class="pend-date-input" type="date" value="${esc(pendDate)}" aria-label="入账日期，平台原始日期 ${esc(pendDate)}"></label><input class="pend-time" type="time" step="60" value="${esc(pendTime)}" title="${esc(r.tx_time || "")}" aria-label="入账时间"></div></td>
-          <td class="mono" translate="no">${esc(r.tx_id)}</td>
-          <td translate="no">${esc(r.username)} / ${esc(pendName)}</td>
-          <td>${fmt(r.amount)}</td>
-          <td>${isWd
-             ? `<select class="pend-mode"><option value="bank">本户</option><option value="help">调钱</option><option value="split">拆分调钱</option><option value="redeposit">REDEP</option></select>
-               <div class="pend-help-summary" hidden role="status" aria-label="调钱方向和状态"><strong>IN</strong><span translate="no">${esc(statusLabel("withdraw") || "WITHDRAW")}</span></div>`
-            : `<select class="pend-mode"><option value="bank">本户</option><option value="redeposit">REDEP</option></select>`}</td>
-          <td>${isWd
-             ? `<select class="pend-bank">${pendingBankOptionsHtml()}</select>
-               <input class="pend-cstatus" list="cstatus-datalist" aria-label="调钱 C STATUS" placeholder="C STATUS / multiple ok" hidden>
-               <div class="pend-split-panel" hidden>
-                 <div class="pend-split-summary"><span>已分配 <b class="pend-split-total">0.00</b> / ${esc(fmt(r.amount))}</span><span class="pend-split-remaining">剩余 ${esc(fmt(r.amount))}</span></div>
-                 <div class="pend-split-self-label">本户自付</div>
-                 <div class="pend-split-columns pend-split-self-columns"><span>BANK</span><span>AMT</span></div>
-                 <div class="pend-split-self">
-                   <select class="pend-split-self-bank" aria-label="本户自付银行账户">${bankOptionsHtml()}</select>
-                   <input class="pend-split-self-amount" inputmode="decimal" aria-label="本户自付金额" placeholder="0.00">
-                 </div>
-                 <div class="pend-split-columns"><span>C STATUS</span><span>AMT</span><span></span></div>
-                 <div class="pend-split-rows"></div>
-                 <button type="button" class="btn btn-outline btn-xs pend-split-add">+ 添加协助方</button>
-                 <p class="pend-split-error" role="alert" aria-live="polite"></p>
-               </div>`
-            : `<select class="pend-bank">${pendingBankOptionsHtml()}</select>`}</td>
-          <td><input class="pend-remark" placeholder="REMARK"></td>
-          <td>
-            <button type="button" class="btn btn-success btn-xs pend-approve">审批</button>
-            <button type="button" class="btn btn-outline btn-xs pend-skip">跳过</button>
-          </td>
-        </tr>`;
-      }).join("") || '<tr><td colspan="9" class="sheet-empty">暂无待审批平台单</td></tr>';
-
-      txBody.querySelectorAll("tr[data-txid]").forEach((tr) => {
-        const mode = tr.querySelector(".pend-mode");
-        const dateInput = tr.querySelector(".pend-date-input");
-        const syncPendingDateLabel = () => {
-          const date = dateInput?.value || dateFromSql(tr.dataset.txTime, sheetDate || todaySydney());
-          const label = tr.querySelector(".pend-date-label");
-          if (label) label.textContent = compactDateLabel(date);
-          const control = tr.querySelector(".pend-date");
-          if (control) control.title = `调整入账日期（平台日期 ${dateFromSql(tr.dataset.txTime, date)}）`;
-        };
-        dateInput?.addEventListener("input", syncPendingDateLabel);
-        dateInput?.addEventListener("change", syncPendingDateLabel);
-        // 改成今天时时间跳到现在：留着平台单的时间（如 16:55）会落成一笔未来流水，服务端会拒（员工演练发现）。
-        dateInput?.addEventListener("change", () => {
-          const timeInput = tr.querySelector(".pend-time");
-          if (timeInput && dateInput.value === todaySydney()) timeInput.value = nowTime();
-        });
-        const syncHelp = () => {
-          const help = mode && mode.value === "help";
-          const split = mode && mode.value === "split";
-          const redeposit = mode && mode.value === "redeposit";
-          tr.querySelector(".pend-help-summary")?.toggleAttribute("hidden", !help);
-          tr.querySelector(".pend-cstatus")?.toggleAttribute("hidden", !help);
-          const bank = tr.querySelector(".pend-bank");
-          if (bank) bank.hidden = help || split || redeposit;
-          const splitPanel = tr.querySelector(".pend-split-panel");
-          if (splitPanel) splitPanel.hidden = !split;
-          if (split) {
-            const splitRows = tr.querySelector(".pend-split-rows");
-            if (splitRows && !splitRows.children.length) {
-              addPendingSplitRow(tr);
-            }
-            updatePendingSplitState(tr);
-          } else {
-            const approve = tr.querySelector(".pend-approve");
-            if (approve) approve.disabled = false;
-          }
-        };
-        mode?.addEventListener("change", syncHelp);
-        tr.querySelector(".pend-split-add")?.addEventListener("click", () => {
-          addPendingSplitRow(tr);
-          updatePendingSplitState(tr);
-        });
-        tr.querySelector(".pend-split-self-amount")?.addEventListener("input", () => updatePendingSplitState(tr));
-        tr.querySelector(".pend-split-self-bank")?.addEventListener("change", () => updatePendingSplitState(tr));
-        tr.querySelector(".pend-split-rows")?.addEventListener("input", () => updatePendingSplitState(tr));
-        tr.querySelector(".pend-split-rows")?.addEventListener("click", (event) => {
-          if (!event.target.closest(".pend-split-remove")) return;
-          event.target.closest(".pend-split-row")?.remove();
-          updatePendingSplitState(tr);
-        });
-        syncHelp();
-      });
+      pendingTxAll = txRows;
+      renderPendingTx();
 
       const skippedBody = document.getElementById("pending-skipped-rows");
       if (skippedBody) {
@@ -3066,6 +3102,9 @@ ${bannedCount > 0 ? `<button type="button" class="bk-banned-summary" id="rail-ba
     document.querySelectorAll(".pending-tab").forEach((btn) => {
       btn.addEventListener("click", () => switchPendingTab(btn.dataset.tab));
     });
+    document.getElementById("pending-search")?.addEventListener("input", renderPendingTx);
+    document.getElementById("pending-type")?.addEventListener("change", renderPendingTx);
+    document.getElementById("pending-more-btn")?.addEventListener("click", () => appendPendingTxRows(window.PENDING_PAGE_SIZE || 50));
     document.getElementById("pending-tx-rows")?.addEventListener("click", (e) => {
       const tr = e.target.closest("tr[data-txid]");
       if (!tr) return;
