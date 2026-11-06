@@ -41,6 +41,7 @@ const {
   deleteStatusOption,
 } = require("../lib/bankStatusOptions");
 const { listCompaniesForUser } = require("../lib/userAccess");
+const { appealDeposits } = require("../lib/appealExport");
 const { requireAdmin } = require("../middleware");
 const {
   BANK_ACCOUNT_FIELDS,
@@ -1054,6 +1055,13 @@ router.delete("/ledger/:id", (req, res) => {
     return { archivedIds, reopened };
   });
   res.json({ ok: true, deletedId: result.archivedIds[0], deletedIds: result.archivedIds, reopened: result.reopened });
+});
+
+// 银行申诉导出：这个户口全部客户入账（规则见 lib/appealExport.js）。
+router.get("/:id/appeal-deposits", (req, res) => {
+  const rows = appealDeposits(getDb(), companyId(req), Number(req.params.id));
+  if (!rows) return res.status(404).json({ error: "Not found" });
+  res.json({ rows });
 });
 
 router.get("/:id/recent-transactions", (req, res) => {

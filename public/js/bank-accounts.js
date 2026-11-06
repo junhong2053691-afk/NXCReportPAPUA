@@ -1703,25 +1703,24 @@ ${bannedCount > 0 ? `<button type="button" class="bk-banned-summary" id="rail-ba
     </tr>`;
   }
 
-  function downloadBkdCsv(bank, recentIn, recentOut) {
-    const rows = [
-      ["DIR", "TIME", "STATUS", "TRANS ID", "AMOUNT", "USERNAME", "NAME", "C STATUS", "REMARK"],
-      ...recentIn.map((r) => ["IN", String(r.entry_time || "").slice(0, 16), statusLabel(r.status), r.tx_id || "", Number(r.amount_in || 0) + Number(r.trf_amount || 0), r.username || "", ledgerNameText(r.name), r.c_status || "", r.remark || ""]),
-      ...recentOut.map((r) => ["OUT", String(r.entry_time || "").slice(0, 16), statusLabel(r.status), r.tx_id || "", -(Number(r.amount_out || 0) + Number(r.help_amount || 0)), r.username || "", ledgerNameText(r.name), r.c_status || "", r.remark || ""]),
-    ];
-    const csv = rows.map((row) => row.map((cell) => {
-      const text = String(cell ?? "");
-      return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
-    }).join(",")).join("\r\n");
-    const blob = new Blob(["\ufeff" + csv], { type: "text/csv;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `${bankBranchOf(bank) || "bank"}-recent-transactions.csv`;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
+  // \u94f6\u884c\u7533\u8bc9\u7528\uff1a\u8fd9\u4e2a\u6237\u53e3\u5168\u90e8\u5ba2\u6237\u5165\u8d26 + \u6237\u53e3\u62ac\u5934\u4e0e\u5408\u8ba1\uff08\u670d\u52a1\u7aef appealExport.js\uff0cCSV \u89c1 appeal-csv.js\uff09\u3002
+  // \u4ee5\u524d\u53ea\u5bfc\u6700\u8fd1 10 \u8fdb 10 \u51fa\u3001\u6df7\u7740\u5185\u90e8\u8c03\u94b1\uff0c\u62ff\u53bb\u7533\u8bc9\u4e0d\u591f\u7528\uff08\u5458\u5de5\u6f14\u7ec3\uff0c\u7528\u9014 2026-11-06 \u4e0e\u7528\u6237\u786e\u8ba4\uff09\u3002
+  function downloadBkdCsv(bank) {
+    return api(`/api/banks/${bank.id}/appeal-deposits`)
+      .then((d) => {
+        const csv = window.buildAppealCsv(bank, d.rows || [], { nameOf: ledgerNameText });
+        const blob = new Blob(["\ufeff" + csv], { type: "text/csv;charset=utf-8" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        const safeName = String(bankBranchOf(bank) || "bank").replace(/[\\/:*?"<>|]+/g, "_");
+        a.download = `${safeName}-appeal-deposits.csv`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+      })
+      .catch((e) => showToast(e.message || "\u4e0b\u8f7d\u5931\u8d25\uff0c\u8bf7\u91cd\u8bd5", { tone: "error" }));
   }
 
   // 值一侧全是租户数据（银行名、户名、BSB、账号、PayID、备注、金额），一律 translate="no"：
@@ -1766,7 +1765,7 @@ ${bannedCount > 0 ? `<button type="button" class="bk-banned-summary" id="rail-ba
         }</span></div>
       </div>`;
 
-      const txSection = `<div class="bkd-tx-toolbar"><button type="button" class="btn btn-outline btn-xs bkd-download-btn">下载 Excel</button></div><div class="bkd-tx-wrap">
+      const txSection = `<div class="bkd-tx-toolbar"><button type="button" class="btn btn-outline btn-xs bkd-download-btn" title="这个户口全部客户入账，带户名、BSB、账号与合计，给银行申诉用">下载申诉记录 (CSV)</button></div><div class="bkd-tx-wrap">
         <div class="bkd-tx-col">
           <div class="bkd-tx-title bkd-tx-in-title">最近 10 笔入账</div>
           ${recentIn.length
@@ -1791,7 +1790,7 @@ ${bannedCount > 0 ? `<button type="button" class="bk-banned-summary" id="rail-ba
       const evSection = `<details class="bkd-events-wrap"><summary>操作历史</summary><ul class="bkd-events-list">${evList}</ul></details>`;
 
       bodyEl.innerHTML = `<div class="bkd-detail">${infoGrid}${txSection}${evSection}</div>`;
-      bodyEl.querySelector(".bkd-download-btn")?.addEventListener("click", () => downloadBkdCsv(b, recentIn, recentOut));
+      bodyEl.querySelector(".bkd-download-btn")?.addEventListener("click", () => downloadBkdCsv(b));
     }).catch(() => {
       bodyEl.innerHTML = '<div class="bkd-empty">加载失败，请重试</div>';
     });
