@@ -4529,29 +4529,127 @@ body.tr-drawer-open { overflow: hidden; }
   }
   .grid-picker .ac-item { min-height: 44px; padding: 12px 14px; font-size: 15px; white-space: normal; }
 
-  /* 合计行：一张小卡片，空的 colspan 格藏掉。 */
+  /* 合计行：一张小卡片，TOTAL 标题 + IN / OUT / HELP TRF 各占一行（标签左、金额右对齐）。
+     不做三列：一天合计到七位数时三列装不下，会把金额折成两行。空的 colspan 格藏掉。
+     格子靠 nth-child：colspan=4 标签、in、out、help、colspan=7 空格。
+     底部多留一截，让最后这张卡片能滚出「↑」回到顶部按钮。 */
   .bkv2 .sheet-table-wrap tfoot .sheet-total-row {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 4px 16px;
-    padding: 12px;
+    display: block;
+    margin-bottom: 64px;
+    padding: 4px 12px;
     border: 1px solid var(--border-strong);
     border-radius: var(--radius-sm);
-    background: var(--surface-3);
+    background: var(--surface-solid);
   }
   .bkv2 .sheet-table-wrap tfoot .sheet-total-row td {
-    display: block;
-    padding: 0 !important;
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    /* 桌面列宽规则会给这些格子钉 width / max-width，要放开才撑满整行。 */
+    width: auto;
+    min-width: 0;
+    max-width: none;
+    padding: 8px 0 !important;
     border: 0 !important;
+    border-top: 1px solid var(--border) !important;
     background: transparent !important;
-    font-size: 15px;
+    font-size: 16px;
+    font-weight: var(--weight-black);
+    font-family: var(--font-mono);
+    line-height: 1.25;
+    text-align: right;
+    white-space: nowrap;
   }
   .bkv2 .sheet-table-wrap tfoot .sheet-total-row td:empty { display: none; }
-  .bkv2 .sheet-table-wrap tfoot .sheet-total-row .total-label { flex: 1 1 100%; text-align: left; }
-  .bkv2 .sheet-table-wrap tfoot .sheet-total-row td:nth-child(2)::before { content: "IN "; }
-  .bkv2 .sheet-table-wrap tfoot .sheet-total-row td:nth-child(3)::before { content: "OUT "; }
-  .bkv2 .sheet-table-wrap tfoot .sheet-total-row td:nth-child(4)::before { content: "HELP "; }
-  .bkv2 .sheet-table-wrap tfoot .sheet-total-row td::before { color: var(--muted); font-size: 11px; }
+  .bkv2 .sheet-table-wrap tfoot .sheet-total-row .total-label {
+    display: block;
+    border-top: 0 !important;
+    color: var(--muted);
+    font-family: inherit;
+    font-size: 11px;
+    letter-spacing: .06em;
+    text-align: left;
+  }
+  .bkv2 .sheet-table-wrap tfoot .sheet-total-row td:nth-child(2) { color: var(--green); }
+  .bkv2 .sheet-table-wrap tfoot .sheet-total-row td:nth-child(2)::before { content: "IN"; }
+  .bkv2 .sheet-table-wrap tfoot .sheet-total-row td:nth-child(3)::before { content: "OUT"; }
+  .bkv2 .sheet-table-wrap tfoot .sheet-total-row td:nth-child(4)::before { content: "HELP TRF"; }
+  .bkv2 .sheet-table-wrap tfoot .sheet-total-row td:not(.total-label)::before {
+    color: var(--muted);
+    font-family: var(--font-sans, inherit);
+    font-size: 11px;
+    font-weight: var(--weight-bold);
+    letter-spacing: .04em;
+  }
+}
+
+/* ===== C STATUS 底部抽屉 (≤700) =====
+   桌面上 C STATUS 在「今日报表」里；手机上那块藏掉，改由流水标题旁的按钮打开 #cstatus-drawer。
+   抽屉就是一个 .modal-overlay：手机上它本来就贴底，app.js 负责 × / Esc / 焦点。
+   两处 tbody 由 renderCstatusPanel 写同一份 HTML。 */
+.cstatus-drawer-btn { display: none; }
+@media (max-width: 700px) {
+  .bk-report-grid > .sheet-cstatus-panel { display: none !important; }
+  .bkv2 .bk-grid-head { justify-content: space-between; }
+  .cstatus-drawer-btn {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-height: 40px;
+    padding: 0 14px;
+    border: 1px solid var(--border-strong);
+    border-radius: 999px;
+    background: var(--surface-solid);
+    color: var(--text);
+    font-size: 12px;
+    font-weight: var(--weight-black);
+    letter-spacing: .04em;
+  }
+  .cstatus-drawer-btn:active { background: var(--surface-2); }
+  .cstatus-drawer-badge {
+    min-width: 18px;
+    height: 18px;
+    padding: 0 5px;
+    border-radius: 999px;
+    background: var(--red);
+    color: #fff;
+    font-size: 10px;
+    line-height: 18px;
+    text-align: center;
+  }
+  .cstatus-drawer-badge[hidden] { display: none; }
+  /* 「手机弹窗全屏」那组规则会把它铺满整屏；抽屉要贴底、按内容高度、最多 75%。ID 特异性压过它。 */
+  #cstatus-drawer { align-items: flex-end; }
+  #cstatus-drawer .modal.cstatus-drawer {
+    height: auto;
+    max-height: 75dvh;
+    overflow-y: auto;
+    padding-bottom: max(16px, env(safe-area-inset-bottom));
+    border-radius: var(--radius) var(--radius) 0 0;
+    box-shadow: 0 -10px 30px rgba(15, 23, 42, .18);
+  }
+  #cstatus-drawer .modal > h2:first-of-type { padding-top: 16px; }
+  #cstatus-drawer .modal > .modal-close { top: 6px; }
+  /* 金额绝不能被截（截掉的是高位，会读错账）：放不下时整张表在这里横滑，而不是省略号。 */
+  #cstatus-drawer .sheet-cstatus-panel { margin: 0; padding: 0; border: 0; box-shadow: none; background: transparent; overflow-x: auto; }
+  /* 桌面给三个金额列各钉 100px（min/max 都是），375 宽时 NAME 只剩几像素。抽屉里改成按内容分。 */
+  #cstatus-drawer .cstatus-summary-table { table-layout: auto; }
+  #cstatus-drawer .cstatus-summary-table .cstatus-col-num,
+  #cstatus-drawer .cstatus-summary-table .cstatus-col-name { width: auto; }
+  #cstatus-drawer .cstatus-summary-table td,
+  #cstatus-drawer .cstatus-summary-table th {
+    width: auto;
+    min-width: 0;
+    max-width: none;
+    padding: 10px 6px;
+    overflow: visible;
+    text-overflow: clip;
+    white-space: nowrap;
+  }
+  #cstatus-drawer .cstatus-summary-table td:nth-child(1) { white-space: normal; overflow-wrap: anywhere; }
+  #cstatus-drawer .cstatus-focus { min-height: 32px; }
 }
 /* ===== 报表首列钉住 + 首页两列 KPI (≤700) =====
    手机上报表都是 .table-wrap 横滚；一滑就看不到这行是谁。钉住第一列（时间/日期/姓名/账号）。

@@ -471,7 +471,7 @@ const pageRoutes = {
 </section>
 </div>
 </div>
-<div class="bk-grid-head"><span class="bk-grid-title" id="bk-grid-title">流水 · ALL</span><span class="sheet-grid-hint">快捷键 · <kbd translate="no">Tab</kbd> 下一格 · <kbd translate="no">Enter</kbd>×2 保存 · <kbd translate="no">Esc</kbd> 取消 · <kbd translate="no">Ctrl+;</kbd> 当前时间 · <kbd translate="no">1</kbd>–<kbd translate="no">9</kbd> 状态</span></div>
+<div class="bk-grid-head"><span class="bk-grid-title" id="bk-grid-title">流水 · ALL</span><button type="button" class="cstatus-drawer-btn" id="cstatus-drawer-btn" aria-haspopup="dialog" aria-controls="cstatus-drawer">C STATUS<b class="cstatus-drawer-badge" id="cstatus-drawer-badge" translate="no" hidden></b></button><span class="sheet-grid-hint">快捷键 · <kbd translate="no">Tab</kbd> 下一格 · <kbd translate="no">Enter</kbd>×2 保存 · <kbd translate="no">Esc</kbd> 取消 · <kbd translate="no">Ctrl+;</kbd> 当前时间 · <kbd translate="no">1</kbd>–<kbd translate="no">9</kbd> 状态</span></div>
 <div class="sheet-table-wrap"><table class="sheet-table">
 <thead><tr><th class="col-no">NO</th><th class="col-time">TIME</th><th class="col-id">TRANS ID</th><th class="col-status">STATUS</th><th class="col-num">IN</th><th class="col-num">OUT</th><th class="col-num">HELP TRF</th><th class="col-bank">BANK ACC</th><th class="col-user">USERNAME</th><th class="col-name">NAME</th><th class="col-cstatus">C STATUS</th><th class="col-other">OTHER</th><th class="col-remark">REMARK</th><th class="col-act"></th></tr></thead>
 <tbody id="sheet-grid"></tbody>
@@ -480,6 +480,14 @@ const pageRoutes = {
 <datalist id="status-datalist"></datalist>
 <datalist id="cstatus-datalist"></datalist>
 </div>
+
+<div class="modal-overlay" id="cstatus-drawer"><div class="modal cstatus-drawer">
+<h2>C STATUS <span class="sheet-panel-sub">Help In / Out</span></h2>
+<section class="sheet-panel sheet-cstatus-panel">
+<table class="sheet-info-table cstatus-summary-table" aria-label="C STATUS Help In / Out"><colgroup><col class="cstatus-col-name"><col class="cstatus-col-num"><col class="cstatus-col-num"><col class="cstatus-col-num"></colgroup><thead><tr><th>NAME</th><th class="num-col">IN</th><th class="num-col">OUT</th><th class="num-col">Total</th></tr></thead>
+<tbody id="cstatus-drawer-rows"></tbody></table>
+</section>
+</div></div>
 
 <div class="modal-overlay" id="bank-modal"><div class="modal bank-modal">
 <h2 id="bank-modal-title">支付渠道</h2>
@@ -530,7 +538,7 @@ const pageRoutes = {
 <h2 id="trf-title">HELP TRF</h2>
 <div class="form-group"><label>方向</label><div class="lf-dir-preview" id="trf-dir-preview" data-direction="empty" role="status" aria-live="polite"><strong id="trf-dir-state">输入金额</strong><span id="trf-dir-detail">正数 = IN · 负数 = OUT</span></div></div>
 <div class="form-group"><label>TIME (24h)</label><input id="trf-time" type="time" step="60"></div>
-<div class="form-group"><label for="trf-amount">金额</label><input id="trf-amount" inputmode="decimal" autocomplete="off" placeholder="例如 100 或 -100" aria-describedby="trf-amount-hint"><small id="trf-amount-hint" class="form-hint">正数或不带符号 = IN，负数 = OUT</small></div>
+<div class="form-group"><label for="trf-amount">金额</label><input id="trf-amount" inputmode="text" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="例如 100 或 -100" aria-describedby="trf-amount-hint"><small id="trf-amount-hint" class="form-hint">正数或不带符号 = IN，负数 = OUT</small></div>
 <div class="form-group"><label for="trf-status">STATUS</label><select id="trf-status" disabled aria-describedby="trf-status-hint"><option value="">请先输入金额</option></select><small id="trf-status-hint" class="form-hint">根据金额正负显示可用状态</small></div>
 <div class="form-group"><label>关联 BANK</label><select id="trf-bank"><option value="">— 不关联渠道 —</option></select></div>
 <div class="form-group"><label>NAME</label><input id="trf-name" autocomplete="off"></div>

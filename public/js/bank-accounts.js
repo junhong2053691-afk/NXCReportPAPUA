@@ -1538,22 +1538,31 @@ ${bannedCount > 0 ? `<button type="button" class="bk-banned-summary" id="rail-ba
     });
   }
 
+  // 同一份 HTML 写两处：桌面「今日报表」里的面板，和手机的 C STATUS 底部抽屉（#cstatus-drawer）。
   function renderCstatusPanel() {
-    const tbody = document.getElementById("sheet-cstatus-rows");
-    if (!tbody) return;
+    const targets = ["sheet-cstatus-rows", "cstatus-drawer-rows"]
+      .map((id) => document.getElementById(id))
+      .filter(Boolean);
+    if (!targets.length) return;
     const rows = dailyReport?.companyRows || [];
     const alertSet = new Set((dailyReport?.reconcileAlerts || []).map((r) => r.name));
+    const badge = document.getElementById("cstatus-drawer-badge");
+    if (badge) {
+      badge.textContent = alertSet.size ? String(alertSet.size) : "";
+      badge.hidden = !alertSet.size;
+    }
     if (!rows.length) {
-      tbody.innerHTML = '<tr><td colspan="4" class="sheet-empty">No C STATUS today</td></tr>';
+      targets.forEach((tbody) => { tbody.innerHTML = '<tr><td colspan="4" class="sheet-empty">No C STATUS today</td></tr>'; });
       return;
     }
-    tbody.innerHTML = rows.map((r) => `
+    const html = rows.map((r) => `
       <tr class="${alertSet.has(r.name) ? "cstatus-unbalanced" : ""}">
         <td class="cstatus-name" translate="no">${alertSet.has(r.name) ? `<button type="button" class="cstatus-focus" data-cstatus="${esc(r.name)}">${esc(r.name)}</button>` : esc(r.name)}</td>
         <td class="num-col in-cell ${r.in ? "has-amount" : ""}" translate="no"${r.in ? ` title="${esc(fmtSigned(r.in))}"` : ""}>${r.in ? fmtSigned(r.in) : ""}</td>
         <td class="num-col out-cell ${r.out ? "has-amount" : ""}" translate="no"${r.out ? ` title="${esc(fmtSigned(r.out))}"` : ""}>${r.out ? fmtSigned(r.out) : ""}</td>
         <td class="num-col total-cell ${r.total ? "has-amount" : ""}" translate="no" title="${esc(fmtSigned(r.total))}">${fmtSigned(r.total)}</td>
       </tr>`).join("");
+    targets.forEach((tbody) => { tbody.innerHTML = html; });
   }
 
   function populateStatusFilter() {
@@ -2716,6 +2725,16 @@ ${bannedCount > 0 ? `<button type="button" class="bk-banned-summary" id="rail-ba
     document.getElementById("sheet-cstatus-rows")?.addEventListener("click", (e) => {
       const focus = e.target.closest(".cstatus-focus");
       if (focus) focusLedgerByCstatus(focus.dataset.cstatus || "");
+    });
+    // 手机 C STATUS 底部抽屉：开关走通用弹窗（app.js 管 × / Esc / 焦点）。点未对平的名字先关抽屉再筛流水。
+    document.getElementById("cstatus-drawer-btn")?.addEventListener("click", () => {
+      document.getElementById("cstatus-drawer")?.classList.add("show");
+    });
+    document.getElementById("cstatus-drawer-rows")?.addEventListener("click", (e) => {
+      const focus = e.target.closest(".cstatus-focus");
+      if (!focus) return;
+      document.getElementById("cstatus-drawer")?.classList.remove("show");
+      focusLedgerByCstatus(focus.dataset.cstatus || "");
     });
 
     document.getElementById("sheet-date")?.addEventListener("change", (e) => {
