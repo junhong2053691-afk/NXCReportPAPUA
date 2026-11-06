@@ -2075,6 +2075,20 @@ Object.assign(I18N.en, {
   "回到顶部": "Back to top",
 });
 
+// batch J: 手机填 C STATUS 的底部抽屉（cstatus-sheet.js）
+Object.assign(I18N.zh, {
+  "选择 C STATUS": "选择 C STATUS",
+  "搜索或输入新名称": "搜索或输入新名称",
+  "+ 使用": "+ 使用",
+  "没有匹配的 C STATUS": "没有匹配的 C STATUS",
+});
+Object.assign(I18N.en, {
+  "选择 C STATUS": "Choose C STATUS",
+  "搜索或输入新名称": "Search or type a new name",
+  "+ 使用": "+ Use",
+  "没有匹配的 C STATUS": "No matching C STATUS",
+});
+
 // ---------------------------------------------------------------------------
 // Translation engine.
 //

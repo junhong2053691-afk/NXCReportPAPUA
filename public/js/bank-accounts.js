@@ -460,6 +460,8 @@
     if (f === "bank_acc" && bankId) attrs += ` data-bank-id="${bankId}"`;
     // 编辑时 BANK ACC 没动就原样保留（见 ledger-bank-pick.js），靠这个初值判断「动没动」。
     if (f === "bank_acc") attrs += ` data-orig-text="${esc(String(val ?? ""))}"`;
+    // 手机上由 cstatus-sheet.js 摘掉键盘，点开走底部抽屉（见 openFieldPicker）。
+    if (f === "c_status") attrs += " data-cstatus-pick";
     if (num) attrs += ' inputmode="decimal"';
     if (f === "time") attrs += ' type="time" step="60"';
     // The <input value> is never translated (value is not in I18N_ATTRS, and
@@ -651,6 +653,16 @@
   function openFieldPicker(inp) {
     const f = inp.getAttribute("data-f");
     if (f === "status") showGridPicker(inp, STATUS_LIST.map((s) => s.label));
+    else if (f === "c_status" && window.isCstatusSheetMobile?.()) {
+      // 手机：底部抽屉代替贴框浮层（浮层会被键盘顶走）。新名字照桌面那样先登记成选项。
+      hideGridPicker();
+      window.openCstatusSheet(inp, cStatusNames(), { allowBlank: true, allowAdd: true }, (value, kind) => {
+        if (kind !== "add" || !value) return;
+        api("/api/banks/c-status-options", { method: "POST", body: JSON.stringify({ name: value }) })
+          .then(() => loadCStatus())
+          .catch(() => {});
+      });
+    }
     else if (f === "c_status") showGridPicker(inp, cStatusNames(), true);
     else if (f === "bank_acc") showGridPicker(inp, bankPickerOptions());
     else if (f === "other") showGridPicker(inp, PROBLEM_OPTIONS, true);
@@ -2232,7 +2244,7 @@ ${bannedCount > 0 ? `<button type="button" class="bk-banned-summary" id="rail-ba
         : `<select class="pend-mode"><option value="bank">本户</option><option value="redeposit">REDEP</option></select>`}</td>
       <td>${isWd
          ? `<select class="pend-bank">${pendingBankOptionsHtml()}</select>
-           <input class="pend-cstatus" list="cstatus-datalist" aria-label="调钱 C STATUS" placeholder="C STATUS / multiple ok" hidden>
+           <input class="pend-cstatus" list="cstatus-datalist" data-cstatus-pick aria-label="调钱 C STATUS" placeholder="C STATUS / multiple ok" hidden>
            <div class="pend-split-panel" hidden>
              <div class="pend-split-summary"><span>已分配 <b class="pend-split-total">0.00</b> / ${esc(fmt(r.amount))}</span><span class="pend-split-remaining">剩余 ${esc(fmt(r.amount))}</span></div>
              <div class="pend-split-self-label">本户自付</div>
@@ -2380,7 +2392,7 @@ ${bannedCount > 0 ? `<button type="button" class="bk-banned-summary" id="rail-ba
     if (!container) return null;
     const row = document.createElement("div");
     row.className = "pend-split-row";
-    row.innerHTML = `<input class="pend-split-cstatus" list="cstatus-datalist" value="${esc(values.c_status || "")}" aria-label="协助方 C STATUS" placeholder="协助方公司">
+    row.innerHTML = `<input class="pend-split-cstatus" list="cstatus-datalist" data-cstatus-pick value="${esc(values.c_status || "")}" aria-label="协助方 C STATUS" placeholder="协助方公司">
       <input class="pend-split-amount" inputmode="decimal" value="${esc(values.amount || "")}" aria-label="协助金额" placeholder="金额">
       <button type="button" class="btn btn-outline btn-xs pend-split-remove" title="删除协助方" aria-label="删除协助方">${renderIcon("x", { size: 14 })}</button>`;
     container.appendChild(row);
@@ -2726,6 +2738,8 @@ ${bannedCount > 0 ? `<button type="button" class="bk-banned-summary" id="rail-ba
       const focus = e.target.closest(".cstatus-focus");
       if (focus) focusLedgerByCstatus(focus.dataset.cstatus || "");
     });
+    // 手机上调钱 / 转出 / 待处理调钱 / 拆分协助方的 C STATUS 输入框：点开底部抽屉选（cstatus-sheet.js）。
+    window.bindCstatusSheet?.(cStatusNames);
     // 手机 C STATUS 底部抽屉：开关走通用弹窗（app.js 管 × / Esc / 焦点）。点未对平的名字先关抽屉再筛流水。
     document.getElementById("cstatus-drawer-btn")?.addEventListener("click", () => {
       document.getElementById("cstatus-drawer")?.classList.add("show");

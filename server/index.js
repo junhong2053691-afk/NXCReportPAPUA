@@ -543,7 +543,7 @@ const pageRoutes = {
 <div class="form-group"><label>关联 BANK</label><select id="trf-bank"><option value="">— 不关联渠道 —</option></select></div>
 <div class="form-group"><label>NAME</label><input id="trf-name" autocomplete="off"></div>
 <div class="form-group"><label>C STATUS (可选)</label>
-<input id="trf-cstatus" list="cstatus-datalist" autocomplete="off" placeholder="使用已关联的 C STATUS"></div>
+<input id="trf-cstatus" list="cstatus-datalist" data-cstatus-pick autocomplete="off" placeholder="使用已关联的 C STATUS"></div>
 <p class="modal-note">提现代付双方分别录入：客户所在公司在「待处理」里对这张提现单选「调钱」（记 WITHDRAW，放 HELP TRF），协助公司在这里录 CASH OUT；例如 EZ 帮 RX 付，RX 审批选调钱、C STATUS 填 EZ68，EZ 在这里录 CASH OUT、C STATUS 填 RX66。</p>
 <div class="form-group"><label>REMARK</label><input id="trf-remark"></div>
 <p id="trf-err" class="form-error" role="alert" aria-live="polite"></p>
@@ -555,7 +555,7 @@ const pageRoutes = {
 <div class="reason-target"><div class="reason-target-detail" id="drain-target" translate="no"></div></div>
 <div class="form-group"><label for="drain-mode">去向</label><select id="drain-mode"><option value="bank">本公司户口</option><option value="company">别家公司</option></select></div>
 <div class="form-group" id="drain-bank-group"><label for="drain-bank">收款户口</label><select id="drain-bank"></select></div>
-<div class="form-group" id="drain-cstatus-group" hidden><label for="drain-cstatus">C STATUS（对方公司）</label><input id="drain-cstatus" list="cstatus-datalist" autocomplete="off"></div>
+<div class="form-group" id="drain-cstatus-group" hidden><label for="drain-cstatus">C STATUS（对方公司）</label><input id="drain-cstatus" list="cstatus-datalist" data-cstatus-pick autocomplete="off"></div>
 <div class="form-group"><label for="drain-amount">金额</label><input id="drain-amount" inputmode="decimal" autocomplete="off" aria-describedby="drain-amount-hint"><small class="form-hint" id="drain-amount-hint" translate="no"></small></div>
 <div class="form-group"><label for="drain-remark">REMARK</label><input id="drain-remark" autocomplete="off"></div>
 <p class="modal-note">本公司户口：记两笔，封禁户 BANK TRF 出、收款户 BANK TRANSFER 入，C STATUS 留空。别家公司：只记封禁户一笔 BANK TRF 出，C STATUS 填对方，对方自己记入账。户口保持封禁；钱拿回后户口还要用的，请用「解封」。</p>
@@ -581,7 +581,7 @@ const pageRoutes = {
 <p id="reason-modal-error" class="form-error" role="alert" aria-live="polite"></p>
 <div class="actions"><button class="btn btn-outline btn-sm" id="reason-modal-cancel" type="button">取消</button><button class="btn btn-danger btn-sm" id="reason-modal-confirm" type="button">确认</button></div>
 </div></div>`,
-    ["/js/ledger-bank-pick.js?v=20261106drill3", "/js/operation-target.js?v=20261106drill1", "/js/render-gate.js?v=20261106drill1", "/js/pending-filter.js?v=20261106drill1", "/js/display-format.js?v=20261106drill2", "/js/appeal-csv.js?v=20261106drill1", "/js/bank-accounts.js?v=20261106drill16"]
+    ["/js/ledger-bank-pick.js?v=20261106drill3", "/js/operation-target.js?v=20261106drill1", "/js/render-gate.js?v=20261106drill1", "/js/pending-filter.js?v=20261106drill1", "/js/display-format.js?v=20261106drill2", "/js/appeal-csv.js?v=20261106drill1", "/js/cstatus-sheet.js?v=20261106sheet1", "/js/bank-accounts.js?v=20261106sheet1"]
   ),
   "/audit-history.html": pageLayout(
     "\u64cd\u4f5c\u5386\u53f2",
@@ -691,7 +691,7 @@ const globalFeedbackHtml = '<div class="app-toast-stack" id="app-toast-stack" ar
 // i18n.js holds the dictionary + translation engine. It is injected into <head> (ahead of the
 // render-blocking stylesheet) so the first paint is already in the saved language, instead of
 // painting Chinese and rewriting it after the two vendored scripts at the end of <body> load.
-const i18nHeadHtml = '<script src="/js/i18n.js?v=20261106drill13"></script>';
+const i18nHeadHtml = '<script src="/js/i18n.js?v=20261106sheet1"></script>';
 // One full translation pass at the end of <body>, where the whole document
 // exists but the two vendored scripts below have not been fetched yet. Anything
 // painted while they load is already in the right language. Must come after
@@ -704,7 +704,7 @@ for (const route of Object.keys(pageRoutes)) {
     .replace('<link rel="stylesheet" href="/css/style.css?v=20260812transferfix1">', i18nHeadHtml + '<link rel="stylesheet" href="/css/style.css?v=20260812transferfix1">')
     .replace('<div class="company-bar glass-control" id="company-bar">', '<div class="company-bar glass-control" id="company-bar">' + companyCompactEntryHtml)
     .replace('<script src="/vendor/lucide-1.65.0.min.js"></script>', globalFeedbackHtml + i18nBootHtml + '<script src="/vendor/lucide-1.65.0.min.js"></script>')
-    .replace('/css/style.css?v=20260812transferfix1', '/css/style.css?v=20261106drill3')
+    .replace('/css/style.css?v=20260812transferfix1', '/css/style.css?v=20261106sheet1')
     .replace('/js/customer-detail.js?v=20260731bankfix4', '/js/customer-detail.js?v=20260817customerhistory1')
     .replace('/css/style.css?v=20260802topbarflow1', '/css/style.css?v=20261001archive1')
     .replace('/js/app.js?v=20260802platformsound3', '/js/app.js?v=20261106drill2');
