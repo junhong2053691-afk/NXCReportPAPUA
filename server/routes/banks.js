@@ -25,6 +25,7 @@ const {
   deleteSkippedPendingTx,
   submitTransfer,
   drainBannedAccount,
+  assertNotSelfCStatus,
   pendingCounts,
   bankAccLabel,
   nowSql,
@@ -235,8 +236,12 @@ router.post("/c-status-options", requireAdmin, (req, res) => {
   const target = req.body.target_company_id != null ? String(req.body.target_company_id).trim() : null;
   const reconcileRequired = req.body.reconcile_required == null ? null : Number(req.body.reconcile_required) ? 1 : 0;
   if (!name) return res.status(400).json({ error: "name required" });
-  const row = upsertCStatusOption(getDb(), cid, name, target, reconcileRequired);
-  res.json({ row });
+  try {
+    const row = upsertCStatusOption(getDb(), cid, name, target, reconcileRequired);
+    res.json({ row });
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
 });
 
 router.delete("/c-status-options/:name", requireAdmin, (req, res) => {
@@ -726,6 +731,11 @@ router.post("/ledger", (req, res) => {
   if (String(entry_time || "").trim() && !normalizedEntryTime) {
     return res.status(400).json({ error: "入账日期或时间无效" });
   }
+  try {
+    assertNotSelfCStatus(db, cid, c_status);
+  } catch (e) {
+    return res.status(e.status || 400).json({ error: e.message });
+  }
 
   const row = runAtomic(db, () => {
     if (c_status) upsertCStatusOptions(db, cid, String(c_status).trim(), null);
@@ -763,6 +773,15 @@ router.put("/ledger/:id", (req, res) => {
   const db = getDb();
   const existing = db.prepare("SELECT * FROM bank_ledger WHERE id = ? AND company_id = ?").get(id, cid);
   if (!existing) return res.status(404).json({ error: "Not found" });
+  // 只在 C STATUS 被改动时校验：库里已有的自指旧行照样能改 OTHER / REMARK。
+  if (req.body.c_status !== undefined
+    && String(req.body.c_status || "").trim() !== String(existing.c_status || "").trim()) {
+    try {
+      assertNotSelfCStatus(db, cid, req.body.c_status);
+    } catch (e) {
+      return res.status(e.status || 400).json({ error: e.message });
+    }
+  }
   const amountKeys = ["amount_in", "amount_out", "help_amount", "trf_amount"];
   const parsedAmounts = readLedgerAmounts(req.body, amountKeys);
   if (!parsedAmounts) return res.status(400).json({ error: "金额必须是有效数字" });

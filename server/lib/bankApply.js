@@ -170,19 +170,45 @@ function ensureCStatusOptions(db, companyId) {
   });
 }
 
+// 「本公司的名字」：任何公司（含自己）把 target_company_id 指向本公司的 C STATUS 名，即别家
+// 怎么叫我。C STATUS 记的是与对方公司的往来，填自己没有对手、对不了平，只会在 C STATUS 表里
+// 多一行永远不归零的数（2026-11-06 员工演练：AuX6→aussiex6 自指项、救封禁户时填 EZ68）。
+// 返回小写名集合；纯外部往来方（如 LH，没有关联公司）不在其中。
+function selfCStatusNames(db, companyId) {
+  const rows = db
+    .prepare("SELECT DISTINCT name FROM bank_c_status_options WHERE target_company_id = ? AND name <> ''")
+    .all(String(companyId || ""));
+  return new Set(rows.map((r) => String(r.name).trim().toLowerCase()).filter(Boolean));
+}
+
+function assertNotSelfCStatus(db, companyId, value) {
+  const self = selfCStatusNames(db, companyId);
+  if (!self.size) return;
+  const hit = splitCStatusNames(value).find((name) => self.has(name.toLowerCase()));
+  if (hit) {
+    throw Object.assign(new Error(`C STATUS「${hit}」是本公司，不能填本公司`), { status: 400 });
+  }
+}
+
 function listCStatusOptions(db, companyId) {
   ensureCStatusOptions(db, companyId);
+  const self = selfCStatusNames(db, companyId);
+  // is_self：录入用的下拉要藏掉；管理页仍要列出来，库里已有的自指项才删得掉。
   return db
     .prepare(
       `SELECT name, target_company_id, reconcile_required, sort_order FROM bank_c_status_options
        WHERE company_id = ? ORDER BY sort_order ASC, name ASC`
     )
-    .all(companyId);
+    .all(companyId)
+    .map((o) => ({ ...o, is_self: self.has(String(o.name).trim().toLowerCase()) ? 1 : 0 }));
 }
 
 function upsertCStatusOption(db, companyId, name, targetCompanyId, reconcileRequired) {
   const n = String(name || "").trim();
   if (!n) return null;
+  if (targetCompanyId != null && String(targetCompanyId).trim() === String(companyId)) {
+    throw Object.assign(new Error("C STATUS 不能关联本公司"), { status: 400 });
+  }
   ensureCStatusOptions(db, companyId);
   const existing = db
     .prepare("SELECT * FROM bank_c_status_options WHERE company_id = ? AND name = ?")
@@ -426,6 +452,7 @@ function approvePendingTx(db, companyId, txId, body, actor) {
       if (!cStatus) throw Object.assign(new Error("每个协助方都要填写 C STATUS"), { status: 400 });
       if (!amount) throw Object.assign(new Error("每个协助金额必须大于 0"), { status: 400 });
       if (seen.has(key)) throw Object.assign(new Error("C STATUS 不能重复"), { status: 400 });
+      assertNotSelfCStatus(db, companyId, cStatus);
       seen.add(key);
       return { c_status: cStatus, amount };
     });
@@ -578,6 +605,7 @@ function approvePendingTx(db, companyId, txId, body, actor) {
       if (!cStatus) {
         throw Object.assign(new Error("调钱请填写 C STATUS"), { status: 400 });
       }
+      assertNotSelfCStatus(db, companyId, cStatus);
       if (cStatus) upsertCStatusOptions(db, companyId, cStatus, null);
       const bankId = body.bank_account_id ? Number(body.bank_account_id) : 0;
       let bank = null;
@@ -835,6 +863,7 @@ function submitTransfer(db, fromCompanyId, body, actor) {
   const isTestStatus = status === "test in" || status === "test out";
 
   if (!amount) throw Object.assign(new Error("金额无效"), { status: 400 });
+  assertNotSelfCStatus(db, fromCompanyId, submittedCStatus);
 
   const bankId = body.bank_account_id ? Number(body.bank_account_id) : 0;
   let bank = null;
@@ -931,10 +960,11 @@ function drainBannedAccount(db, companyId, bankId, body, actor) {
       throw Object.assign(new Error("收款户口无效、已封禁或已归档"), { status: 400 });
     }
   } else {
-    const selfLinked = splitCStatusNames(cStatus).some((name) => db
-      .prepare("SELECT 1 FROM bank_c_status_options WHERE company_id = ? AND name = ? AND target_company_id = ?")
-      .get(companyId, name, companyId));
-    if (selfLinked) throw Object.assign(new Error("不能转给本公司，请改选本公司收款户口"), { status: 400 });
+    try {
+      assertNotSelfCStatus(db, companyId, cStatus);
+    } catch (e) {
+      throw Object.assign(new Error("不能转给本公司，请改选本公司收款户口"), { status: 400 });
+    }
     targetCompany = linkedCompanyForCStatus(db, companyId, cStatus);
   }
 
@@ -1013,6 +1043,8 @@ module.exports = {
   mapAmountFields,
   ensureCStatusOptions,
   listCStatusOptions,
+  selfCStatusNames,
+  assertNotSelfCStatus,
   upsertCStatusOption,
   upsertCStatusOptions,
   logAccountEvent,

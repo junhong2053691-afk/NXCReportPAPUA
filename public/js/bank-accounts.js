@@ -372,7 +372,8 @@
     });
   }
   function cStatusNames() {
-    return cStatusOptions.map((o) => o.name);
+    // is_self = 本公司自己的名字（别家怎么叫我），录入时不能填，服务端也会拒（见 bankApply.selfCStatusNames）。
+    return cStatusOptions.filter((o) => !Number(o.is_self)).map((o) => o.name);
   }
   function entryDateTime(timeStr) {
     const t = normalizeTime24(timeStr);
@@ -2330,7 +2331,7 @@ ${bannedCount > 0 ? `<button type="button" class="bk-banned-summary" id="rail-ba
     if (!container) return null;
     const row = document.createElement("div");
     row.className = "pend-split-row";
-    row.innerHTML = `<input class="pend-split-cstatus" list="cstatus-datalist" value="${esc(values.c_status || "")}" aria-label="协助方 C STATUS" placeholder="例如 EZ">
+    row.innerHTML = `<input class="pend-split-cstatus" list="cstatus-datalist" value="${esc(values.c_status || "")}" aria-label="协助方 C STATUS" placeholder="协助方公司">
       <input class="pend-split-amount" inputmode="decimal" value="${esc(values.amount || "")}" aria-label="协助金额" placeholder="金额">
       <button type="button" class="btn btn-outline btn-xs pend-split-remove" title="删除协助方" aria-label="删除协助方">${renderIcon("x", { size: 14 })}</button>`;
     container.appendChild(row);
