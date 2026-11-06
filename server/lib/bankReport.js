@@ -25,7 +25,9 @@ const STATUS_LABELS = {
   "test out": "TEST OUT",
 };
 
-const DEPOSIT_STATUSES = new Set(["deposit", "new", "unclaim"]);
+// 日报 REPORT 的 DEPOSIT。不含 unclaim：UNCLAIM 在下面单列，含进来就算了两遍
+// （运营 Excel 口径，2026-11-06 确认；测试 daily-report-status.test.js）。
+const DEPOSIT_STATUSES = new Set(["deposit", "new"]);
 const TOTAL_OUTFLOW_STATUSES = new Set([
   "withdraw",
   "wrong",
@@ -310,6 +312,8 @@ function computeBankDailyReport(db, companyId, opts = {}) {
     if (status === "wrong") addReport(report, "wrong", -outTotal, outTotal > 0 ? 1 : 0);
     if (status === "cash in") addReport(report, "cash in", inTotal, inTotal > 0 ? 1 : 0);
     if (status === "cash out") addReport(report, "cash out", -outTotal, outTotal > 0 ? 1 : 0);
+    if (status === "give back") addReport(report, "give back", -outTotal, outTotal > 0 ? 1 : 0);
+    // EXCHANGE 刻意是正数（Excel 记换钱总额），REDEP 刻意只记笔数——都是运营口径，别改平。
     if (status === "expenses") addReport(report, "expenses", -outTotal, outTotal > 0 ? 1 : 0);
     if (status === "exchange") addReport(report, "exchange", inTotal + outTotal, 1);
     if (status === "redeposit") addReport(report, "redeposit", 0, 1);
@@ -348,9 +352,10 @@ function computeBankDailyReport(db, companyId, opts = {}) {
     { leftLabel: "WRONG", leftValue: report.wrong?.amount || 0, rightLabel: "W/D COUNT", rightValue: wdCount, rightIsMetric: true },
     { leftLabel: "CASH IN", leftValue: report["cash in"]?.amount || 0, rightLabel: "UNIQUE CUST", rightValue: userSet.size, rightIsMetric: true },
     { leftLabel: "CASH OUT", leftValue: report["cash out"]?.amount || 0, rightLabel: "NEW REG", rightValue: newReg, rightIsMetric: true },
-    { leftLabel: "EXPENSES", leftValue: report.expenses?.amount || 0, rightLabel: "UNCLAIM", rightValue: unclaimAmount, rightIsMetric: false },
-    { leftLabel: "EXCHANGE", leftValue: report.exchange?.amount || 0, rightLabel: "TEST IN", rightValue: report["test in"]?.amount || 0, rightIsMetric: false },
-    { leftLabel: "TEST OUT", leftValue: report["test out"]?.amount || 0, rightLabel: "REDEP", rightValue: report.redeposit?.count || 0, rightIsMetric: true },
+    { leftLabel: "GIVE BACK", leftValue: report["give back"]?.amount || 0, rightLabel: "UNCLAIM", rightValue: unclaimAmount, rightIsMetric: false },
+    { leftLabel: "EXPENSES", leftValue: report.expenses?.amount || 0, rightLabel: "TEST IN", rightValue: report["test in"]?.amount || 0, rightIsMetric: false },
+    { leftLabel: "EXCHANGE", leftValue: report.exchange?.amount || 0, rightLabel: "REDEP", rightValue: report.redeposit?.count || 0, rightIsMetric: true },
+    { leftLabel: "TEST OUT", leftValue: report["test out"]?.amount || 0, rightLabel: "", rightValue: 0, rightIsMetric: true },
   ];
 
   const reportRows = [
@@ -359,6 +364,7 @@ function computeBankDailyReport(db, companyId, opts = {}) {
     report.wrong || { key: "wrong", label: "WRONG", amount: 0, count: 0 },
     report["cash in"] || { key: "cash in", label: "CASH IN", amount: 0, count: 0 },
     report["cash out"] || { key: "cash out", label: "CASH OUT", amount: 0, count: 0 },
+    report["give back"] || { key: "give back", label: "GIVE BACK", amount: 0, count: 0 },
     report.expenses || { key: "expenses", label: "EXPENSES", amount: 0, count: 0 },
     report.exchange || { key: "exchange", label: "EXCHANGE", amount: 0, count: 0 },
     report.redeposit || { key: "redeposit", label: "REDEPOSIT", amount: 0, count: 0, isMetric: true },

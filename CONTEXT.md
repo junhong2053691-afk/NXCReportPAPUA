@@ -29,11 +29,15 @@
 
 | 指标 | 日报 | 月报 |
 |---|---|---|
-| DEPOSIT 金额 | `deposit + new + unclaim` | `deposit + new + amopay` |
+| DEPOSIT 金额 | `deposit + new`（**不含 `unclaim`**，UNCLAIM 单列） | `deposit + new + amopay` |
 | DEP COUNT | `deposit + amopay` | `deposit + new + amopay`（与金额同一组） |
 | UNIQUE CUST | 当天任何带 username 的流水（含提现）去重 | 只数 DEP 那组状态 |
 
 同一天两个页面的 DEPOSIT 数字不一样是**对的**。要统一须先和运营对齐 Excel。
+
+日报 REPORT 里另外三条看着像 bug、其实是 Excel 口径（2026-11-06 与运营确认，`daily-report-status.test.js` 守着）：
+**GIVE BACK** 单独一行、负数；**EXCHANGE** 显示正数（换钱总额），与其他出账类不同号；
+**REDEP** 只记笔数，手工录的 REDEPOSIT 入账金额只进余额、不进任何汇总行。
 
 ## 往来账（MONTHLY REPORT › COMPANY EXPENSES）
 
