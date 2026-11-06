@@ -1106,6 +1106,8 @@ function ensureGlobalFeedbackUi() {
         '<div class="modal app-dialog" data-tone="info">' +
           '<h2 id="app-dialog-title">' + appUiLabel("确认操作", "Confirm action") + "</h2>" +
           '<p class="app-dialog-message" id="app-dialog-message"></p>' +
+          // 操作对象（户名、账号、余额）是租户数据，不翻译。见 operation-target.js。
+          '<div class="reason-target app-dialog-target" id="app-dialog-target" translate="no" hidden></div>' +
           '<div class="app-dialog-prompt" id="app-dialog-prompt" hidden>' +
             '<label for="app-dialog-input" id="app-dialog-label">' + appUiLabel("请输入", "Enter a value") + "</label>" +
             '<input id="app-dialog-input" autocomplete="off">' +
@@ -1248,6 +1250,11 @@ function openAppDialog(kind, options) {
   title.textContent = options.title || (kind === "prompt" ? appUiLabel("请输入", "Enter a value") : appUiLabel("确认操作", "Confirm action"));
   message.textContent = options.message || "";
   message.hidden = !options.message;
+  const target = document.getElementById("app-dialog-target");
+  if (target) {
+    target.textContent = options.target || "";
+    target.hidden = !options.target;
+  }
   error.textContent = "";
   promptWrap.hidden = kind !== "prompt";
   cancel.textContent = options.cancelLabel || appUiLabel("取消", "Cancel");

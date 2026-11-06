@@ -555,12 +555,12 @@ const pageRoutes = {
 <div class="modal reason-modal">
 <h2 id="reason-modal-title">填写操作原因</h2>
 <p class="modal-note" id="reason-modal-description">此操作会写入永久审计记录。</p>
-<div class="reason-target" id="reason-modal-target"></div>
+<div class="reason-target"><div id="reason-modal-target"></div><div class="reason-target-detail" id="reason-modal-detail" translate="no" hidden></div></div>
 <div class="form-group"><label for="reason-modal-input">操作原因 <span aria-hidden="true">*</span></label><textarea id="reason-modal-input" rows="4" maxlength="500" placeholder="请说明为什么执行此操作" aria-describedby="reason-modal-count reason-modal-error"></textarea><small id="reason-modal-count" class="form-hint">0 / 500</small></div>
 <p id="reason-modal-error" class="form-error" role="alert" aria-live="polite"></p>
 <div class="actions"><button class="btn btn-outline btn-sm" id="reason-modal-cancel" type="button">取消</button><button class="btn btn-danger btn-sm" id="reason-modal-confirm" type="button">确认</button></div>
 </div></div>`,
-    ["/js/ledger-bank-pick.js?v=20261106drill3", "/js/bank-accounts.js?v=20261106drill8"]
+    ["/js/ledger-bank-pick.js?v=20261106drill3", "/js/operation-target.js?v=20261106drill1", "/js/bank-accounts.js?v=20261106drill9"]
   ),
   "/audit-history.html": pageLayout(
     "\u64cd\u4f5c\u5386\u53f2",
@@ -670,7 +670,7 @@ const globalFeedbackHtml = '<div class="app-toast-stack" id="app-toast-stack" ar
 // i18n.js holds the dictionary + translation engine. It is injected into <head> (ahead of the
 // render-blocking stylesheet) so the first paint is already in the saved language, instead of
 // painting Chinese and rewriting it after the two vendored scripts at the end of <body> load.
-const i18nHeadHtml = '<script src="/js/i18n.js?v=20261106drill7"></script>';
+const i18nHeadHtml = '<script src="/js/i18n.js?v=20261106drill8"></script>';
 // One full translation pass at the end of <body>, where the whole document
 // exists but the two vendored scripts below have not been fetched yet. Anything
 // painted while they load is already in the right language. Must come after
@@ -683,10 +683,10 @@ for (const route of Object.keys(pageRoutes)) {
     .replace('<link rel="stylesheet" href="/css/style.css?v=20260812transferfix1">', i18nHeadHtml + '<link rel="stylesheet" href="/css/style.css?v=20260812transferfix1">')
     .replace('<div class="company-bar glass-control" id="company-bar">', '<div class="company-bar glass-control" id="company-bar">' + companyCompactEntryHtml)
     .replace('<script src="/vendor/lucide-1.65.0.min.js"></script>', globalFeedbackHtml + i18nBootHtml + '<script src="/vendor/lucide-1.65.0.min.js"></script>')
-    .replace('/css/style.css?v=20260812transferfix1', '/css/style.css?v=20261106drill1')
+    .replace('/css/style.css?v=20260812transferfix1', '/css/style.css?v=20261106drill2')
     .replace('/js/customer-detail.js?v=20260731bankfix4', '/js/customer-detail.js?v=20260817customerhistory1')
     .replace('/css/style.css?v=20260802topbarflow1', '/css/style.css?v=20261001archive1')
-    .replace('/js/app.js?v=20260802platformsound3', '/js/app.js?v=20261106drill1');
+    .replace('/js/app.js?v=20260802platformsound3', '/js/app.js?v=20261106drill2');
 }
 
 function requireAdminPage(req, res, next) {

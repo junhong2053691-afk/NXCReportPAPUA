@@ -4161,6 +4161,10 @@ body[data-user-role="admin"] .bkv2 .sheet-table .col-act { width: 100px; }
 
 .reason-modal { max-width: 500px; }
 .reason-target { margin: 10px 0 14px; padding: 9px 10px; border-left: 3px solid var(--orange); border-radius: var(--radius-xs); background: var(--orange-soft); color: var(--text-soft); font-size: 12px; }
+/* 确认框里「动的是哪一个」：户名 / 金额 / TRANS ID，要比标题行醒目（见 operation-target.js）。 */
+.reason-target-detail { margin-top: 4px; color: var(--text); font-weight: var(--weight-bold); overflow-wrap: anywhere; }
+.app-dialog-target { margin: -6px 0 16px; color: var(--text); font-weight: var(--weight-bold); overflow-wrap: anywhere; }
+.app-dialog-target[hidden] { display: none; }
 .reason-modal textarea { width: 100%; min-height: 110px; resize: vertical; }
 .reason-modal .form-hint { display: block; margin-top: 4px; text-align: right; }
 

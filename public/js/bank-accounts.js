@@ -1054,6 +1054,12 @@
     document.getElementById("reason-modal-title").textContent = options?.title || "\u586b\u5199\u64cd\u4f5c\u539f\u56e0";
     document.getElementById("reason-modal-description").textContent = options?.description || "\u6b64\u64cd\u4f5c\u4f1a\u5199\u5165\u6c38\u4e45\u5ba1\u8ba1\u8bb0\u5f55\u3002";
     document.getElementById("reason-modal-target").textContent = options?.target || "";
+    // 明细（时间、金额、TRANS ID、户口）是租户数据，放在 translate="no" 的那一行。
+    const detail = document.getElementById("reason-modal-detail");
+    if (detail) {
+      detail.textContent = options?.detail || "";
+      detail.hidden = !options?.detail;
+    }
     document.getElementById("reason-modal-confirm").textContent = options?.confirmLabel || "\u786e\u8ba4";
     document.getElementById("reason-modal-error").textContent = "";
     document.getElementById("reason-modal-count").textContent = "0 / 500";
@@ -2000,7 +2006,24 @@ ${bannedCount > 0 ? `<button type="button" class="bk-banned-summary" id="rail-ba
   function deletedHelpTrfAmount(r) {
     return Number(r.help_amount || 0) + Number(r.trf_amount || 0);
   }
+  // 确认框里「动的是哪一笔 / 哪个户口」那一行（规则与测试见 operation-target.js）。
+  function ledgerTargetFor(r) {
+    if (!r) return "";
+    const bank = bankRows.find((b) => Number(b.id) === Number(r.bank_account_id));
+    return window.ledgerTargetDetail(r, {
+      statusLabel: statusLabel(inferRowStatus(r)),
+      name: ledgerNameText(r.name),
+      bankLabel: bank ? bankBranchOf(bank) : (bankBranchOf(r) || r.bank_acc || ""),
+    });
+  }
+  function bankTargetFor(id) {
+    const b = bankRows.find((x) => String(x.id) === String(id));
+    if (!b) return "";
+    return window.bankTargetDetail(b, { label: bankBranchOf(b), balance: bankLedgerBalance(b) });
+  }
+  let deletedLedgerById = new Map();
   function renderDeletedLedgerRows(rows) {
+    deletedLedgerById = new Map(rows.map((r) => [Number(r.id), r]));
     const tbody = document.getElementById("deleted-ledger-rows");
     if (!tbody) return;
     if (!rows.length) {
@@ -2043,6 +2066,7 @@ ${bannedCount > 0 ? `<button type="button" class="bk-banned-summary" id="rail-ba
       title: "恢复流水",
       description: "恢复后会重算银行余额，并写入永久审计记录。",
       target: `已删除流水 #${id}`,
+      detail: ledgerTargetFor(deletedLedgerById.get(Number(id))),
       confirmLabel: "确认恢复",
     }).then((reason) => {
       if (!reason) return null;
@@ -2733,6 +2757,7 @@ ${bannedCount > 0 ? `<button type="button" class="bk-banned-summary" id="rail-ba
           title: "删除流水",
           description: "流水会进入最近删除；如关联平台单，可能同时恢复为待处理。",
           target: `账单流水 #${id}`,
+          detail: ledgerTargetFor(ledgerRows.find((r) => Number(r.id) === id)),
           confirmLabel: "确认删除",
         }).then((reason) => {
           if (!reason) return null;
@@ -2806,6 +2831,7 @@ ${bannedCount > 0 ? `<button type="button" class="bk-banned-summary" id="rail-ba
         const note = await showPromptDialog({
           title: "\u5c01\u7981\u652f\u4ed8\u6e20\u9053",
           message: "\u5c01\u7981\u540e\u8be5\u6e20\u9053\u5c06\u4e0d\u518d\u53c2\u4e0e\u5f53\u524d\u8fd0\u8425\uff0c\u5e76\u8fdb\u5165\u300c\u5c01\u7981\u4e2d\u300d\u5f85\u6e05\u7406\u961f\u5217\u3002",
+          target: bankTargetFor(ban.dataset.id),
           label: "\u5c01\u7981\u539f\u56e0\uff08\u53ef\u7559\u7a7a\uff09",
           maxLength: 500,
           confirmLabel: "\u786e\u8ba4\u5c01\u7981",
@@ -2821,6 +2847,15 @@ ${bannedCount > 0 ? `<button type="button" class="bk-banned-summary" id="rail-ba
       }
       const unban = e.target.closest(".bkd-unban-btn");
       if (unban) {
+        // 解封以前一点就生效：户口立刻回到审批和调钱的下拉里（员工演练里解封期间又被选中）。
+        const ok = await showConfirmDialog({
+          title: "解封支付渠道",
+          message: "解封后该渠道回到运营中，会重新出现在审批和调钱的银行下拉里。",
+          target: bankTargetFor(unban.dataset.id),
+          confirmLabel: "确认解封",
+          tone: "warning",
+        });
+        if (!ok) return;
         bkdMutate(
           api(`/api/banks/${unban.dataset.id}`, { method: "PUT", body: JSON.stringify({ unban: true }) })
         );
@@ -2831,6 +2866,7 @@ ${bannedCount > 0 ? `<button type="button" class="bk-banned-summary" id="rail-ba
         const note = await showPromptDialog({
           title: "\u5f52\u6863\u652f\u4ed8\u6e20\u9053",
           message: "\u5f52\u6863\u540e\u8be5\u6e20\u9053\u4e0d\u518d\u51fa\u73b0\u5728\u4efb\u4f55\u5217\u8868\u3001\u4e0b\u62c9\u4e0e Telegram \u63a8\u9001\u4e2d\uff0c\u5386\u53f2\u6d41\u6c34\u5168\u90e8\u4fdd\u7559\u3002\u968f\u65f6\u53ef\u5728\u300c\u5df2\u5f52\u6863\u300d\u9875\u7b7e\u53d6\u6d88\u5f52\u6863\u3002",
+          target: bankTargetFor(archive.dataset.id),
           label: "\u5f52\u6863\u539f\u56e0\uff08\u53ef\u7559\u7a7a\uff09",
           maxLength: 500,
           confirmLabel: "\u786e\u8ba4\u5f52\u6863",
