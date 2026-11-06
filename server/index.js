@@ -573,7 +573,7 @@ const pageRoutes = {
 <p id="reason-modal-error" class="form-error" role="alert" aria-live="polite"></p>
 <div class="actions"><button class="btn btn-outline btn-sm" id="reason-modal-cancel" type="button">取消</button><button class="btn btn-danger btn-sm" id="reason-modal-confirm" type="button">确认</button></div>
 </div></div>`,
-    ["/js/ledger-bank-pick.js?v=20261106drill3", "/js/operation-target.js?v=20261106drill1", "/js/render-gate.js?v=20261106drill1", "/js/pending-filter.js?v=20261106drill1", "/js/bank-accounts.js?v=20261106drill13"]
+    ["/js/ledger-bank-pick.js?v=20261106drill3", "/js/operation-target.js?v=20261106drill1", "/js/render-gate.js?v=20261106drill1", "/js/pending-filter.js?v=20261106drill1", "/js/display-format.js?v=20261106drill1", "/js/bank-accounts.js?v=20261106drill14"]
   ),
   "/audit-history.html": pageLayout(
     "\u64cd\u4f5c\u5386\u53f2",

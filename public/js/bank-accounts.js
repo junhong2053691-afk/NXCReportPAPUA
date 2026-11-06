@@ -124,7 +124,7 @@
       .trim();
   }
   function fmt(n) {
-    return Number(n || 0).toLocaleString("en-AU", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    return window.moneyText(n); // 不出 -0.00（display-format.js）
   }
   function fmtMetric(n) {
     const v = Number(n || 0);
@@ -138,7 +138,7 @@
   function fmtOut(n) {
     const v = Number(n || 0);
     if (!v) return "";
-    return (-Math.abs(v)).toFixed(2);
+    return `-${fmt(Math.abs(v))}`; // 和 IN 列一样带千分位，parseOut 会去掉逗号
   }
   function parseNum(v) {
     if (v === "" || v == null) return 0;
@@ -1744,7 +1744,7 @@ ${bannedCount > 0 ? `<button type="button" class="bk-banned-summary" id="rail-ba
 
       const bannedEvent = events.find((e) => e.event === "banned");
       const bannedInfo = bannedEvent
-        ? `<div class="bkd-ban-info">封禁于 <strong>${esc(String(bannedEvent.created_at || "").slice(0, 10))}</strong>${bannedEvent.actor ? ` · ${esc(bannedEvent.actor)}` : ""}${bannedEvent.note ? ` · ${esc(bannedEvent.note)}` : ""}</div>`
+        ? `<div class="bkd-ban-info">封禁于 <strong>${esc(window.sqlUtcToSydney(bannedEvent.created_at, { dateOnly: true }))}</strong>${bannedEvent.actor ? ` · ${esc(bannedEvent.actor)}` : ""}${bannedEvent.note ? ` · ${esc(bannedEvent.note)}` : ""}</div>`
         : "";
 
       const infoGrid = `<div class="bkd-info-grid">
@@ -1781,7 +1781,7 @@ ${bannedCount > 0 ? `<button type="button" class="bk-banned-summary" id="rail-ba
       </div>`;
 
       const evList = events.slice(0, 10).map((e) =>
-        `<li><strong>${esc(e.event)}</strong><span class="bkd-ev-time"> ${esc(String(e.created_at || "").slice(0, 16))}</span>${e.actor ? ` · ${esc(e.actor)}` : ""}${e.note ? ` · ${esc(e.note)}` : ""}</li>`
+        `<li><strong>${esc(e.event)}</strong><span class="bkd-ev-time"> ${esc(window.sqlUtcToSydney(e.created_at))}</span>${e.actor ? ` · ${esc(e.actor)}` : ""}${e.note ? ` · ${esc(e.note)}` : ""}</li>`
       ).join("") || "<li>暂无记录</li>";
       const evSection = `<details class="bkd-events-wrap"><summary>操作历史</summary><ul class="bkd-events-list">${evList}</ul></details>`;
 
@@ -2050,7 +2050,7 @@ ${bannedCount > 0 ? `<button type="button" class="bk-banned-summary" id="rail-ba
       const bankName = bankBranchOf(r) || r.bank_acc || "";
       const userName = [r.username, ledgerNameText(r.name)].filter(Boolean).join(" · ");
       return `<tr data-id="${r.id}">
-        <td class="mono">${esc(String(r.deleted_at || "").slice(0, 16))}</td>
+        <td class="mono">${esc(window.sqlUtcToSydney(r.deleted_at))}</td>
         <td class="mono">${esc(String(r.entry_time || "").slice(0, 16))}</td>
         <td translate="no"><span class="status-chip ${statusClass(r.status)}">${esc(statusLabel(r.status))}</span></td>
         <td class="mono">${esc(r.tx_id || "")}</td>
@@ -2351,7 +2351,7 @@ ${bannedCount > 0 ? `<button type="button" class="bk-banned-summary" id="rail-ba
             <td class="mono" translate="no">${esc(r.tx_id)}</td>
             <td translate="no">${esc(r.username)} / ${esc(skippedName)}</td>
             <td class="num-col">${fmt(r.amount)}</td>
-            <td class="mono">${esc(String(r.decided_at || "").slice(0, 16))}</td>
+            <td class="mono">${esc(window.sqlUtcToSydney(r.decided_at))}</td>
             <td>${esc(r.decided_by || "")}</td>
             <td>
               <button type="button" class="btn btn-success btn-xs pend-restore">Restore</button>
