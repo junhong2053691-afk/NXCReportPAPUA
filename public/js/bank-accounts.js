@@ -2204,7 +2204,7 @@ ${bannedCount > 0 ? `<button type="button" class="bk-banned-summary" id="rail-ba
           <td>${fmt(r.amount)}</td>
           <td>${isWd
              ? `<select class="pend-mode"><option value="bank">本户</option><option value="help">调钱</option><option value="split">拆分调钱</option><option value="redeposit">REDEP</option></select>
-               <div class="pend-help-summary" hidden role="status" aria-label="调钱方向和状态"><strong>IN</strong><span translate="no">${esc(statusLabel("cash in") || "CASH IN")}</span></div>`
+               <div class="pend-help-summary" hidden role="status" aria-label="调钱方向和状态"><strong>IN</strong><span translate="no">${esc(statusLabel("withdraw") || "WITHDRAW")}</span></div>`
             : `<select class="pend-mode"><option value="bank">本户</option><option value="redeposit">REDEP</option></select>`}</td>
           <td>${isWd
              ? `<select class="pend-bank">${pendingBankOptionsHtml()}</select>

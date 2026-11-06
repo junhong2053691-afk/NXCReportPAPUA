@@ -124,6 +124,12 @@ function mapAmountFields(direction, status, amount) {
   return fields;
 }
 
+// 「别家替我付客户提现」的落列：withdraw + help_amount。审批的「调钱」与「拆分调钱」协助部分
+// 共用这一份——两处各写一遍，就是它们曾经一个落 trf_amount、一个落 amount_in 的原因。
+function helpWithdrawFields(amount) {
+  return { status: "withdraw", amount_in: 0, amount_out: 0, help_amount: money(amount), trf_amount: 0 };
+}
+
 // Keep manual IN/OUT status validation in sync with the dropdown options.
 const TRANSFER_IN_STATUSES = new Set(["deposit", "cash in", "new", "bank transfer", "unclaim", "redeposit", "amopay", "test in"]);
 const TRANSFER_OUT_STATUSES = new Set(["withdraw", "wrong", "cash out", "give back", "expenses", "exchange", "bank trf", "test out"]);
@@ -489,9 +495,10 @@ function approvePendingTx(db, companyId, txId, body, actor) {
           company_id: companyId,
           entry_time: entryTime,
           tx_id: pending.tx_id,
-          // The split still comes in as IN, but it belongs to the original
-          // withdraw platform order and should keep the WITHDRAW status.
-          ...mapAmountFields("in", "withdraw", row.amount),
+          // 协助方替我付客户 = withdraw + help_amount（C STATUS 记 IN，REPORT 的 WITHDRAW 含它），
+          // 与单笔「调钱」同一个落法，口径见 bank-c-status.test.js。以前落在 amount_in，
+          // 方向虽对，但「入账 IN」虚增、REPORT 把它算进 CASH IN、WITHDRAW 少算。
+          ...helpWithdrawFields(row.amount),
           username: pending.username,
           name: pending.name,
           c_status: row.c_status,
@@ -553,10 +560,10 @@ function approvePendingTx(db, companyId, txId, body, actor) {
       if (pending.tx_type !== "WITHDRAW") {
         throw Object.assign(new Error("只有 withdraw 平台单可以调钱"), { status: 400 });
       }
-      // A withdraw help is always inbound for the company whose customer
-      // needs the payout. The helper company records its CASH OUT separately.
-      const direction = "in";
-      const status = "cash in";
+      // 别家替我付这笔客户提现：我方记 withdraw + help_amount（C STATUS 记 IN = 我欠对方），
+      // 协助方自己记 CASH OUT（OUT）。两边一 IN 一 OUT，相加为 0——和 4 家 Excel 的 C STATUS
+      // 表一致。以前落成 cash in + trf_amount，C STATUS 记 OUT、和协助方同号，差额是 -2X、
+      // 永远对不平（2026-11-06 员工演练）。
       const cStatus = String(body.c_status || "").trim();
       if (!cStatus) {
         throw Object.assign(new Error("调钱请填写 C STATUS"), { status: 400 });
@@ -570,14 +577,7 @@ function approvePendingTx(db, companyId, txId, body, actor) {
           .get(bankId, companyId);
         if (!bank) throw Object.assign(new Error("银行账户无效、已封禁或已归档"), { status: 400 });
       }
-      // Keep the business direction/status as CASH IN, but place helped money
-      // in the shared HELP TRF column so it is visually distinct from cash
-      // received by this company's own bank account.
-      const amounts = {
-        ...mapAmountFields(direction, status, pending.amount),
-        amount_in: 0,
-        trf_amount: money(pending.amount),
-      };
+      const amounts = helpWithdrawFields(pending.amount);
       const ledger = insertLedger(db, {
         bank_account_id: bankId,
         company_id: companyId,
