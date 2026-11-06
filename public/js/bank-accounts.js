@@ -1292,12 +1292,13 @@
       ? '<span class="bk-flag bk-flag-alert" title="余额已达报警阈值">⚠️</span>'
       : "";
     if (stats.isPG) {
-      return '<span class="bk-flag bk-flag-pg" title="PaymentGateway balance is excluded from total">PG</span>' + alertFlag;
+      return '<span class="bk-flag bk-flag-pg" title="PaymentGateway 余额不计入合计">PG</span>' + alertFlag;
     }
+    // 以前写死英文 Active / Inactive，中文模式下也是英文（员工演练）。中文原文 + 字典翻译。
     return (
       (b.active
-        ? '<span class="bk-flag bk-flag-active" title="Active channel">Active</span>'
-        : '<span class="bk-flag bk-flag-idle">Inactive</span>') + alertFlag
+        ? '<span class="bk-flag bk-flag-active">使用中</span>'
+        : '<span class="bk-flag bk-flag-idle">未启用</span>') + alertFlag
     );
   }
   function bankDirectoryRowHtml(b, index) {
@@ -1780,9 +1781,13 @@ ${bannedCount > 0 ? `<button type="button" class="bk-banned-summary" id="rail-ba
         </div>
       </div>`;
 
-      const evList = events.slice(0, 10).map((e) =>
-        `<li><strong>${esc(e.event)}</strong><span class="bkd-ev-time"> ${esc(window.sqlUtcToSydney(e.created_at))}</span>${e.actor ? ` · ${esc(e.actor)}` : ""}${e.note ? ` · ${esc(e.note)}` : ""}</li>`
-      ).join("") || "<li>暂无记录</li>";
+      // 事件码 / 类型码转中文（display-format.js）；操作人与封禁原因是租户数据，不翻译。
+      const evList = events.slice(0, 10).map((e) => {
+        const note = e.event === "created"
+          ? ` · <span>${esc(window.accountKindLabel(e.note))}</span>`
+          : (e.note ? ` · <span translate="no">${esc(e.note)}</span>` : "");
+        return `<li><strong>${esc(window.accountEventLabel(e.event))}</strong><span class="bkd-ev-time"> ${esc(window.sqlUtcToSydney(e.created_at))}</span>${e.actor ? ` · <span translate="no">${esc(e.actor)}</span>` : ""}${note}</li>`;
+      }).join("") || "<li>暂无记录</li>";
       const evSection = `<details class="bkd-events-wrap"><summary>操作历史</summary><ul class="bkd-events-list">${evList}</ul></details>`;
 
       bodyEl.innerHTML = `<div class="bkd-detail">${infoGrid}${txSection}${evSection}</div>`;
@@ -2354,11 +2359,11 @@ ${bannedCount > 0 ? `<button type="button" class="bk-banned-summary" id="rail-ba
             <td class="mono">${esc(window.sqlUtcToSydney(r.decided_at))}</td>
             <td>${esc(r.decided_by || "")}</td>
             <td>
-              <button type="button" class="btn btn-success btn-xs pend-restore">Restore</button>
+              <button type="button" class="btn btn-success btn-xs pend-restore">恢复</button>
               <button type="button" class="btn btn-danger btn-xs pend-delete">删除</button>
             </td>
           </tr>`;
-        }).join("") || '<tr><td colspan="8" class="sheet-empty">No skipped platform orders</td></tr>';
+        }).join("") || '<tr><td colspan="8" class="sheet-empty">暂无已跳过的平台单</td></tr>';
       }
     });
   }

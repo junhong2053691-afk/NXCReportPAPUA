@@ -471,7 +471,7 @@ const pageRoutes = {
 </section>
 </div>
 </div>
-<div class="bk-grid-head"><span class="bk-grid-title" id="bk-grid-title">流水 · ALL</span><span class="sheet-grid-hint">快捷键 · <kbd>Tab</kbd> 下一格 · <kbd>Enter</kbd>×2 保存 · <kbd>Esc</kbd> 取消 · <kbd>Ctrl+;</kbd> 当前时间 · <kbd>1</kbd>–<kbd>9</kbd> 状态</span></div>
+<div class="bk-grid-head"><span class="bk-grid-title" id="bk-grid-title">流水 · ALL</span><span class="sheet-grid-hint">快捷键 · <kbd translate="no">Tab</kbd> 下一格 · <kbd translate="no">Enter</kbd>×2 保存 · <kbd translate="no">Esc</kbd> 取消 · <kbd translate="no">Ctrl+;</kbd> 当前时间 · <kbd translate="no">1</kbd>–<kbd translate="no">9</kbd> 状态</span></div>
 <div class="sheet-table-wrap"><table class="sheet-table">
 <thead><tr><th class="col-no">NO</th><th class="col-time">TIME</th><th class="col-id">TRANS ID</th><th class="col-status">STATUS</th><th class="col-num">IN</th><th class="col-num">OUT</th><th class="col-num">HELP TRF</th><th class="col-bank">BANK ACC</th><th class="col-user">USERNAME</th><th class="col-name">NAME</th><th class="col-cstatus">C STATUS</th><th class="col-other">OTHER</th><th class="col-remark">REMARK</th><th class="col-act"></th></tr></thead>
 <tbody id="sheet-grid"></tbody>
@@ -573,7 +573,7 @@ const pageRoutes = {
 <p id="reason-modal-error" class="form-error" role="alert" aria-live="polite"></p>
 <div class="actions"><button class="btn btn-outline btn-sm" id="reason-modal-cancel" type="button">取消</button><button class="btn btn-danger btn-sm" id="reason-modal-confirm" type="button">确认</button></div>
 </div></div>`,
-    ["/js/ledger-bank-pick.js?v=20261106drill3", "/js/operation-target.js?v=20261106drill1", "/js/render-gate.js?v=20261106drill1", "/js/pending-filter.js?v=20261106drill1", "/js/display-format.js?v=20261106drill1", "/js/bank-accounts.js?v=20261106drill14"]
+    ["/js/ledger-bank-pick.js?v=20261106drill3", "/js/operation-target.js?v=20261106drill1", "/js/render-gate.js?v=20261106drill1", "/js/pending-filter.js?v=20261106drill1", "/js/display-format.js?v=20261106drill2", "/js/bank-accounts.js?v=20261106drill15"]
   ),
   "/audit-history.html": pageLayout(
     "\u64cd\u4f5c\u5386\u53f2",
@@ -683,7 +683,7 @@ const globalFeedbackHtml = '<div class="app-toast-stack" id="app-toast-stack" ar
 // i18n.js holds the dictionary + translation engine. It is injected into <head> (ahead of the
 // render-blocking stylesheet) so the first paint is already in the saved language, instead of
 // painting Chinese and rewriting it after the two vendored scripts at the end of <body> load.
-const i18nHeadHtml = '<script src="/js/i18n.js?v=20261106drill11"></script>';
+const i18nHeadHtml = '<script src="/js/i18n.js?v=20261106drill12"></script>';
 // One full translation pass at the end of <body>, where the whole document
 // exists but the two vendored scripts below have not been fetched yet. Anything
 // painted while they load is already in the right language. Must come after

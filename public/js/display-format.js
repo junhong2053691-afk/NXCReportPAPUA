@@ -36,10 +36,33 @@ function moneyText(n) {
   return v.toLocaleString("en-AU", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
+// 渠道操作历史（bank_account_events.event / note）是代码值，原样显示就是 banned / nominee
+// （员工演练）。这里转成中文原文，切到英文由 i18n 字典完成；认不出的原样返回。
+const ACCOUNT_EVENT_LABELS = {
+  created: "新建",
+  updated: "修改",
+  banned: "封禁",
+  unbanned: "解封",
+  archived: "归档",
+  unarchived: "取消归档",
+};
+const ACCOUNT_KIND_LABELS = { nominee: "人头", ghost: "幽灵", payment_gateway: "PaymentGateway" };
+
+function accountEventLabel(code) {
+  const key = String(code || "").trim();
+  return ACCOUNT_EVENT_LABELS[key] || key;
+}
+function accountKindLabel(code) {
+  const key = String(code || "").trim();
+  return ACCOUNT_KIND_LABELS[key] || key;
+}
+
 if (typeof window !== "undefined") {
   window.sqlUtcToSydney = sqlUtcToSydney;
   window.moneyText = moneyText;
+  window.accountEventLabel = accountEventLabel;
+  window.accountKindLabel = accountKindLabel;
 }
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { sqlUtcToSydney, moneyText };
+  module.exports = { sqlUtcToSydney, moneyText, accountEventLabel, accountKindLabel };
 }
