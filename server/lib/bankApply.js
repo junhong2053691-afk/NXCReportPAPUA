@@ -717,9 +717,40 @@ function platformTxTypeForLedger(db, row) {
   return transactionType === "DEPOSIT" || transactionType === "WITHDRAW" ? transactionType : "";
 }
 
-function reopenPendingForLedger(db, row) {
+// 同一平台单（tx_id）在账上还剩哪一行。排除：刚插回的那一行本身、同一拆分组的兄弟行
+// （help_split 一笔单本来就是多行同 tx_id）。
+function otherLedgerForTx(db, companyId, txId, opts = {}) {
+  const tx = String(txId || "").trim();
+  if (!tx) return null;
+  const groupId = String(opts.excludeGroupId || "").trim();
+  return db
+    .prepare(
+      `SELECT * FROM bank_ledger
+       WHERE company_id = ? AND tx_id = ? AND id <> ?
+         AND (? = '' OR COALESCE(transfer_group_id, '') <> ?)
+       ORDER BY id ASC LIMIT 1`
+    )
+    .get(companyId, tx, Number(opts.excludeLedgerId || 0), groupId, groupId) || null;
+}
+
+// 「最近删除 → 恢复」前的闸门：这笔平台单删掉之后已经被重新审批入账，再把旧行塞回去
+// 就是同一 tx_id 记两次（演练里 4 家公司都复现了）。返回挡路的那一行，没有冲突返回 null。
+function restoreConflictForDeleted(db, deleted) {
+  if (!deleted) return null;
+  return otherLedgerForTx(db, deleted.company_id, deleted.tx_id, {
+    excludeGroupId: deleted.transfer_group_id,
+  });
+}
+
+// opts.excludeLedgerId / excludeGroupId 只给恢复路径用：那时被恢复的行已经插回去了，
+// 它自己和同组兄弟不算「还在账上的别的行」。
+function reopenPendingForLedger(db, row, opts = {}) {
   const txType = platformTxTypeForLedger(db, row);
   if (!txType) return false;
+
+  // 删掉的是重复行、同一平台单还有别的流水在账上：这笔单并没有「没入账」，打回待处理
+  // 就能被审第三次，删掉 bank_balance_log 还会让同步侧的防重锁失效。
+  if (otherLedgerForTx(db, row.company_id, row.tx_id, opts)) return false;
 
   // The balance log is the sync-side de-duplication key. Remove it before
   // re-approval so the order can be applied to a different bank if needed.
@@ -883,6 +914,7 @@ module.exports = {
   pendingCounts,
   platformTxTypeForLedger,
   reopenPendingForLedger,
+  restoreConflictForDeleted,
   nowSql,
   normalizeSqlDateTime,
 };

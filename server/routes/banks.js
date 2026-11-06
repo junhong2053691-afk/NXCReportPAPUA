@@ -30,6 +30,7 @@ const {
   normalizeSqlDateTime,
   platformTxTypeForLedger,
   reopenPendingForLedger,
+  restoreConflictForDeleted,
 } = require("../lib/bankApply");
 const {
   isValidStatusValue,
@@ -775,6 +776,20 @@ router.put("/ledger/:id", (req, res) => {
       .prepare(`SELECT id FROM bank_accounts WHERE id = ? AND company_id = ? AND ${SQL_OPERATING}`)
       .get(Number(req.body.bank_account_id), cid);
     if (!ba) return res.status(400).json({ error: "银行账户不属于当前公司，或已封禁 / 已归档" });
+  } else if (req.body.bank_account_id === undefined && existing.bank_account_id) {
+    // 前端在「BANK ACC 没动」时不发 bank_account_id（原样保留绑定，封禁户的历史行也能改 OTHER /
+    // REMARK）。但归档户的金额不能动：那会让余额在所有视图之外复活，归档闸门挡的正是这个。
+    const current = db
+      .prepare("SELECT * FROM bank_accounts WHERE id = ? AND company_id = ?")
+      .get(existing.bank_account_id, cid);
+    const amountChanged = amountKeys.some(
+      // OUT 列历史上正负号都存过，按绝对值比，免得只改 OTHER 也被判成改了金额
+      (k) => req.body[k] !== undefined
+        && Math.round(Math.abs(Number(req.body[k] || 0)) * 100) !== Math.round(Math.abs(Number(existing[k] || 0)) * 100)
+    );
+    if (current && isArchived(current) && amountChanged) {
+      return res.status(409).json({ error: "该渠道已归档，不能修改这行的金额；请先取消归档" });
+    }
   }
 
   // 同 POST /ledger：entry_time 必须是实例时区的墙上时间格式，给了但无效一律 400
@@ -858,6 +873,16 @@ router.post("/ledger/deleted/:deletedId/restore", (req, res) => {
     }
   }
 
+  // 误审 → 删除 → 重审之后，旧行还躺在回收站里。不拦的话恢复它就是同一平台单记两次。
+  // 闸门在 runAtomic 之前，理由同上面的归档闸门（better-sqlite3 同步执行，读写之间插不进别的请求）。
+  const conflict = restoreConflictForDeleted(db, deleted);
+  if (conflict) {
+    return res.status(409).json({
+      error: `平台单 ${deleted.tx_id} 已重新入账（流水 #${conflict.id}），恢复会重复入账`,
+      conflict_ledger_id: conflict.id,
+    });
+  }
+
   let restoredId = 0;
   let restoredPlatformOrder = false;
   runAtomic(db, () => {
@@ -900,7 +925,8 @@ router.post("/ledger/deleted/:deletedId/restore", (req, res) => {
           )
           .get(cid, deleted.transfer_group_id)
       : null;
-    if (txType && !hasDeletedSibling && reopenPendingForLedger(db, deleted)) {
+    const reopenOpts = { excludeLedgerId: restoredId, excludeGroupId: deleted.transfer_group_id };
+    if (txType && !hasDeletedSibling && reopenPendingForLedger(db, deleted, reopenOpts)) {
       const bank = deleted.transfer_group_id
         ? db
             .prepare(

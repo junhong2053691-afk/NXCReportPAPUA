@@ -195,7 +195,11 @@ function pageLayout(title, active, body, script) {
   const insightOpen = insightNav.some(([key]) => key === active) ? " open" : "";
   const monthlyOpen = monthlyNav.some(([key]) => key === active) ? " open" : "";
   const settingsOpen = settingsNav.some(([key]) => key === active) ? " open" : "";
-  const extra = script ? `<script src="${script}"></script>` : "";
+  // script 可以是一个路径或按加载顺序排列的数组（纯函数模块要排在页面脚本前面）。
+  const extra = (Array.isArray(script) ? script : [script])
+    .filter(Boolean)
+    .map((src) => `<script src="${src}"></script>`)
+    .join("");
   return `<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="color-scheme" content="light dark"><title>${title} - \u64cd\u76d8\u624b\u540e\u53f0</title><link rel="stylesheet" href="/css/style.css?v=20260812transferfix1"></head><body><a class="skip-link" href="#main-content">\u8df3\u5230\u4e3b\u5185\u5bb9</a><div class="ambient-field" aria-hidden="true"><span></span><span></span></div><div class="sidebar-backdrop" id="sidebar-backdrop"></div><button type="button" class="mobile-menu-btn icon-btn" id="mobile-menu-btn" aria-label="\u6253\u5f00\u5bfc\u822a" aria-controls="sidebar" aria-expanded="false"><i data-lucide="menu"></i><span class="icon-fallback" aria-hidden="true">Menu</span></button><div class="layout"><aside class="sidebar" id="sidebar" aria-label="\u4e3b\u5bfc\u822a"><div class="brand-mark"><span class="brand-symbol" aria-hidden="true">T</span><div><h2>Trader</h2><p>Command Center</p></div></div><div class="company-bar glass-control" id="company-bar"><label for="company-select">\u5f53\u524d\u516c\u53f8</label><select id="company-select" aria-describedby="company-sync"></select><span id="company-sync" class="company-sync-hint" aria-live="polite">\u6b63\u5728\u8bfb\u53d6...</span></div><nav class="nav-stack" aria-label="\u5de5\u4f5c\u533a"><div class="nav-section nav-primary">${primaryLinks}</div><details class="nav-group"${insightOpen}><summary><span class="nav-summary-label"><i data-lucide="sparkles"></i><span>\u6d1e\u5bdf</span></span><i data-lucide="chevron-down" class="nav-chevron"></i></summary><div class="nav-children">${insightLinks}</div></details><details class="nav-group" id="nav-monthly-group"${monthlyOpen} hidden><summary><span class="nav-summary-label"><i data-lucide="calendar-range"></i><span>MONTHLY REPORT</span></span><i data-lucide="chevron-down" class="nav-chevron"></i></summary><div class="nav-children">${monthlyLinks}</div></details><details class="nav-group" id="nav-settings-group"${settingsOpen} hidden><summary><span class="nav-summary-label"><i data-lucide="sliders-horizontal"></i><span>\u8bbe\u7f6e</span></span><i data-lucide="chevron-down" class="nav-chevron"></i></summary><div class="nav-children">${settingsLinks}</div></details></nav><div class="sidebar-footer"><div class="user-info"><div class="user-avatar" aria-hidden="true">OP</div><div class="user-copy"><span class="user-label">Operator</span><strong id="current-user" translate="no">-</strong></div><button type="button" class="sidebar-theme-btn icon-btn" aria-label="切换主题" title="切换主题"><i data-lucide="moon"></i></button><button type="button" class="logout-btn icon-btn" id="logout-btn" aria-label="\u9000\u51fa\u767b\u5f55" title="\u9000\u51fa\u767b\u5f55"><i data-lucide="log-out"></i></button></div></div></aside><main class="main" id="main-content" tabindex="-1"><header class="topbar glass-panel"><div class="topbar-heading"><div class="topbar-kicker">Trader Dashboard</div><div class="topbar-title">${activeItem[2]}</div></div><div class="topbar-actions"><div class="sync-state" id="global-sync-state" data-state="loading" role="status" aria-live="polite"><span class="sync-indicator" aria-hidden="true"></span><span class="sync-copy"><strong id="global-sync-text">\u6b63\u5728\u8bfb\u53d6\u540c\u6b65\u72b6\u6001</strong><small id="global-sync-time"></small></span></div><button type="button" class="lang-toggle" id="lang-toggle" translate="no" aria-label="\u5207\u6362\u8bed\u8a00" title="\u5207\u6362\u8bed\u8a00"><span data-lang-choice="zh">中</span><span data-lang-choice="en">EN</span></button><button type="button" class="theme-toggle icon-btn" id="theme-toggle" aria-label="\u5207\u6362\u4e3b\u9898" title="\u5207\u6362\u4e3b\u9898"><i data-lucide="moon"></i></button></div></header><section class="page-shell">${body}</section></main></div>${MOBILE_TABBAR}<script src="/vendor/lucide-1.65.0.min.js"></script><script src="/vendor/gsap-3.12.5.min.js"></script><script src="/js/alarm.js?v=20260930alarm1"></script><script src="/js/app.js?v=20260802platformsound3"></script><script src="/js/customer-detail.js?v=20260731bankfix4"></script>${extra}</body></html>`;
 }
 
@@ -556,7 +560,7 @@ const pageRoutes = {
 <p id="reason-modal-error" class="form-error" role="alert" aria-live="polite"></p>
 <div class="actions"><button class="btn btn-outline btn-sm" id="reason-modal-cancel" type="button">取消</button><button class="btn btn-danger btn-sm" id="reason-modal-confirm" type="button">确认</button></div>
 </div></div>`,
-    "/js/bank-accounts.js?v=20261106review1"
+    ["/js/ledger-bank-pick.js?v=20261106drill2", "/js/bank-accounts.js?v=20261106drill2"]
   ),
   "/audit-history.html": pageLayout(
     "\u64cd\u4f5c\u5386\u53f2",
@@ -666,7 +670,7 @@ const globalFeedbackHtml = '<div class="app-toast-stack" id="app-toast-stack" ar
 // i18n.js holds the dictionary + translation engine. It is injected into <head> (ahead of the
 // render-blocking stylesheet) so the first paint is already in the saved language, instead of
 // painting Chinese and rewriting it after the two vendored scripts at the end of <body> load.
-const i18nHeadHtml = '<script src="/js/i18n.js?v=20261105referral1"></script>';
+const i18nHeadHtml = '<script src="/js/i18n.js?v=20261106drill1"></script>';
 // One full translation pass at the end of <body>, where the whole document
 // exists but the two vendored scripts below have not been fetched yet. Anything
 // painted while they load is already in the right language. Must come after

@@ -251,22 +251,15 @@
   function bankPickerLabel(b, index) {
     return `${index + 1}. ${tabLabel(b)}`;
   }
+  // 匹配规则在 ledger-bank-pick.js（有测试）：序号后面还有字就必须整段对得上。
   function bankByPickerLabel(text) {
-    const t = String(text || "").trim();
-    if (!t) return null;
-    const numMatch = t.match(/^(\d+)(?:\.\s*|\s+|$)/);
     const list = usableBanks();
-    if (numMatch) {
-      const idx = Number(numMatch[1]) - 1;
-      if (idx >= 0 && idx < list.length) return list[idx];
-    }
-    const upper = t.toUpperCase();
-    return list.find((b) =>
-      bankPickerLabel(b, list.indexOf(b)).toUpperCase() === upper
-      || tabLabel(b).toUpperCase() === upper
-      || bankBranchOf(b).toUpperCase() === upper
-      || String(b.account_name || "").toUpperCase() === upper
-    ) || null;
+    const id = window.matchBankByLabel(text, list.map((b, i) => ({
+      id: b.id,
+      label: bankPickerLabel(b, i),
+      aliases: [tabLabel(b), bankBranchOf(b), b.account_name],
+    })));
+    return id == null ? null : list.find((b) => b.id === id) || null;
   }
   /** Sydney wall-clock HH:MM in 24-hour (h23). */
   function nowTime() {
@@ -347,22 +340,27 @@
     inp.value = bankPickerLabel(bank, idx >= 0 ? idx : 0);
     inp.dataset.bankId = String(bank.id);
   }
-  function rowBankId(tr, bankAccText) {
+  // 只负责从 DOM 取值，判定规则在 ledger-bank-pick.js（有测试）。返回 { mode, id }。
+  function rowBankId(tr, bankAccText, isExisting) {
     const inp = tr.querySelector('input[data-f="bank_acc"]');
-    const text = String(bankAccText || "").trim();
-    if (inp?.dataset.bankCleared === "1") return 0;
-    const matched = matchBankId(bankAccText);
-    if (matched) return matched;
-    if (inp?.dataset.bankId) {
-      const id = Number(inp.dataset.bankId);
+    const datasetBankId = inp?.dataset.bankId ? Number(inp.dataset.bankId) : 0;
+    let datasetLabel = "";
+    if (datasetBankId) {
       const list = usableBanks();
-      const bank = list.find((b) => b.id === id);
-      const idx = list.findIndex((b) => b.id === id);
-      const label = bank ? bankPickerLabel(bank, idx >= 0 ? idx : 0) : "";
-      if (!text || label.toUpperCase() === text.toUpperCase()) return id;
+      const idx = list.findIndex((b) => b.id === datasetBankId);
+      if (idx >= 0) datasetLabel = bankPickerLabel(list[idx], idx);
     }
-    if (!text && activeBankId !== ALL_BANKS && activeBankId) return activeBankId;
-    return usableBanks()[0]?.id ?? null;
+    return window.resolveRowBank({
+      isExisting: Boolean(isExisting),
+      cleared: inp?.dataset.bankCleared === "1",
+      text: bankAccText,
+      origText: inp?.dataset.origText ?? "",
+      matchedId: matchBankId(bankAccText),
+      datasetBankId,
+      datasetLabel,
+      activeBankId: activeBankId !== ALL_BANKS ? activeBankId : null,
+      firstUsableId: usableBanks()[0]?.id ?? null,
+    });
   }
   function cStatusNames() {
     return cStatusOptions.map((o) => o.name);
@@ -450,6 +448,8 @@
     let attrs = ` data-f="${f}" class="${cls}" value="${esc(String(val ?? ""))}" autocomplete="off" spellcheck="false"`;
     if (f === "status") attrs += ` style="${statusStyleAttr(val)}"`;
     if (f === "bank_acc" && bankId) attrs += ` data-bank-id="${bankId}"`;
+    // 编辑时 BANK ACC 没动就原样保留（见 ledger-bank-pick.js），靠这个初值判断「动没动」。
+    if (f === "bank_acc") attrs += ` data-orig-text="${esc(String(val ?? ""))}"`;
     if (num) attrs += ' inputmode="decimal"';
     if (f === "time") attrs += ' type="time" step="60"';
     // The <input value> is never translated (value is not in I18N_ATTRS, and
@@ -743,9 +743,24 @@
       return Promise.resolve();
     }
     const body = readRow(tr);
-    body.bank_account_id = isRedepositStatus(body.status) ? 0 : rowBankId(tr, body.bank_acc);
+    if (isRedepositStatus(body.status)) {
+      body.bank_account_id = 0;
+    } else {
+      const pick = rowBankId(tr, body.bank_acc, isExisting);
+      if (pick.mode === "invalid") {
+        showToast("BANK ACC 无法识别，请从下拉选择，或选「— 空白 —」解绑", { tone: "warning" });
+        return Promise.resolve();
+      }
+      if (pick.mode === "keep") {
+        // 没动 BANK ACC：两个字段都不发，服务端原样保留绑定（含封禁户的历史行）。
+        delete body.bank_acc;
+      } else {
+        body.bank_account_id = pick.id;
+      }
+    }
+    const keepBank = !("bank_acc" in body);
     if (isRedepositStatus(body.status)) body.bank_acc = "";
-    if (!isRedepositStatus(body.status) && !body.bank_account_id && isExisting) body.bank_acc = "";
+    if (!keepBank && !isRedepositStatus(body.status) && !body.bank_account_id && isExisting) body.bank_acc = "";
     if (!isRedepositStatus(body.status) && !body.bank_account_id && !isExisting) {
       showToast("请选择 BANK ACC", { tone: "warning" });
       return Promise.resolve();
