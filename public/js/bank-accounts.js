@@ -53,6 +53,16 @@
   let ledgerLoadRequest = 0;
   let reportLoadRequest = 0;
   let sharedRefreshInFlight = false;
+  // 后台 5 秒轮询：数据没变就不重绘（规则见 render-gate.js）。
+  const renderGate = window.createRenderGate();
+  // loadBanks / loadSheet / loadDailyReport 常被 .then(fn) 串起来，会收到上一步的返回值，
+  // 所以只认严格的 { background: true }。
+  const isBackground = (opts) => Boolean(opts) && opts.background === true;
+  function gateRender(key, opts, data) {
+    if (isBackground(opts)) return renderGate.changed(key, data);
+    renderGate.remember(key, data);
+    return true;
+  }
 
   const GRID_FIELDS = [
     "time", "tx_id", "status", "in", "out", "help_trf",
@@ -903,7 +913,7 @@
     }
   }
 
-  function loadBanks() {
+  function loadBanks(opts) {
     const request = ++bankLoadRequest;
     return api("/api/banks", { bg: true }).then((d) => {
       if (request !== bankLoadRequest) return;
@@ -915,10 +925,11 @@
       } else if (activeBankId == null) {
         activeBankId = ALL_BANKS;
       }
+      if (!gateRender("banks", opts, { rows: bankRows, active: activeBankId })) return;
       renderTabs();
     });
   }
-  function loadSheet() {
+  function loadSheet(opts) {
     const request = ++ledgerLoadRequest;
     if (!bankRows.length) {
       if (isGridBusy()) return Promise.resolve();
@@ -947,16 +958,18 @@
     }).then((pages) => {
       if (request !== ledgerLoadRequest || dateSnapshot !== sheetDate || bankSnapshot !== activeBankId || isGridBusy()) return;
       ledgerRows = pages.flatMap((page) => page.rows || []);
+      if (!gateRender("sheet", opts, { date: dateSnapshot, bank: bankSnapshot, rows: ledgerRows })) return;
       renderSheet();
     }).catch(() => {});
   }
-  function loadDailyReport() {
+  function loadDailyReport(opts) {
     const request = ++reportLoadRequest;
     const dateSnapshot = sheetDate;
     return api(`/api/banks/daily-report?date=${encodeURIComponent(dateSnapshot)}`, { bg: true })
       .then((d) => {
         if (request !== reportLoadRequest || dateSnapshot !== sheetDate) return;
         dailyReport = d;
+        if (!gateRender("report", opts, { date: dateSnapshot, report: d })) return;
         renderDailyPanels();
       })
       .catch(() => {});
@@ -2519,8 +2532,9 @@ ${bannedCount > 0 ? `<button type="button" class="bk-banned-summary" id="rail-ba
   function refreshSharedWorkspace() {
     if (document.hidden || isGridBusy() || sharedRefreshInFlight) return Promise.resolve();
     sharedRefreshInFlight = true;
-    return loadBanks()
-      .then(() => Promise.all([loadSheet(), loadDailyReport(), refreshPendingBadge()]))
+    // 后台轮询：数据和上次画的一样就不重绘，否则按钮在员工点下去之前就被换掉（员工演练 4/4）。
+    return loadBanks({ background: true })
+      .then(() => Promise.all([loadSheet({ background: true }), loadDailyReport({ background: true }), refreshPendingBadge()]))
       .catch(() => {})
       .finally(() => { sharedRefreshInFlight = false; });
   }
