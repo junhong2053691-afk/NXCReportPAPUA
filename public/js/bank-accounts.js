@@ -1484,8 +1484,16 @@ ${bannedCount > 0 ? `<button type="button" class="bk-banned-summary" id="rail-ba
     const loud = !!alarm && alarm.stage() === "loud";
     box.hidden = false;
     box.classList.toggle("reconcile-alarming", loud);
+    // 只拿本方的 C STATUS 名去搜：r.name 是两边叫法拼起来的「EZ68 / PK7」，本方流水里搜不到。
+    // 本方没映射这家时没有可看的流水，不出按钮；同一家映射了多个名字时每个名字一个按钮。
+    const focusButtons = (r) => {
+      const names = Array.isArray(r.local_names) ? r.local_names : [];
+      return names.map((n) =>
+        `<button type="button" class="btn btn-outline btn-xs reconcile-focus" data-cstatus="${esc(n)}">${names.length > 1 ? `查看流水 <span translate="no">${esc(n)}</span>` : "查看流水"}</button>`
+      ).join("");
+    };
     const items = alerts.map((r) =>
-      `<span class="reconcile-alert-item"><strong>${esc(r.display_name || r.name)}</strong><span>差额 ${fmtSigned(r.difference)}</span><span>IN ${fmtSigned(r.in || 0)}</span><span>OUT ${fmtSigned(r.out || 0)}</span><button type="button" class="btn btn-outline btn-xs reconcile-focus" data-cstatus="${esc(r.name || "")}">查看流水</button></span>`
+      `<span class="reconcile-alert-item"><strong>${esc(r.display_name || r.name)}</strong><span>差额 ${fmtSigned(r.difference)}</span><span>IN ${fmtSigned(r.in || 0)}</span><span>OUT ${fmtSigned(r.out || 0)}</span>${focusButtons(r)}</span>`
     ).join("");
     let noteText = "";
     if (loud) noteText = alarm.blocked() ? "点击页面后声音可用" : "";

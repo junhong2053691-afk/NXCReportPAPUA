@@ -487,6 +487,9 @@ function computeBankDailyReport(db, companyId, opts = {}) {
     const names = [...new Set([...group.currentNames, ...group.counterpartyNames])].filter(Boolean);
     reconcileAlerts.push({
       name: names.join(" / "),
+      // name 拼的是两边的叫法（本方 EZ68 / 对方叫我方 PK7），本方流水里只有本方那个名字。
+      // 「查看流水」必须只拿它去搜，整串去搜一行都搜不到（员工演练发现）。
+      local_names: [...new Set(group.currentNames)].filter(Boolean),
       in: current.in,
       out: current.out,
       total: current.total,
