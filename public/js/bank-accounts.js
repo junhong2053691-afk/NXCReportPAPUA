@@ -1850,6 +1850,8 @@ ${bannedCount > 0 ? `<button type="button" class="bk-banned-summary" id="rail-ba
       acts =
         `<button type="button" class="btn btn-outline btn-xs bkd-edit-btn" data-id="${b.id}">${esc(tr("编辑"))}</button>`
         + `<button type="button" class="btn btn-outline btn-xs bkd-unban-btn" data-id="${b.id}">${esc(tr("解封"))}</button>`
+        // 有钱才给「转出余额」：不用解封再封回去（员工演练发现）。
+        + (bankLedgerBalance(b) > 0.004 ? `<button type="button" class="btn btn-outline btn-xs bkd-drain-btn" data-id="${b.id}">${esc(tr("转出余额"))}</button>` : "")
         + archiveBtn;
     } else {
       acts =
@@ -2502,6 +2504,59 @@ ${bannedCount > 0 ? `<button type="button" class="bk-banned-summary" id="rail-ba
     document.getElementById("transfer-modal")?.classList.add("show");
   }
 
+  // 封禁户「转出余额」：不解封，转到本公司运营中的户口（记两笔）或转给别家（C STATUS）。
+  // 记法与校验在服务端 bankApply.drainBannedAccount。
+  let drainBankId = 0;
+  let drainSubmitting = false;
+  function syncDrainMode() {
+    const company = document.getElementById("drain-mode")?.value === "company";
+    document.getElementById("drain-bank-group")?.toggleAttribute("hidden", company);
+    document.getElementById("drain-cstatus-group")?.toggleAttribute("hidden", !company);
+  }
+  function openDrainModal(id) {
+    const bank = bankRows.find((b) => String(b.id) === String(id));
+    if (!bank) return;
+    drainBankId = bank.id;
+    const g = (key) => document.getElementById(key);
+    const balance = bankLedgerBalance(bank);
+    g("drain-target").textContent = bankTargetFor(bank.id);
+    g("drain-mode").value = "bank";
+    g("drain-bank").innerHTML = window.bankSelectOptionsHtml(usableBanks(), tabLabel);
+    g("drain-cstatus").value = "";
+    g("drain-amount").value = balance > 0 ? balance.toFixed(2) : "";
+    g("drain-amount-hint").textContent = `BAL ${fmt(balance)}`;
+    g("drain-remark").value = "";
+    g("drain-err").textContent = "";
+    syncDrainMode();
+    g("drain-modal").classList.add("show");
+  }
+  function submitDrain() {
+    if (drainSubmitting || !drainBankId) return;
+    const g = (key) => document.getElementById(key);
+    const err = g("drain-err");
+    const company = g("drain-mode").value === "company";
+    const body = { amount: parseNum(g("drain-amount").value), remark: g("drain-remark").value.trim() };
+    if (company) body.c_status = g("drain-cstatus").value.trim();
+    else body.to_bank_account_id = Number(g("drain-bank").value || 0);
+    if (!(body.amount > 0)) { err.textContent = "请输入转出金额"; return; }
+    if (!company && !body.to_bank_account_id) { err.textContent = "请选择收款户口"; return; }
+    if (company && !body.c_status) { err.textContent = "请填写对方公司的 C STATUS"; return; }
+    drainSubmitting = true;
+    const submit = g("drain-submit");
+    if (submit) submit.disabled = true;
+    api(`/api/banks/${drainBankId}/drain`, { method: "POST", body: JSON.stringify(body) })
+      .then(() => {
+        g("drain-modal").classList.remove("show");
+        showToast("已转出", { tone: "success" });
+        return bkdMutate(Promise.resolve()).then(loadSheet).then(loadDailyReport);
+      })
+      .catch((e) => { err.textContent = e.message || "转出失败，请重试"; })
+      .finally(() => {
+        drainSubmitting = false;
+        if (submit) submit.disabled = false;
+      });
+  }
+
   function openCstatusModal() {
     renderCstatusManage();
     fillCompanySelects();
@@ -2859,6 +2914,11 @@ ${bannedCount > 0 ? `<button type="button" class="bk-banned-summary" id="rail-ba
         );
         return;
       }
+      const drain = e.target.closest(".bkd-drain-btn");
+      if (drain) {
+        openDrainModal(drain.dataset.id);
+        return;
+      }
       const unban = e.target.closest(".bkd-unban-btn");
       if (unban) {
         // 解封以前一点就生效：户口立刻回到审批和调钱的下拉里（员工演练里解封期间又被选中）。
@@ -3095,6 +3155,11 @@ ${bannedCount > 0 ? `<button type="button" class="bk-banned-summary" id="rail-ba
     document.getElementById("trf-cancel")?.addEventListener("click", () => {
       document.getElementById("transfer-modal").classList.remove("show");
     });
+    document.getElementById("drain-mode")?.addEventListener("change", syncDrainMode);
+    document.getElementById("drain-cancel")?.addEventListener("click", () => {
+      document.getElementById("drain-modal").classList.remove("show");
+    });
+    document.getElementById("drain-submit")?.addEventListener("click", submitDrain);
     document.getElementById("trf-submit")?.addEventListener("click", () => {
       const g = (id) => document.getElementById(id);
       if (transferSubmitting) return;

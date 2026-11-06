@@ -542,6 +542,19 @@ const pageRoutes = {
 <div class="actions"><button class="btn btn-outline btn-sm" id="trf-cancel">取消</button><button class="btn btn-success btn-sm" id="trf-submit">保存</button></div>
 </div></div>
 
+<div class="modal-overlay" id="drain-modal"><div class="modal drain-modal">
+<h2>转出封禁户余额</h2>
+<div class="reason-target"><div class="reason-target-detail" id="drain-target" translate="no"></div></div>
+<div class="form-group"><label for="drain-mode">去向</label><select id="drain-mode"><option value="bank">本公司户口</option><option value="company">别家公司</option></select></div>
+<div class="form-group" id="drain-bank-group"><label for="drain-bank">收款户口</label><select id="drain-bank"></select></div>
+<div class="form-group" id="drain-cstatus-group" hidden><label for="drain-cstatus">C STATUS（对方公司）</label><input id="drain-cstatus" list="cstatus-datalist" autocomplete="off"></div>
+<div class="form-group"><label for="drain-amount">金额</label><input id="drain-amount" inputmode="decimal" autocomplete="off" aria-describedby="drain-amount-hint"><small class="form-hint" id="drain-amount-hint" translate="no"></small></div>
+<div class="form-group"><label for="drain-remark">REMARK</label><input id="drain-remark" autocomplete="off"></div>
+<p class="modal-note">本公司户口：记两笔，封禁户 BANK TRF 出、收款户 BANK TRANSFER 入，C STATUS 留空。别家公司：只记封禁户一笔 BANK TRF 出，C STATUS 填对方，对方自己记入账。户口保持封禁；钱拿回后户口还要用的，请用「解封」。</p>
+<p id="drain-err" class="form-error" role="alert" aria-live="polite"></p>
+<div class="actions"><button class="btn btn-outline btn-sm" id="drain-cancel" type="button">取消</button><button class="btn btn-success btn-sm" id="drain-submit" type="button">确认转出</button></div>
+</div></div>
+
 <div class="modal-overlay" id="cstatus-modal"><div class="modal">
 <h2>C STATUS 管理</h2>
 <div class="form-group"><label>名称</label><input id="cs-new-name"></div>
@@ -560,7 +573,7 @@ const pageRoutes = {
 <p id="reason-modal-error" class="form-error" role="alert" aria-live="polite"></p>
 <div class="actions"><button class="btn btn-outline btn-sm" id="reason-modal-cancel" type="button">取消</button><button class="btn btn-danger btn-sm" id="reason-modal-confirm" type="button">确认</button></div>
 </div></div>`,
-    ["/js/ledger-bank-pick.js?v=20261106drill3", "/js/operation-target.js?v=20261106drill1", "/js/render-gate.js?v=20261106drill1", "/js/bank-accounts.js?v=20261106drill10"]
+    ["/js/ledger-bank-pick.js?v=20261106drill3", "/js/operation-target.js?v=20261106drill1", "/js/render-gate.js?v=20261106drill1", "/js/bank-accounts.js?v=20261106drill11"]
   ),
   "/audit-history.html": pageLayout(
     "\u64cd\u4f5c\u5386\u53f2",
@@ -670,7 +683,7 @@ const globalFeedbackHtml = '<div class="app-toast-stack" id="app-toast-stack" ar
 // i18n.js holds the dictionary + translation engine. It is injected into <head> (ahead of the
 // render-blocking stylesheet) so the first paint is already in the saved language, instead of
 // painting Chinese and rewriting it after the two vendored scripts at the end of <body> load.
-const i18nHeadHtml = '<script src="/js/i18n.js?v=20261106drill8"></script>';
+const i18nHeadHtml = '<script src="/js/i18n.js?v=20261106drill9"></script>';
 // One full translation pass at the end of <body>, where the whole document
 // exists but the two vendored scripts below have not been fetched yet. Anything
 // painted while they load is already in the right language. Must come after

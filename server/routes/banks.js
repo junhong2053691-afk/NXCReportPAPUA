@@ -24,6 +24,7 @@ const {
   restoreSkippedPendingTx,
   deleteSkippedPendingTx,
   submitTransfer,
+  drainBannedAccount,
   pendingCounts,
   bankAccLabel,
   nowSql,
@@ -353,6 +354,16 @@ router.delete("/pending-tx/:txId/skipped", (req, res) => {
 router.post("/ledger/transfer", (req, res) => {
   try {
     const result = submitTransfer(getDb(), companyId(req), req.body || {}, actorFromRequest(req));
+    res.json(result);
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+// 封禁户「转出余额」：不解封，直接把钱转到本公司运营中的户口，或转给别家（C STATUS）。
+router.post("/:id/drain", (req, res) => {
+  try {
+    const result = drainBannedAccount(getDb(), companyId(req), Number(req.params.id), req.body || {}, actorFromRequest(req));
     res.json(result);
   } catch (e) {
     res.status(e.status || 500).json({ error: e.message });

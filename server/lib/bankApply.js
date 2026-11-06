@@ -1,7 +1,7 @@
 "use strict";
 
-const { refreshBankBalance, bankBranchOf } = require("./bankReport");
-const { SQL_OPERATING } = require("./bankLifecycle");
+const { refreshBankBalance, bankBranchOf, balanceFromLedger } = require("./bankReport");
+const { SQL_OPERATING, isBanned } = require("./bankLifecycle");
 const { formatWallClock, todayKey, localMidnightUtc } = require("./dates");
 const { cleanLedgerName } = require("./displayName");
 const { isDemoTenant } = require("./readConfig");
@@ -895,6 +895,96 @@ function submitTransfer(db, fromCompanyId, body, actor) {
   });
 }
 
+// 封禁户「转出余额」。所有记账入口都只认运营中的户口，以前员工只能「解封 → 记两笔 → 再封禁」，
+// 解封期间户口又出现在审批下拉里（2026-11-06 员工演练）。记法与用户确认（Excel）：
+//   转到本公司另一个户口：封禁户 BANK TRF 出 + 收款户 BANK TRANSFER 入，金额相同，C STATUS 留空
+//   转给别家公司：      封禁户 BANK TRF 出，C STATUS 填对方（对方自己记入账）
+// 落列与调钱弹窗录 BANK TRF / BANK TRANSFER 完全一样（mapAmountFields），所以 C STATUS 表
+// 的方向也一样。户口不解封；钱能拿回、户口还要用的照旧走「解封」。
+function drainBannedAccount(db, companyId, bankId, body, actor) {
+  const from = db
+    .prepare("SELECT * FROM bank_accounts WHERE id = ? AND company_id = ?")
+    .get(Number(bankId || 0), companyId);
+  if (!from || !isBanned(from)) {
+    throw Object.assign(new Error("只有封禁中的户口可以转出余额"), { status: 400 });
+  }
+  const amountNumber = Number(String(body?.amount ?? "").replace(/,/g, "").trim());
+  const amount = Number.isFinite(amountNumber) ? Math.round(amountNumber * 100) / 100 : 0;
+  if (!(amount > 0)) throw Object.assign(new Error("金额无效"), { status: 400 });
+  const balance = balanceFromLedger(db, from.id);
+  if (Math.round(amount * 100) > Math.round(balance * 100)) {
+    throw Object.assign(new Error(`转出金额不能超过户口余额 ${balance.toFixed(2)}`), { status: 400 });
+  }
+
+  const toBankId = Number(body?.to_bank_account_id || 0);
+  const cStatus = String(body?.c_status || "").trim();
+  if (Boolean(toBankId) === Boolean(cStatus)) {
+    throw Object.assign(new Error("请选择本公司收款户口，或填写对方公司的 C STATUS（二选一）"), { status: 400 });
+  }
+  let to = null;
+  let targetCompany = "";
+  if (toBankId) {
+    to = db
+      .prepare(`SELECT * FROM bank_accounts WHERE id = ? AND company_id = ? AND ${SQL_OPERATING}`)
+      .get(toBankId, companyId);
+    if (!to || to.id === from.id) {
+      throw Object.assign(new Error("收款户口无效、已封禁或已归档"), { status: 400 });
+    }
+  } else {
+    const selfLinked = splitCStatusNames(cStatus).some((name) => db
+      .prepare("SELECT 1 FROM bank_c_status_options WHERE company_id = ? AND name = ? AND target_company_id = ?")
+      .get(companyId, name, companyId));
+    if (selfLinked) throw Object.assign(new Error("不能转给本公司，请改选本公司收款户口"), { status: 400 });
+    targetCompany = linkedCompanyForCStatus(db, companyId, cStatus);
+  }
+
+  const entryTime = nowSql();
+  const remark = String(body?.remark || "").trim();
+  const groupId = makeTransferGroupId();
+  return runAtomic(db, () => {
+    if (cStatus) upsertCStatusOptions(db, companyId, cStatus, targetCompany || null);
+    const out = insertLedger(db, {
+      bank_account_id: from.id,
+      company_id: companyId,
+      entry_time: entryTime,
+      ...mapAmountFields("out", "bank trf", amount),
+      bank_acc: bankAccLabel(from),
+      c_status: cStatus,
+      remark,
+      transfer_group_id: groupId,
+    });
+    const inbound = to
+      ? insertLedger(db, {
+        bank_account_id: to.id,
+        company_id: companyId,
+        entry_time: entryTime,
+        ...mapAmountFields("in", "bank transfer", amount),
+        bank_acc: bankAccLabel(to),
+        remark,
+        transfer_group_id: groupId,
+      })
+      : null;
+    appendAuditEvent(db, {
+      companyId,
+      action: "transfer.created",
+      source: "user",
+      actor: auditActorValue(actor),
+      summary: `封禁户转出余额 #${out.id}${inbound ? ` → #${inbound.id}` : ""}`,
+      reason: remark,
+      after: pickFields(out, LEDGER_FIELDS),
+      metadata: {
+        banned_drain: true,
+        from_bank_account_id: from.id,
+        to_bank_account_id: to ? to.id : 0,
+        target_company_id: targetCompany || "",
+        counterparty_required: Boolean(targetCompany),
+      },
+      refs: ledgerRefs(out),
+    });
+    return { ledger: out, inbound, transfer_group_id: groupId, counterparty_required: Boolean(targetCompany) };
+  });
+}
+
 function pendingCounts(db, companyId) {
   const tx = db
     .prepare("SELECT COUNT(*) AS n FROM bank_tx_pending WHERE company_id = ? AND state = 'pending'")
@@ -936,6 +1026,7 @@ module.exports = {
   restoreSkippedPendingTx,
   deleteSkippedPendingTx,
   submitTransfer,
+  drainBannedAccount,
   pendingCounts,
   platformTxTypeForLedger,
   reopenPendingForLedger,
