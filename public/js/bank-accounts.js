@@ -2978,7 +2978,7 @@ ${bannedCount > 0 ? `<button type="button" class="bk-banned-summary" id="rail-ba
       if (e.target.closest(".pend-skip")) {
         requestOperationReason({
           title: "跳过平台单",
-          description: "请记录暂不处理这笔平台单的原因。",
+          description: "请记录暂不处理这笔平台单的原因。今天内可在「已跳过」恢复；过了今天自动过期，无法恢复，这笔钱也不会入账。",
           target: `平台交易 ${txId}`,
           confirmLabel: "确认跳过",
         }).then((reason) => {
@@ -2986,7 +2986,7 @@ ${bannedCount > 0 ? `<button type="button" class="bk-banned-summary" id="rail-ba
           return api(`/api/banks/pending-tx/${encodeURIComponent(txId)}/skip`, {
             method: "POST",
             body: JSON.stringify({ reason }),
-          }).then(() => { showToast("Skipped，可在 Skipped tab 恢复", { tone: "success" }); loadPendingPanels(); refreshPendingBadge(); });
+          }).then(() => { showToast("已跳过，今天内可在「已跳过」恢复", { tone: "success" }); loadPendingPanels(); refreshPendingBadge(); });
         });
         return;
       }

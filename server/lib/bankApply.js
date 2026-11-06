@@ -2,7 +2,7 @@
 
 const { refreshBankBalance, bankBranchOf } = require("./bankReport");
 const { SQL_OPERATING } = require("./bankLifecycle");
-const { formatWallClock, todayKey } = require("./dates");
+const { formatWallClock, todayKey, localMidnightUtc } = require("./dates");
 const { cleanLedgerName } = require("./displayName");
 const { isDemoTenant } = require("./readConfig");
 const {
@@ -316,11 +316,26 @@ function listPendingTx(db, companyId) {
     .all(companyId);
 }
 
+// 跳过的单按**跳过的那一天**（实例时区）过期：当天跳过的当天都能在「已跳过」恢复，过了
+// 本地午夜才转 expired。以前按平台单日期 tx_time 判定，于是任何往日的单一跳过就满足
+// 「早于今天」，几秒内（pendingCounts 每 8 秒轮询）就永久定型——2026-11-06 员工演练里
+// 4 家公司都这样丢过单，而 toast 还写着「可在 Skipped tab 恢复」。
+// decided_at 是 datetime('now') 写的 UTC，必须用 localMidnightUtc 换算日界；没有 decided_at
+// 的历史行退回按 tx_time 判定。两个条件只在这里定义一次，过期、列表、计数共用。
+const SKIPPED_EXPIRED_SQL = `state = 'skipped' AND (
+  (COALESCE(decided_at, '') <> '' AND decided_at < ?)
+  OR (COALESCE(decided_at, '') = '' AND substr(tx_time, 1, 10) < ?)
+)`;
+const SKIPPED_CURRENT_SQL = `state = 'skipped' AND (
+  (COALESCE(decided_at, '') <> '' AND decided_at >= ?)
+  OR (COALESCE(decided_at, '') = '' AND substr(tx_time, 1, 10) = ?)
+)`;
+const skippedDayParams = (dateKey) => [localMidnightUtc(dateKey), dateKey];
+
 function expireSkippedPendingTx(db, companyId, dateKey) {
   const rows = db.prepare(
-    `SELECT * FROM bank_tx_pending
-     WHERE company_id = ? AND state = 'skipped' AND substr(tx_time, 1, 10) < ?`
-  ).all(companyId, dateKey);
+    `SELECT * FROM bank_tx_pending WHERE company_id = ? AND ${SKIPPED_EXPIRED_SQL}`
+  ).all(companyId, ...skippedDayParams(dateKey));
   if (!rows.length) return 0;
   return runAtomic(db, () => {
     const update = db.prepare(
@@ -353,11 +368,11 @@ function listSkippedPendingTx(db, companyId, limit = 100, dateKey = todayKey()) 
   return db
     .prepare(
       `SELECT * FROM bank_tx_pending
-       WHERE company_id = ? AND state = 'skipped' AND substr(tx_time, 1, 10) = ?
+       WHERE company_id = ? AND ${SKIPPED_CURRENT_SQL}
        ORDER BY decided_at DESC, id DESC
        LIMIT ?`
     )
-    .all(companyId, dateKey, Math.min(300, Math.max(1, Number(limit || 100))));
+    .all(companyId, ...skippedDayParams(dateKey), Math.min(300, Math.max(1, Number(limit || 100))));
 }
 
 function approvePendingTx(db, companyId, txId, body, actor) {
@@ -878,10 +893,9 @@ function pendingCounts(db, companyId) {
   expireSkippedPendingTx(db, companyId, dateKey);
   const skipped = db
     .prepare(
-      `SELECT COUNT(*) AS n FROM bank_tx_pending
-       WHERE company_id = ? AND state = 'skipped' AND substr(tx_time, 1, 10) = ?`
+      `SELECT COUNT(*) AS n FROM bank_tx_pending WHERE company_id = ? AND ${SKIPPED_CURRENT_SQL}`
     )
-    .get(companyId, dateKey).n;
+    .get(companyId, ...skippedDayParams(dateKey)).n;
   return {
     company_id: companyId,
     pending_tx: tx,

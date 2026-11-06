@@ -1287,14 +1287,14 @@ Object.assign(I18N.zh, {
   "已删除，平台订单已恢复到待接单": "已删除，平台订单已恢复到待接单",
   "BANK ACC 无法识别，请从下拉选择，或选「— 空白 —」解绑": "BANK ACC 无法识别，请从下拉选择，或选「— 空白 —」解绑",
   "封禁后该渠道将不再参与当前运营。": "封禁后该渠道将不再参与当前运营。",
-  "请记录暂不处理这笔平台单的原因。": "请记录暂不处理这笔平台单的原因。",
+  "请记录暂不处理这笔平台单的原因。今天内可在「已跳过」恢复；过了今天自动过期，无法恢复，这笔钱也不会入账。": "请记录暂不处理这笔平台单的原因。今天内可在「已跳过」恢复；过了今天自动过期，无法恢复，这笔钱也不会入账。",
   "本方调钱已保存，请对方公司另外录入": "本方调钱已保存，请对方公司另外录入",
   "删除后当天不能再恢复，请说明原因。": "删除后当天不能再恢复，请说明原因。",
   "余额上限报警必须是不小于 0 的数字": "余额上限报警必须是不小于 0 的数字",
   "请输入金额，例如 100 或 -100": "请输入金额，例如 100 或 -100",
   "恢复后会重算银行余额，并写入永久审计记录。": "恢复后会重算银行余额，并写入永久审计记录。",
   "金额格式无效，请输入 100 或 -100": "金额格式无效，请输入 100 或 -100",
-  "Skipped，可在 Skipped tab 恢复": "Skipped，可在 Skipped tab 恢复",
+  "已跳过，今天内可在「已跳过」恢复": "已跳过，今天内可在「已跳过」恢复",
   "流水会进入最近删除；如关联平台单，可能同时恢复为待处理。": "流水会进入最近删除；如关联平台单，可能同时恢复为待处理。",
 });
 Object.assign(I18N.en, {
@@ -1378,14 +1378,14 @@ Object.assign(I18N.en, {
   "已删除，平台订单已恢复到待接单": "Deleted; the platform order is back to pending intake",
   "BANK ACC 无法识别，请从下拉选择，或选「— 空白 —」解绑": "BANK ACC not recognised. Pick one from the list, or choose \"— blank —\" to unlink",
   "封禁后该渠道将不再参与当前运营。": "Once banned, this channel no longer takes part in operations.",
-  "请记录暂不处理这笔平台单的原因。": "Record why this platform order is being left for now.",
+  "请记录暂不处理这笔平台单的原因。今天内可在「已跳过」恢复；过了今天自动过期，无法恢复，这笔钱也不会入账。": "Record why this platform order is being left for now. You can restore it from Skipped until the end of today; after that it expires for good and the money is never booked.",
   "本方调钱已保存，请对方公司另外录入": "This side of the transfer is saved; the other company must enter theirs separately",
   "删除后当天不能再恢复，请说明原因。": "It cannot be restored the same day. Please give a reason.",
   "余额上限报警必须是不小于 0 的数字": "The balance alert threshold must be a number no smaller than 0",
   "请输入金额，例如 100 或 -100": "Enter an amount, e.g. 100 or -100",
   "恢复后会重算银行余额，并写入永久审计记录。": "Restoring recalculates the bank balance and writes a permanent audit record.",
   "金额格式无效，请输入 100 或 -100": "Invalid amount format, enter 100 or -100",
-  "Skipped，可在 Skipped tab 恢复": "Skipped; restore it from the Skipped tab",
+  "已跳过，今天内可在「已跳过」恢复": "Skipped; you can restore it from Skipped until the end of today",
   "流水会进入最近删除；如关联平台单，可能同时恢复为待处理。": "The row moves to recently deleted; a linked platform order may go back to pending.",
 });
 

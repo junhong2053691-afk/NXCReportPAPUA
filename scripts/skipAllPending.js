@@ -10,11 +10,10 @@
  *   1. **skip 掉的钱永远不会进账本。** pending 单只有经 approvePendingTx 才写 bank_ledger。
  *      标成 skipped 就是放弃这笔流水记录 —— 跑之前请先确认这些钱不需要入账
  *      （用 tx_id 把 bank_tx_pending LEFT JOIN bank_ledger 可以查已录入的部分）。
- *   2. **今天以前的单会立刻永久定型。** bankApply.js 的 expireSkippedPendingTx 把
- *      tx_time 早于今天的 skipped 单转成 expired，而 restoreSkippedPendingTx 只认
- *      skipped。触发点是 pendingCounts()，也就是每 8 秒被轮询的
- *      /api/banks/pending-counts —— 所以 skip 之后几秒内就回不去了。
- *      只有**当天**的单还能从「已跳过」tab 恢复。
+ *   2. **过了本地午夜就永久定型。** bankApply.js 的 expireSkippedPendingTx 按**跳过的那一天**
+ *      （decided_at，实例时区）把 skipped 单转成 expired，而 restoreSkippedPendingTx 只认
+ *      skipped。所以跑完当天还能从「已跳过」tab 逐笔恢复，过了午夜就回不去了。
+ *      （2026-11-06 之前是按平台单日期 tx_time 判定，往日的单 skip 后几秒内就定型。）
  *   3. **跑之前先备份。** 库是 WAL 模式，用 scripts/vacuumSnapshot.js 打快照，
  *      别直接拷 .db（会丢掉未 checkpoint 的 WAL）。
  *

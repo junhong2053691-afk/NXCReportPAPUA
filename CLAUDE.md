@@ -94,8 +94,9 @@ $env:TUNNEL_EDGE_IP_VERSION="4"
 | `scripts/set-password.js` | 直接改库里的账号密码，密码只从 stdin 读。**搬库后改 `config.json` 不生效**，这是唯一入口 |
 
 `skipAllPending.js` 有三条不可回避的前提，详见其文件头注释：**skip 掉的钱永远不进账本**；
-**今天以前的单几秒内就转成 `expired` 且无法恢复**（`pendingCounts` 每 8 秒被轮询，它内部就会触发
-`expireSkippedPendingTx`）；**跑之前必须先 `vacuumSnapshot`**，那是唯一退路。
+**过了本地午夜就转成 `expired` 且无法恢复**（`expireSkippedPendingTx` 按跳过日 `decided_at`
+判定，不是平台单日期——按 `tx_time` 判会让往日的单一跳过就几秒内定型，演练里 4 家都这样丢过单）；
+**跑之前必须先 `vacuumSnapshot`**，那是唯一退路。
 它复用 `skipPendingTx` 逐笔调用以保留审计，**绝不在外层包 `runAtomic`**（会嵌套回滚，见下文）。
 
 备份落在 `server/db/backup-<时间戳>/`，已被 `.gitignore` 挡住 —— 那里面是含 23 万客户
