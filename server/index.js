@@ -536,7 +536,7 @@ const pageRoutes = {
 <div class="form-group"><label>NAME</label><input id="trf-name" autocomplete="off"></div>
 <div class="form-group"><label>C STATUS (可选)</label>
 <input id="trf-cstatus" list="cstatus-datalist" autocomplete="off" placeholder="使用已关联的 C STATUS"></div>
-<p class="modal-note">提现代付双方分别录入：本公司 CASH IN，协助公司另外 CASH OUT；例如 X6 由 Rolex 帮忙，X6 是 Rolex / CASH IN，Rolex 是 X6 / CASH OUT。</p>
+<p class="modal-note">提现代付双方分别录入：客户所在公司在「待处理」里对这张提现单选「调钱」（记 WITHDRAW，放 HELP TRF），协助公司在这里录 CASH OUT；例如 EZ 帮 RX 付，RX 审批选调钱、C STATUS 填 EZ68，EZ 在这里录 CASH OUT、C STATUS 填 RX66。</p>
 <div class="form-group"><label>REMARK</label><input id="trf-remark"></div>
 <p id="trf-err" class="form-error" role="alert" aria-live="polite"></p>
 <div class="actions"><button class="btn btn-outline btn-sm" id="trf-cancel">取消</button><button class="btn btn-success btn-sm" id="trf-submit">保存</button></div>
@@ -670,7 +670,7 @@ const globalFeedbackHtml = '<div class="app-toast-stack" id="app-toast-stack" ar
 // i18n.js holds the dictionary + translation engine. It is injected into <head> (ahead of the
 // render-blocking stylesheet) so the first paint is already in the saved language, instead of
 // painting Chinese and rewriting it after the two vendored scripts at the end of <body> load.
-const i18nHeadHtml = '<script src="/js/i18n.js?v=20261106drill3"></script>';
+const i18nHeadHtml = '<script src="/js/i18n.js?v=20261106drill5"></script>';
 // One full translation pass at the end of <body>, where the whole document
 // exists but the two vendored scripts below have not been fetched yet. Anything
 // painted while they load is already in the right language. Must come after

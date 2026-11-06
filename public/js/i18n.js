@@ -1033,7 +1033,7 @@ Object.assign(I18N.zh, {
   "启用 Telegram（关掉后所有 Bot 停止，期间的报警会留在队列里等重新打开）": "启用 Telegram（关掉后所有 Bot 停止，期间的报警会留在队列里等重新打开）",
   "余额达到该金额时推送 Telegram。跌回阈值下会自动复位，下次再达到会重新提醒。": "余额达到该金额时推送 Telegram。跌回阈值下会自动复位，下次再达到会重新提醒。",
   "只有这些 chat 能用 /balance、/today，其余一律静默。把 Bot 拉进群后发 /myid 即可获取，群 chat id 是负数。": "只有这些 chat 能用 /balance、/today，其余一律静默。把 Bot 拉进群后发 /myid 即可获取，群 chat id 是负数。",
-  "提现代付双方分别录入：本公司 CASH IN，协助公司另外 CASH OUT；例如 X6 由 Rolex 帮忙，X6 是 Rolex / CASH IN，Rolex 是 X6 / CASH OUT。": "提现代付双方分别录入：本公司 CASH IN，协助公司另外 CASH OUT；例如 X6 由 Rolex 帮忙，X6 是 Rolex / CASH IN，Rolex 是 X6 / CASH OUT。",
+  "提现代付双方分别录入：客户所在公司在「待处理」里对这张提现单选「调钱」（记 WITHDRAW，放 HELP TRF），协助公司在这里录 CASH OUT；例如 EZ 帮 RX 付，RX 审批选调钱、C STATUS 填 EZ68，EZ 在这里录 CASH OUT、C STATUS 填 RX66。": "提现代付双方分别录入：客户所在公司在「待处理」里对这张提现单选「调钱」（记 WITHDRAW，放 HELP TRF），协助公司在这里录 CASH OUT；例如 EZ 帮 RX 付，RX 审批选调钱、C STATUS 填 EZ68，EZ 在这里录 CASH OUT、C STATUS 填 RX66。",
 });
 Object.assign(I18N.en, {
   "操盘手后台": "Trader Dashboard",
@@ -1202,7 +1202,7 @@ Object.assign(I18N.en, {
   "启用 Telegram（关掉后所有 Bot 停止，期间的报警会留在队列里等重新打开）": "Enable Telegram (turning this off stops every bot; alerts stay queued until it is switched back on)",
   "余额达到该金额时推送 Telegram。跌回阈值下会自动复位，下次再达到会重新提醒。": "Pushes to Telegram when the balance reaches this amount. It resets by itself once the balance falls back below the threshold, and fires again next time.",
   "只有这些 chat 能用 /balance、/today，其余一律静默。把 Bot 拉进群后发 /myid 即可获取，群 chat id 是负数。": "Only these chats can use /balance and /today; everything else is dropped silently. Add the bot to a group and send /myid to get the id — group ids are negative.",
-  "提现代付双方分别录入：本公司 CASH IN，协助公司另外 CASH OUT；例如 X6 由 Rolex 帮忙，X6 是 Rolex / CASH IN，Rolex 是 X6 / CASH OUT。": "Both sides of an assisted withdrawal are entered separately: this company as CASH IN, the helping company as CASH OUT. If Rolex helps X6, X6 records Rolex / CASH IN and Rolex records X6 / CASH OUT.",
+  "提现代付双方分别录入：客户所在公司在「待处理」里对这张提现单选「调钱」（记 WITHDRAW，放 HELP TRF），协助公司在这里录 CASH OUT；例如 EZ 帮 RX 付，RX 审批选调钱、C STATUS 填 EZ68，EZ 在这里录 CASH OUT、C STATUS 填 RX66。": "Both sides of an assisted withdrawal are entered separately: the customer's company approves the withdrawal in Pending with \"Transfer\" (recorded as WITHDRAW in HELP TRF), and the helping company enters CASH OUT here. E.g. if EZ pays for RX, RX approves with Transfer and C STATUS EZ68, and EZ enters CASH OUT here with C STATUS RX66.",
 });
 
 // batch B: bank-accounts.js
