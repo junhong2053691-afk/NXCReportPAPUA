@@ -1073,6 +1073,8 @@ const appModalState = {
   openedAt: new WeakMap(),
   lastFocus: new WeakMap(),
   pointerStartedOnBackdrop: new WeakMap(),
+  // 本次打开后员工动过表单没有（只认 isTrusted 的 input/change）。动过就不让遮罩关它，见 modal-guard.js。
+  dirty: new WeakMap(),
   sequence: 0,
   domObserver: null,
 };
@@ -1343,6 +1345,7 @@ function syncModalOverlay(overlay) {
   const wasOpen = Boolean(appModalState.wasOpen.get(overlay));
   const dialog = overlay.querySelector(".modal");
   appModalState.wasOpen.set(overlay, open);
+  if (open !== wasOpen) appModalState.dirty.set(overlay, false);
   if (open && !wasOpen) {
     appModalState.lastFocus.set(overlay, document.activeElement);
     appModalState.openedAt.set(overlay, ++appModalState.sequence);
@@ -1423,12 +1426,29 @@ function registerModalOverlay(overlay) {
   overlay.addEventListener("pointerdown", function (event) {
     appModalState.pointerStartedOnBackdrop.set(overlay, event.target === overlay);
   });
+  const markDirty = function (event) { if (event.isTrusted) appModalState.dirty.set(overlay, true); };
+  dialog.addEventListener("input", markDirty);
+  dialog.addEventListener("change", markDirty);
   overlay.addEventListener("click", function (event) {
     const startedOnBackdrop = Boolean(appModalState.pointerStartedOnBackdrop.get(overlay));
     appModalState.pointerStartedOnBackdrop.set(overlay, false);
-    if (!startedOnBackdrop || event.target !== overlay || getTopModalOverlay() !== overlay) return;
+    // modal-guard.js 由 server/index.js 在 app.js 之前注入；缺了它就退回旧行为（不动过也照关）。
+    const decide = window.modalBackdropDecision || function (s) {
+      return s.startedOnBackdrop && s.endedOnBackdrop && s.isTop ? "dismiss" : "ignore";
+    };
+    const decision = decide({
+      startedOnBackdrop: startedOnBackdrop,
+      endedOnBackdrop: event.target === overlay,
+      isTop: getTopModalOverlay() === overlay,
+      dirty: Boolean(appModalState.dirty.get(overlay)),
+    });
+    if (decision === "ignore") return;
     event.preventDefault();
     event.stopImmediatePropagation();
+    if (decision === "keep") {
+      showToast(window.MODAL_KEEP_MESSAGE, { tone: "warning" });
+      return;
+    }
     requestModalDismiss(overlay);
   });
   const observer = new MutationObserver(function () { syncModalOverlay(overlay); });

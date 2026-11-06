@@ -1039,6 +1039,21 @@ body.modal-open { overflow: hidden; }
 .modal-close:hover { border-color: var(--border); background: var(--surface-2); color: var(--text); }
 .bkd-modal.has-modal-close .bkd-modal-heading { padding-right: 48px; }
 .modal-lg { width: min(960px, 100%); }
+/* 按钮条钉在弹窗底边：弹窗比屏幕矮时（600–768 高）「保存」一直看得见，不用先滚到底。
+   员工演练里按钮压在底边、点偏落在遮罩上把弹窗关了、内容全丢（遮罩那一半见 modal-guard.js）。
+   负的 bottom / margin 抵掉 .modal 的 20px 内边距，贴住真正的底边。
+   :where() 让 :not 不加特异性，下面 ≤768 / ≤700 两条同特异性规则靠源码顺序覆盖它。
+   待处理 / 渠道管理自己是固定头尾的 flex 结构，不参与。 */
+.modal-overlay:not(.app-dialog-overlay):not(:where(#pending-modal, #banks-list-modal)) .modal > .actions {
+  position: sticky;
+  bottom: -20px;
+  z-index: 2;
+  margin: 16px -20px -20px;
+  padding: 12px 20px;
+  border-top: 1px solid var(--border);
+  border-radius: 0 0 var(--radius) var(--radius);
+  background: var(--surface-solid);
+}
 .copy-box { padding: 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface-2); white-space: pre-wrap; overflow-wrap: anywhere; }
 .app-dialog { width: min(460px, 100%); }
 .app-dialog[data-tone="danger"] { border-color: color-mix(in srgb, var(--red) 38%, var(--glass-border)); }
@@ -3568,6 +3583,11 @@ tr:hover .bank-bal-btns { opacity: 1; }
   th { position: static; font-size: 12px; }
   td { max-width: 220px; font-size: 14px; }
   .modal { padding: 16px; max-height: calc(100dvh - 24px); }
+  .modal-overlay:not(.app-dialog-overlay):not(:where(#pending-modal, #banks-list-modal)) .modal > .actions {
+    bottom: -16px;
+    margin: 16px -16px -16px;
+    padding: 12px 16px;
+  }
   .modal-overlay { align-items: flex-end; padding: 12px max(10px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) max(10px, env(safe-area-inset-left)); }
   .modal-overlay .modal { width: 100%; border-radius: var(--radius) var(--radius) 0 0; }
   /* 上面那条 .modal 用的是 max-height，而渠道管理弹窗要固定 height 才能让
@@ -3717,6 +3737,7 @@ tr:hover .bank-bal-btns { opacity: 1; }
     margin: auto -16px 0;
     padding: 12px 16px max(12px, env(safe-area-inset-bottom));
     border-top: 1px solid var(--border);
+    border-radius: 0;
     background: var(--surface-solid);
   }
   #pending-modal .modal,
