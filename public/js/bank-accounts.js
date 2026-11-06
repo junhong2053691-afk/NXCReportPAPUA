@@ -1642,7 +1642,8 @@ ${bannedCount > 0 ? `<button type="button" class="bk-banned-summary" id="rail-ba
     api(url, { method, body: JSON.stringify(body) })
       .then((d) => {
         closeBankModal({ restoreList: false });
-        if (d.row && wasNew) activeBankId = d.row.id;
+        // 刻意不切换流水的渠道筛选：以前新建后会筛到新户，流水显示「当天暂无流水」、KPI 变 0，
+        // 调钱弹窗还会预选它，员工把调钱绑到了空户口上（员工演练 4/4）。筛选只由员工自己点。
         return loadBanks().then(loadSheet).then(loadDailyReport).then(() => {
           if (shouldRestoreList) restoreBanksListModal(wasNew ? "#add-bank-btn" : `.bkd-edit-btn[data-id="${d.row?.id || ""}"]`);
         });
