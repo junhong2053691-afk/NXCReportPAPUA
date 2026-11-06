@@ -2243,6 +2243,11 @@ ${bannedCount > 0 ? `<button type="button" class="bk-banned-summary" id="rail-ba
         };
         dateInput?.addEventListener("input", syncPendingDateLabel);
         dateInput?.addEventListener("change", syncPendingDateLabel);
+        // 改成今天时时间跳到现在：留着平台单的时间（如 16:55）会落成一笔未来流水，服务端会拒（员工演练发现）。
+        dateInput?.addEventListener("change", () => {
+          const timeInput = tr.querySelector(".pend-time");
+          if (timeInput && dateInput.value === todaySydney()) timeInput.value = nowTime();
+        });
         const syncHelp = () => {
           const help = mode && mode.value === "help";
           const split = mode && mode.value === "split";

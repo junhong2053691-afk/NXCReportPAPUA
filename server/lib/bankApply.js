@@ -61,11 +61,21 @@ function normalizeSqlDateTime(value) {
   return `${m[1]} ${hh}:${mm}:${ss}`;
 }
 
-function pendingLedgerEntryTime(pending, requested) {
+// 浏览器时钟可能比服务器快一点，「当前时间」差几分钟不算未来。
+const FUTURE_ENTRY_SLACK_MS = 5 * 60 * 1000;
+
+// 默认记平台单的日期与时间（Excel 按平台单那天算，2026-11-06 与用户确认）。
+// 员工改过的时间**不能晚于现在**：演练里只把日期改成今天、时间留着平台的 16:55，而当时
+// 才 14:30，于是落成一笔「未来流水」。前端改日期时会把时间跳到现在，这里是最后一道闸，
+// 拒绝而不是静默改写。平台自己的 tx_time 不受这条限制（那是平台的时钟，不是人填的）。
+function pendingLedgerEntryTime(pending, requested, nowMs = Date.now()) {
   const txTime = normalizeSqlDateTime(pending?.tx_time) || nowSql();
   const reqTime = normalizeSqlDateTime(requested);
   if (String(requested || "").trim() && !reqTime) {
     throw Object.assign(new Error("入账日期或时间无效"), { status: 400 });
+  }
+  if (reqTime && reqTime > formatWallClock(new Date(nowMs + FUTURE_ENTRY_SLACK_MS).toISOString())) {
+    throw Object.assign(new Error("入账时间不能晚于现在"), { status: 400 });
   }
   // Keep the platform timestamp in pending.tx_time. The separately stored
   // approval timestamp is intentionally editable and remains auditable.
@@ -918,6 +928,7 @@ module.exports = {
   logAccountEvent,
   insertLedger,
   enqueuePendingTx,
+  pendingLedgerEntryTime,
   listPendingTx,
   listSkippedPendingTx,
   approvePendingTx,
