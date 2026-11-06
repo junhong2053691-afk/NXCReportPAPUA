@@ -53,7 +53,6 @@
   let ledgerLoadRequest = 0;
   let reportLoadRequest = 0;
   let sharedRefreshInFlight = false;
-  const PENDING_BANK_RANK_STORAGE_PREFIX = "bank-pending-last-bank:";
 
   const GRID_FIELDS = [
     "time", "tx_id", "status", "in", "out", "help_trf",
@@ -2149,41 +2148,12 @@ ${bannedCount > 0 ? `<button type="button" class="bk-banned-summary" id="rail-ba
       b.textContent = n > 0 ? `${base} (${n})` : base;
     });
   }
+  // 审批行的两个银行下拉：固定顺序、不加位置序号、不按「上次用过」重排（规则与测试见 ledger-bank-pick.js）。
   function bankOptionsHtml(selected) {
-    return '<option value="">—</option>' + usableBanks().map((b, i) =>
-      `<option value="${b.id}" translate="no"${String(selected) === String(b.id) ? " selected" : ""}>${esc(bankPickerLabel(b, i))}</option>`
-    ).join("");
-  }
-  function pendingBankRankCompanyId() {
-    return String(document.getElementById("company-select")?.value || "").trim();
-  }
-  function pendingBankRankStorageKey(companyId = pendingBankRankCompanyId()) {
-    return companyId ? `${PENDING_BANK_RANK_STORAGE_PREFIX}${companyId}` : "";
-  }
-  function lastPendingBankId(companyId = pendingBankRankCompanyId()) {
-    const key = pendingBankRankStorageKey(companyId);
-    if (!key) return 0;
-    try {
-      const bankId = Number(localStorage.getItem(key) || 0);
-      if (bankId && usableBanks().some((b) => b.id === bankId)) return bankId;
-      if (bankId) localStorage.removeItem(key);
-    } catch (_) {}
-    return 0;
-  }
-  function rememberPendingBank(bankId, companyId = pendingBankRankCompanyId()) {
-    const id = Number(bankId || 0);
-    const key = pendingBankRankStorageKey(companyId);
-    if (!id || !key || !usableBanks().some((b) => b.id === id)) return;
-    try { localStorage.setItem(key, String(id)); } catch (_) {}
+    return window.bankSelectOptionsHtml(usableBanks(), tabLabel, selected);
   }
   function pendingBankOptionsHtml() {
-    const banks = usableBanks().slice();
-    const lastBankId = lastPendingBankId();
-    const lastBankIndex = banks.findIndex((b) => b.id === lastBankId);
-    if (lastBankIndex > 0) banks.unshift(banks.splice(lastBankIndex, 1)[0]);
-    return '<option value="">—</option>' + banks.map((b, i) =>
-      `<option value="${b.id}" translate="no">${esc(bankPickerLabel(b, i))}</option>`
-    ).join("");
+    return window.bankSelectOptionsHtml(usableBanks(), tabLabel);
   }
   function loadPendingPanels() {
     return Promise.all([
@@ -3006,7 +2976,6 @@ ${bannedCount > 0 ? `<button type="button" class="bk-banned-summary" id="rail-ba
       if (!e.target.closest(".pend-approve")) return;
       const modeEl = tr.querySelector(".pend-mode");
       const mode = modeEl ? modeEl.value : "bank";
-      const companyId = pendingBankRankCompanyId();
       if (mode === "split" && !updatePendingSplitState(tr)) return;
       const body = {
         mode: mode === "split" ? "help_split" : mode,
@@ -3032,10 +3001,8 @@ ${bannedCount > 0 ? `<button type="button" class="bk-banned-summary" id="rail-ba
       api(`/api/banks/pending-tx/${encodeURIComponent(txId)}/approve`, {
         method: "POST",
         body: JSON.stringify(body),
-      }).then(() => {
-        if (mode === "bank") rememberPendingBank(body.bank_account_id, companyId);
-        return reloadAll().then(loadPendingPanels);
-      }).catch((err) => showToast(err.message || "审批失败", { tone: "error" }));
+      }).then(() => reloadAll().then(loadPendingPanels))
+        .catch((err) => showToast(err.message || "审批失败", { tone: "error" }));
     });
     document.getElementById("pending-skipped-rows")?.addEventListener("click", (e) => {
       const restore = e.target.closest(".pend-restore");

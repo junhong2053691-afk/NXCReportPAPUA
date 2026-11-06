@@ -59,10 +59,24 @@ function matchBankByLabel(text, options) {
   return hit ? hit.id : null;
 }
 
+// 审批平台单的银行下拉（本户 / 拆分自付）。**固定按户口列表顺序、不加位置序号、不预选**。
+// 2026-11-06 员工演练：旧实现把上一笔用过的户口顶到第一位、每审一笔重排，误点一次那个错的
+// 户口下一笔就排第一，连环误点；位置序号又叠在户名自带的编号前（「1. 7. Ubank MAT」）。
+// 用户确认固定顺序。位置序号只属于流水表 BANK ACC 格（那里靠它键盘录入），<select> 用不上。
+function bankSelectOptionsHtml(banks, labelOf, selected) {
+  const escAttr = (s) => String(s == null ? "" : s)
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  const sel = selected == null || selected === "" ? "" : String(selected);
+  return '<option value="">—</option>' + (Array.isArray(banks) ? banks : []).map((b) =>
+    `<option value="${escAttr(b.id)}" translate="no"${sel && sel === String(b.id) ? " selected" : ""}>${escAttr(labelOf(b))}</option>`
+  ).join("");
+}
+
 if (typeof window !== "undefined") {
   window.resolveRowBank = resolveRowBank;
   window.matchBankByLabel = matchBankByLabel;
+  window.bankSelectOptionsHtml = bankSelectOptionsHtml;
 }
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { resolveRowBank, matchBankByLabel };
+  module.exports = { resolveRowBank, matchBankByLabel, bankSelectOptionsHtml };
 }
