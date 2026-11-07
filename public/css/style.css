@@ -323,18 +323,13 @@ table { border-spacing: 0; }
 }
 .brand-mark { display: flex; align-items: center; gap: 11px; min-height: 52px; padding: 4px 5px 12px; }
 .brand-symbol, .login-brand {
-  display: grid;
-  place-items: center;
+  display: block;
   flex: 0 0 auto;
   width: 38px;
   height: 38px;
-  border: 1px solid rgba(255, 255, 255, .42);
+  object-fit: cover;
   border-radius: var(--radius);
-  background: linear-gradient(145deg, #2477e8, #1557bd 58%, #0b8b72);
-  color: #fff;
-  font-size: 17px;
-  font-weight: var(--weight-bold);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .34), 0 8px 18px rgba(22, 90, 183, .2);
+  box-shadow: 0 8px 18px rgba(22, 90, 183, .22);
 }
 .brand-mark h2 { margin: 0; font-size: 17px; line-height: 1.2; font-weight: var(--weight-bold); }
 .brand-mark p { margin: 2px 0 0; color: var(--muted); font-size: 11px; text-transform: uppercase; }
@@ -1155,7 +1150,7 @@ body.customer-drawer-open { overflow: hidden; }
   padding: max(20px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(20px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
 }
 .login-box { width: min(420px, 100%); padding: 28px; background: var(--glass-strong); }
-.login-brand { width: 44px; height: 44px; margin-bottom: 22px; }
+.login-brand { width: 56px; height: 56px; margin-bottom: 22px; }
 .login-heading { margin-bottom: 22px; }
 .login-heading h1 { margin: 2px 0 7px; font-size: 27px; line-height: 1.2; }
 .login-heading p { margin: 0; color: var(--text-soft); }

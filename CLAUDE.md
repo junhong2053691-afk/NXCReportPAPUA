@@ -1,4 +1,8 @@
-# CLAUDE.md — 操盘手后台 (trader-dashboard)
+# CLAUDE.md — NXC Report (trader-dashboard)
+
+> 产品名 2026-11 起改为 **NXC Report**（原「操盘手后台」）。目录、`package.json`、`deploy/*.service`、
+> 日志前缀 `[trader-dashboard]` 等内部标识刻意保留旧名。图标资源在 `public/brand/` 与
+> `public/favicon.ico`，设计原图存档在 `design-system/brand/`。
 
 本文件供 AI 助手（Claude / Cursor）快速理解项目上下文与开发约束。
 

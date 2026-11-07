@@ -1,4 +1,4 @@
-# 操盘手后台 (trader-dashboard)
+# NXC Report (trader-dashboard)
 
 独立后台，供操盘手查看充值单、提现单、顾客动向。与 `marketing-bot` 分开运行。
 

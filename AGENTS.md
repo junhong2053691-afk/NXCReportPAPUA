@@ -1,4 +1,4 @@
-# AGENTS.md — 操盘手后台 (trader-dashboard)
+# AGENTS.md — NXC Report (trader-dashboard)
 
 本文件供 AI 助手（Codex / Cursor）快速理解项目上下文与开发约束。
 

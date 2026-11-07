@@ -867,7 +867,6 @@ const I18N_PHRASES_ZH = [
 ];
 // batch A: server/index.js page shell + static HTML
 Object.assign(I18N.zh, {
-  "操盘手后台": "操盘手后台",
   "笔数": "笔数",
   "操作": "操作",
   "动作": "动作",
@@ -937,7 +936,7 @@ Object.assign(I18N.zh, {
   "← 上一天": "← 上一天",
   "查看待处理": "查看待处理",
   "待处理工作": "待处理工作",
-  "发给操盘手": "发给操盘手",
+  "发送账号信息": "发送账号信息",
   "接口不存在": "接口不存在",
   "今日新注册": "今日新注册",
   "旧记录回填": "旧记录回填",
@@ -969,7 +968,6 @@ Object.assign(I18N.zh, {
   "沉默7天+重点": "沉默7天+重点",
   "服务器内部错误": "服务器内部错误",
   "每天归零分开算": "每天归零分开算",
-  "新建操盘手账号": "新建操盘手账号",
   "白名单 chat": "白名单 chat",
   "今日暂无充值客户": "今日暂无充值客户",
   "领取人数（去重）": "领取人数（去重）",
@@ -1023,7 +1021,7 @@ Object.assign(I18N.zh, {
   "Google Sheets（CSV 导入）": "Google Sheets（CSV 导入）",
   "交易号 / 流水 ID / 原因 / 操作者": "交易号 / 流水 ID / 原因 / 操作者",
   "填超出范围的值会被自动收到边界，不会保存失败。": "填超出范围的值会被自动收到边界，不会保存失败。",
-  "自定义账号 ID 和密码，创建后复制发给操盘手": "自定义账号 ID 和密码，创建后复制发给操盘手",
+  "自定义账号 ID、密码和角色（Admin / Operator），创建后复制发给对方": "自定义账号 ID、密码和角色（Admin / Operator），创建后复制发给对方",
   "的所有同步数据（客户、交易、统计），且不可恢复。": "的所有同步数据（客户、交易、统计），且不可恢复。",
   "输入完整交易号或流水 ID，查看平台原单、关联流水和时间线。": "输入完整交易号或流水 ID，查看平台原单、关联流水和时间线。",
   "10–600。保存后会立即生效，这个是兼顾直接改库的兼容兼顾。": "10–600。保存后会立即生效，这个是兼顾直接改库的兼容兼顾。",
@@ -1036,7 +1034,6 @@ Object.assign(I18N.zh, {
   "提现代付双方分别录入：客户所在公司在「待处理」里对这张提现单选「调钱」（记 WITHDRAW，放 HELP TRF），协助公司在这里录 CASH OUT；例如 EZ 帮 RX 付，RX 审批选调钱、C STATUS 填 EZ68，EZ 在这里录 CASH OUT、C STATUS 填 RX66。": "提现代付双方分别录入：客户所在公司在「待处理」里对这张提现单选「调钱」（记 WITHDRAW，放 HELP TRF），协助公司在这里录 CASH OUT；例如 EZ 帮 RX 付，RX 审批选调钱、C STATUS 填 EZ68，EZ 在这里录 CASH OUT、C STATUS 填 RX66。",
 });
 Object.assign(I18N.en, {
-  "操盘手后台": "Trader Dashboard",
   "笔数": "Count",
   "操作": "Actions",
   "动作": "Action",
@@ -1106,7 +1103,7 @@ Object.assign(I18N.en, {
   "← 上一天": "← Previous day",
   "查看待处理": "View pending",
   "待处理工作": "Pending work",
-  "发给操盘手": "Send to the trader",
+  "发送账号信息": "Send account details",
   "接口不存在": "Endpoint not found",
   "今日新注册": "New today",
   "旧记录回填": "Backfill old records",
@@ -1138,7 +1135,6 @@ Object.assign(I18N.en, {
   "沉默7天+重点": "Silent 7+ days (priority)",
   "服务器内部错误": "Internal server error",
   "每天归零分开算": "Resets daily, counted separately",
-  "新建操盘手账号": "New trader account",
   "白名单 chat": "Whitelisted chats",
   "今日暂无充值客户": "No depositing customers today",
   "领取人数（去重）": "Claimers (unique)",
@@ -1192,7 +1188,7 @@ Object.assign(I18N.en, {
   "Google Sheets（CSV 导入）": "Google Sheets (CSV import)",
   "交易号 / 流水 ID / 原因 / 操作者": "Trans ID / ledger ID / reason / operator",
   "填超出范围的值会被自动收到边界，不会保存失败。": "Out-of-range values are clamped to the limit rather than failing to save.",
-  "自定义账号 ID 和密码，创建后复制发给操盘手": "Set an account ID and password, then copy them to the trader",
+  "自定义账号 ID、密码和角色（Admin / Operator），创建后复制发给对方": "Set an account ID, password and role (Admin / Operator), then copy the details to them",
   "的所有同步数据（客户、交易、统计），且不可恢复。": "'s synced data (customers, transactions, stats). This cannot be undone.",
   "输入完整交易号或流水 ID，查看平台原单、关联流水和时间线。": "Enter a full trans ID or ledger ID to see the platform order, the linked ledger rows and the timeline.",
   "10–600。保存后会立即生效，这个是兼顾直接改库的兼容兼顾。": "10–600. Takes effect as soon as you save; this also covers edits made directly in the database.",
@@ -2301,7 +2297,8 @@ function flushI18n() {
 }
 
 // The old TreeWalker was rooted at document.body, so the tab caption stayed
-// Chinese forever. Title format is "<page> - 操盘手后台".
+// Chinese forever. Title format is "<page> - NXC Report" (the brand has no
+// dictionary entry, so it passes through untouched in both languages).
 function applyTitle(lang) {
   if (!i18nTitleState || document.title !== i18nTitleState.out) {
     i18nTitleState = { src: document.title, out: null };

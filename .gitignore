@@ -84,12 +84,14 @@ patch-*.js
 # 员工演练：测试账号密码 + 报告里会抄到真实客户姓名
 .scratch/agent-drill/
 
-# 图片：public/ 下确认零图片，根目录只有调试截图
+# 图片：根目录只有调试截图。唯一例外是品牌图标（NXC Report logo / favicon）
 *.png
 *.jpg
 *.jpeg
 *.gif
 *.webp
+!public/brand/*.png
+!design-system/brand/*.png
 
 # ════════════════════════════════════════════════════════════
 #  编辑器 / 操作系统
