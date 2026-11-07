@@ -90,10 +90,6 @@ function sortRows(rows, sort) {
   });
 }
 
-function rangeParams(dateFrom, dateTo) {
-  return [dateFrom, dateTo, dateFrom, dateTo, dateFrom, dateTo, dateFrom, dateTo, dateFrom, dateTo, dateFrom, dateTo, dateFrom, dateTo];
-}
-
 function depositedSql(prefix = "c") {
   const p = prefix ? prefix + "." : "";
   return `(COALESCE(${p}dep_total, 0) > 0 OR COALESCE(${p}dep_count, 0) > 0 OR (${p}last_deposit IS NOT NULL AND ${p}last_deposit != ''))`;
@@ -126,46 +122,106 @@ function buildTotals(rows) {
   return totals;
 }
 
+// ── 性能 ──
+// 下面几个报表以前都是 customers（一家 7 万多行）LEFT JOIN first_dep 等 CTE。SQLite 不给 CTE
+// 建自动索引，每个客户都把 CTE 整个扫一遍（客户数 × 首充人数），一次 1.5–2 秒；better-sqlite3
+// 是同步的，这期间整个进程都停着，几个人同时开报表就能把审批和同步一起卡住（线上出过 524）。
+// 现在 CTE 各自单独查出来放进 Map，按客户在 JS 里拼，口径与原 SQL 逐格相同。
+
+/** 客户 id → 历史首充日期（firstDepCte 同一口径，含按手机号回退归属）。 */
+function firstDepMap(db, companyId) {
+  const map = new Map();
+  for (const r of db.prepare("WITH " + firstDepCte(companyId) + " SELECT customer_id, first_dep_date FROM first_dep").all()) {
+    map.set(String(r.customer_id), r.first_dep_date);
+  }
+  return map;
+}
+
+/** 本公司全部客户的推荐人分组键（与原 SQL 的 GROUP BY referrer_key 同一表达式）。 */
+function customersWithReferrer(db, companyId) {
+  return db
+    .prepare(
+      `SELECT c.id, ${refKeySql("c.referrer")} AS referrer_key, ${refLabelSql("c.referrer")} AS referrer,
+         c.register_date_key AS reg
+       FROM customers c WHERE c.company_id = ?`
+    )
+    .all(companyId);
+}
+
+/** 区间内某类交易按 customer_id（原样，不回退手机号）求和；NULL 的 customer_id 原 SQL 也 JOIN 不上，跳过。 */
+function rangeSumByCustomer(db, companyId, type, dateFrom, dateTo) {
+  const map = new Map();
+  for (const r of db
+    .prepare(
+      `SELECT customer_id, SUM(amount) AS total FROM transactions
+       WHERE company_id = ? AND type = ? AND created_date >= ? AND created_date <= ?
+       GROUP BY customer_id`
+    )
+    .all(companyId, type, dateFrom, dateTo)) {
+    if (r.customer_id != null) map.set(String(r.customer_id), r.total);
+  }
+  return map;
+}
+
+function groupFor(groups, c) {
+  let g = groups.get(c.referrer_key);
+  if (!g) {
+    g = {
+      referrer_key: c.referrer_key,
+      referrer: c.referrer,
+      total_customers: 0,
+      new_regs: 0,
+      first_dep_count: 0,
+      dep_users: 0,
+      dep_total: 0,
+      wd_total: 0,
+    };
+    groups.set(c.referrer_key, g);
+  }
+  return g;
+}
+
 function computeReferrerLeaderboardAllTime(db, opts = {}) {
   const companyId = opts.companyId;
   const sort = "total_sum";
   const q = (opts.q || "").trim().toLowerCase();
 
-  const sql =
-    "WITH " +
-    firstDepCte(companyId) +
-    `,
-    cust_dep AS (
-      SELECT
-        COALESCE(NULLIF(t.customer_id, ''), c.id) AS customer_id,
-        SUM(CASE WHEN t.type = 'DEPOSIT' THEN t.amount ELSE 0 END) AS dep_total,
-        SUM(CASE WHEN t.type = 'WITHDRAW' THEN t.amount ELSE 0 END) AS wd_total
-      FROM transactions t
-      LEFT JOIN customers c ON c.company_id = t.company_id
-        AND (t.customer_id IS NULL OR t.customer_id = '')
-        AND t.mobile IS NOT NULL AND t.mobile != ''
-        AND c.mobile = t.mobile
-      WHERE t.company_id = ? AND t.type IN ('DEPOSIT', 'WITHDRAW')
-      GROUP BY COALESCE(NULLIF(t.customer_id, ''), c.id)
+  const firstDep = firstDepMap(db, companyId);
+  const custDep = new Map();
+  for (const r of db
+    .prepare(
+      `SELECT
+         COALESCE(NULLIF(t.customer_id, ''), c.id) AS customer_id,
+         SUM(CASE WHEN t.type = 'DEPOSIT' THEN t.amount ELSE 0 END) AS dep_total,
+         SUM(CASE WHEN t.type = 'WITHDRAW' THEN t.amount ELSE 0 END) AS wd_total
+       FROM transactions t
+       LEFT JOIN customers c ON c.company_id = t.company_id
+         AND (t.customer_id IS NULL OR t.customer_id = '')
+         AND t.mobile IS NOT NULL AND t.mobile != ''
+         AND c.mobile = t.mobile
+       WHERE t.company_id = ? AND t.type IN ('DEPOSIT', 'WITHDRAW')
+       GROUP BY COALESCE(NULLIF(t.customer_id, ''), c.id)`
     )
-    SELECT
-      ${refKeySql("c.referrer")} AS referrer_key,
-      ${refLabelSql("c.referrer")} AS referrer,
-      COUNT(*) AS total_customers,
-      COUNT(*) AS new_regs,
-      COUNT(DISTINCT CASE WHEN fd.first_dep_date IS NOT NULL THEN c.id END) AS first_dep_count,
-      COUNT(DISTINCT CASE WHEN cd.customer_id IS NOT NULL AND cd.dep_total > 0 THEN c.id END) AS dep_users,
-      COALESCE(SUM(cd.dep_total), 0) AS dep_total,
-      COALESCE(SUM(cd.wd_total), 0) AS wd_total
-    FROM customers c
-    LEFT JOIN first_dep fd ON fd.customer_id = c.id
-    LEFT JOIN cust_dep cd ON cd.customer_id = c.id
-    WHERE c.company_id = ?
-    GROUP BY referrer_key`;
+    .all(companyId)) {
+    if (r.customer_id != null) custDep.set(String(r.customer_id), r);
+  }
 
-  let rows = db
-    .prepare(sql)
-    .all(companyId, companyId)
+  const groups = new Map();
+  for (const c of customersWithReferrer(db, companyId)) {
+    const g = groupFor(groups, c);
+    const id = String(c.id);
+    g.total_customers += 1;
+    g.new_regs += 1;
+    if (firstDep.get(id) != null) g.first_dep_count += 1;
+    const cd = custDep.get(id);
+    if (cd) {
+      if (cd.dep_total > 0) g.dep_users += 1;
+      g.dep_total += cd.dep_total || 0;
+      g.wd_total += cd.wd_total || 0;
+    }
+  }
+
+  let rows = [...groups.values()]
     .map((r) => {
       const totalCustomers = Number(r.total_customers || 0);
       const depUsers = Number(r.dep_users || 0);
@@ -216,60 +272,28 @@ function computeReferrerLeaderboard(db, dateFrom, dateTo, opts = {}) {
   dateTo = range.dateTo;
   const q = (opts.q || "").trim().toLowerCase();
 
-  const sql =
-    "WITH " +
-    firstDepCte(companyId) +
-    `,
-    range_dep AS (
-      SELECT customer_id, SUM(amount) AS dep_total
-      FROM transactions
-      WHERE company_id = ? AND type = 'DEPOSIT' AND created_date >= ? AND created_date <= ?
-      GROUP BY customer_id
-    ),
-    range_wd AS (
-      SELECT customer_id, SUM(amount) AS wd_total
-      FROM transactions
-      WHERE company_id = ? AND type = 'WITHDRAW' AND created_date >= ? AND created_date <= ?
-      GROUP BY customer_id
-    ),
-    range_dep_users AS (
-      SELECT DISTINCT customer_id
-      FROM transactions
-      WHERE company_id = ? AND type = 'DEPOSIT' AND created_date >= ? AND created_date <= ?
-    )
-    SELECT
-      ${refKeySql("c.referrer")} AS referrer_key,
-      ${refLabelSql("c.referrer")} AS referrer,
-      COUNT(DISTINCT c.id) AS total_customers,
-      COUNT(DISTINCT CASE WHEN c.register_date_key >= ? AND c.register_date_key <= ? THEN c.id END) AS new_regs,
-      COUNT(DISTINCT CASE WHEN fd.first_dep_date >= ? AND fd.first_dep_date <= ? THEN c.id END) AS first_dep_count,
-      COUNT(DISTINCT CASE WHEN du.customer_id IS NOT NULL THEN c.id END) AS dep_users,
-      COALESCE(SUM(rd.dep_total), 0) AS dep_total,
-      COALESCE(SUM(rw.wd_total), 0) AS wd_total
-    FROM customers c
-    LEFT JOIN first_dep fd ON fd.customer_id = c.id
-    LEFT JOIN range_dep rd ON rd.customer_id = c.id
-    LEFT JOIN range_wd rw ON rw.customer_id = c.id
-    LEFT JOIN range_dep_users du ON du.customer_id = c.id
-    WHERE c.company_id = ?
-    GROUP BY referrer_key
-    HAVING COUNT(DISTINCT CASE WHEN c.register_date_key >= ? AND c.register_date_key <= ? THEN c.id END) > 0
-        OR COUNT(DISTINCT CASE WHEN fd.first_dep_date >= ? AND fd.first_dep_date <= ? THEN c.id END) > 0
-        OR COALESCE(SUM(rd.dep_total), 0) > 0
-        OR COALESCE(SUM(rw.wd_total), 0) > 0`;
+  const inRange = (d) => d != null && d >= dateFrom && d <= dateTo;
+  const firstDep = firstDepMap(db, companyId);
+  // range_dep_users（区间内有充值的 DISTINCT customer_id）与 range_dep 的分组键是同一个集合。
+  const rangeDep = rangeSumByCustomer(db, companyId, "DEPOSIT", dateFrom, dateTo);
+  const rangeWd = rangeSumByCustomer(db, companyId, "WITHDRAW", dateFrom, dateTo);
 
-  const rp = rangeParams(dateFrom, dateTo);
-  const lbParams = [
-    companyId, dateFrom, dateTo,
-    companyId, dateFrom, dateTo,
-    companyId, dateFrom, dateTo,
-    ...rp.slice(6, 10),
-    companyId,
-    ...rp.slice(10),
-  ];
-  let rows = db
-    .prepare(sql)
-    .all(...lbParams)
+  const groups = new Map();
+  for (const c of customersWithReferrer(db, companyId)) {
+    const g = groupFor(groups, c);
+    const id = String(c.id);
+    g.total_customers += 1;
+    if (inRange(c.reg)) g.new_regs += 1;
+    if (inRange(firstDep.get(id))) g.first_dep_count += 1;
+    if (rangeDep.has(id)) {
+      g.dep_users += 1;
+      g.dep_total += rangeDep.get(id) || 0;
+    }
+    if (rangeWd.has(id)) g.wd_total += rangeWd.get(id) || 0;
+  }
+
+  let rows = [...groups.values()]
+    .filter((r) => r.new_regs > 0 || r.first_dep_count > 0 || r.dep_total > 0 || r.wd_total > 0)
     .map((r) => {
       const newRegs = Number(r.new_regs || 0);
       const firstDep = Number(r.first_dep_count || 0);
@@ -334,16 +358,13 @@ function computeReferrerReport(db, referrerKey, dateFrom, dateTo, opts = {}) {
     .prepare("SELECT COUNT(*) AS n FROM customers c WHERE c.company_id = ? AND " + refKeySql("c.referrer") + " = ?")
     .get(companyId, referrerKey).n;
 
-  let customerSql =
-    "WITH " +
-    firstDepCte(companyId) +
-    `
+  // 首充日期从 Map 里补，不再 LEFT JOIN first_dep（自然流量一组就有几万人，逐个扫 CTE 很慢）。
+  const firstDep = firstDepMap(db, companyId);
+  let customerSql = `
     SELECT
       c.id, c.username, c.name, c.mobile, c.register_date_key, c.last_login_date,
-      c.dep_count, c.dep_total, c.wd_total, c.last_deposit, c.last_login,
-      fd.first_dep_date
+      c.dep_count, c.dep_total, c.wd_total, c.last_deposit, c.last_login
     FROM customers c
-    LEFT JOIN first_dep fd ON fd.customer_id = c.id
     WHERE c.company_id = ? AND ${refKeySql("c.referrer")} = ?`;
 
   const params = [companyId, referrerKey];
@@ -351,12 +372,17 @@ function computeReferrerReport(db, referrerKey, dateFrom, dateTo, opts = {}) {
     customerSql += " AND c.register_date_key >= ? AND c.register_date_key <= ?";
     params.push(dateFrom, dateTo);
   } else if (segment === "first_dep_today") {
-    customerSql += " AND fd.first_dep_date >= ? AND fd.first_dep_date <= ?";
-    params.push(dateFrom, dateTo);
+    const ids = [];
+    for (const [id, d] of firstDep) if (d != null && d >= dateFrom && d <= dateTo) ids.push(id);
+    customerSql += " AND c.id IN (SELECT value FROM json_each(?))";
+    params.push(JSON.stringify(ids));
   }
 
   customerSql += " ORDER BY c.register_date DESC LIMIT 500";
-  const customers = db.prepare(customerSql).all(...params);
+  const customers = db
+    .prepare(customerSql)
+    .all(...params)
+    .map((c) => ({ ...c, first_dep_date: firstDep.get(String(c.id)) ?? null }));
 
   return {
     dateFrom,

@@ -45,50 +45,96 @@ const cents = (v) => Math.round(Number(v || 0) * 100);
  * 的人会被算成本月首充。「第一笔」先比日期键 created_date（日界口径的那一列），同一天再比
  * created_at、id；不直接按 created_at 排，是因为它为空的单子会排到最前面被当成首笔。
  */
+//
+// 性能：以前是一条 SQL 用 customers（一家 7 万多行）LEFT JOIN 上面这几个 CTE。SQLite 不给
+// CTE 建自动索引，于是每个客户都把 CTE 整个扫一遍 —— 客户数 × 有充值的下线数，单次 4 秒多，
+// 而 better-sqlite3 是同步的，这 4 秒里整个进程（审批、同步、所有人的请求）都在等。
+// 现在拆成两步：先按客户聚合出「有动静的人」（只有几百上千行），再按主键把这些人和本期注册
+// 的人从 customers 里取出来，在 JS 里拼。口径与以前那条 SQL 逐行相同。
 function downlineRows(db, companyId, p, referrer) {
   const onlyReferrer = typeof referrer === "string";
-  return db
+  const activity = db
     .prepare(
-      `WITH tx AS (
+      `WITH tx AS MATERIALIZED (
          SELECT ${TX_CUSTOMER_ID} AS cid, t.type, t.created_date AS d, t.created_at, t.id, t.amount
          FROM transactions t
          ${TX_JOIN}
          WHERE t.company_id = @cid AND t.type IN ('DEPOSIT', 'WITHDRAW') AND ${NOT_TEST}
            AND COALESCE(${TX_CUSTOMER_ID}, '') <> ''
        ),
-       dep AS (
+       dep AS MATERIALIZED (
          SELECT cid, d, amount, ROW_NUMBER() OVER (PARTITION BY cid ORDER BY d, created_at, id) AS rn
          FROM tx WHERE type = 'DEPOSIT'
        ),
        first AS (SELECT cid, d AS first_date, amount AS first_amount FROM dep WHERE rn = 1),
        per AS (
-         SELECT dep.cid,
+         SELECT dep.cid, f.first_date, f.first_amount,
            SUM(CASE WHEN dep.d >= @from AND dep.d < @to THEN 1 ELSE 0 END) AS dep_count,
            SUM(CASE WHEN dep.d >= @from AND dep.d < @to THEN dep.amount ELSE 0 END) AS dep_amount,
            SUM(CASE WHEN dep.d = f.first_date THEN 1 ELSE 0 END) AS first_day_count,
            SUM(CASE WHEN dep.d = f.first_date THEN dep.amount ELSE 0 END) AS first_day_amount
          FROM dep JOIN first f ON f.cid = dep.cid
          GROUP BY dep.cid
-       ),
-       wd AS (
-         SELECT cid, COUNT(*) AS wd_count, SUM(ABS(amount)) AS wd_amount
-         FROM tx WHERE type = 'WITHDRAW' AND d >= @from AND d < @to
-         GROUP BY cid
        )
-       SELECT c.id, c.username, c.name, ${REF_EXPR} AS referrer, c.register_date_key AS reg,
-         f.first_date, f.first_amount,
-         COALESCE(per.dep_count, 0) AS dep_count, COALESCE(per.dep_amount, 0) AS dep_amount,
-         COALESCE(per.first_day_count, 0) AS first_day_count, COALESCE(per.first_day_amount, 0) AS first_day_amount,
-         COALESCE(wd.wd_count, 0) AS wd_count, COALESCE(wd.wd_amount, 0) AS wd_amount
-       FROM customers c
-       LEFT JOIN first f ON f.cid = c.id
-       LEFT JOIN per ON per.cid = c.id
-       LEFT JOIN wd ON wd.cid = c.id
-       WHERE c.company_id = @cid
-         AND ((c.register_date_key >= @from AND c.register_date_key < @to) OR per.dep_count > 0 OR wd.wd_count > 0)
-         ${onlyReferrer ? `AND ${REF_EXPR} = @ref` : ""}`
+       SELECT 'dep' AS kind, cid, first_date, first_amount, dep_count, dep_amount, first_day_count, first_day_amount,
+         0 AS wd_count, 0 AS wd_amount
+       FROM per
+       UNION ALL
+       SELECT 'wd', cid, NULL, NULL, 0, 0, 0, 0, COUNT(*), SUM(ABS(amount))
+       FROM tx WHERE type = 'WITHDRAW' AND d >= @from AND d < @to
+       GROUP BY cid`
     )
-    .all({ cid: companyId, from: p.from, to: p.to, ...(onlyReferrer ? { ref: referrer } : {}) });
+    .all({ cid: companyId, from: p.from, to: p.to });
+
+  const dep = new Map();
+  const wd = new Map();
+  for (const a of activity) (a.kind === "dep" ? dep : wd).set(String(a.cid), a);
+
+  // 要取的人：本期有充值或提现的（按主键取），加上本期注册的（按注册日取）。
+  const wanted = new Set();
+  for (const [id, a] of dep) if (a.dep_count > 0) wanted.add(id);
+  for (const id of wd.keys()) wanted.add(id);
+
+  const cols = `c.id, c.username, c.name, ${REF_EXPR} AS referrer, c.register_date_key AS reg`;
+  const refFilter = onlyReferrer ? `AND ${REF_EXPR} = @ref` : "";
+  const people = new Map();
+  for (const c of db
+    .prepare(
+      `SELECT ${cols} FROM customers c
+       WHERE c.company_id = @cid AND c.register_date_key >= @from AND c.register_date_key < @to ${refFilter}`
+    )
+    .all({ cid: companyId, from: p.from, to: p.to, ...(onlyReferrer ? { ref: referrer } : {}) })) {
+    people.set(String(c.id), c);
+  }
+  const ids = [...wanted].filter((id) => !people.has(id));
+  if (ids.length) {
+    for (const c of db
+      .prepare(
+        `SELECT ${cols} FROM customers c
+         WHERE c.company_id = @cid AND c.id IN (SELECT value FROM json_each(@ids)) ${refFilter}`
+      )
+      .all({ cid: companyId, ids: JSON.stringify(ids), ...(onlyReferrer ? { ref: referrer } : {}) })) {
+      people.set(String(c.id), c);
+    }
+  }
+
+  const rows = [];
+  for (const [id, c] of people) {
+    const d = dep.get(id);
+    const w = wd.get(id);
+    rows.push({
+      ...c,
+      first_date: d ? d.first_date : null,
+      first_amount: d ? d.first_amount : null,
+      dep_count: d ? d.dep_count : 0,
+      dep_amount: d ? d.dep_amount : 0,
+      first_day_count: d ? d.first_day_count : 0,
+      first_day_amount: d ? d.first_day_amount : 0,
+      wd_count: w ? w.wd_count : 0,
+      wd_amount: w ? w.wd_amount : 0,
+    });
+  }
+  return rows;
 }
 
 const METRIC_KEYS = [
