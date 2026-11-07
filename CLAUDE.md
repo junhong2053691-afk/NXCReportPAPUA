@@ -141,6 +141,9 @@ $env:TUNNEL_EDGE_IP_VERSION="4"
 - **改 `api_url` 必须同时给新 token**（`lib/apiUrlPolicy.js`）。库里的 token 只存不显示，
   但会被发往这个地址：放开它就等于能把 token 发到任意服务器。
 - **`NODE_ENV=production` 下，默认密码或弱 `sessionSecret` 拒绝启动**（`lib/startupGuards.js`）。
+- **登录旋转验证码（`lib/captcha.js`）的角度只存在服务端**：图用 `@resvg/resvg-wasm` 栅格化成 PNG 再发，
+  别改成直接发 SVG 或在前端旋转初始角度——答案会出现在 DOM 里。题目一次性（对错都作废），
+  校验在 `limiter.attempt` 之前，过不了验证的请求不占账号的失败额度。
 - **`pruneStaleCustomers` 有熔断**：待删超过 `max(50, 5%)` 一个都不删，日志打 `PRUNE BLOCKED`。
 
 ### 前端约定

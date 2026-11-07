@@ -5,9 +5,11 @@ const { defaultCompanyId } = require("../lib/companies");
 const { isOperator, firstAuthorizedCompanyId } = require("../lib/userAccess");
 const { createLoginLimiter } = require("../lib/loginLimiter");
 const { establishSession } = require("../middleware");
+const { createCaptchaStore } = require("../lib/captcha");
 
 const router = express.Router();
 const limiter = createLoginLimiter();
+const captchas = createCaptchaStore();
 
 // 账号不存在时也跑一次 bcrypt，否则响应时间差会暴露哪些账号存在。
 const DUMMY_HASH = bcrypt.hashSync("no-such-user", 10);
@@ -24,12 +26,33 @@ function regenerate(req) {
   });
 }
 
+router.get("/captcha", async (req, res, next) => {
+  res.set("Cache-Control", "no-store");
+  if (!captchas.allowIssue(clientIp(req))) {
+    return res.status(429).json({ error: "操作太频繁，请稍后再试" });
+  }
+  try {
+    res.json(await captchas.issue());
+  } catch (e) {
+    next(e);
+  }
+});
+
 router.post("/login", async (req, res, next) => {
-  const { username, password } = req.body || {};
+  const { username, password, captchaId, captchaAngle } = req.body || {};
   if (!username || !password) {
     return res.status(400).json({ error: "请输入账号和密码" });
   }
+  if (!captchaId || captchaAngle === undefined || captchaAngle === null || captchaAngle === "") {
+    return res.status(400).json({ error: "请先完成安全验证", captcha: true });
+  }
   const name = String(username).trim();
+
+  // 验证码在限流之前：过不了验证的请求不占账号的失败额度，乱试的人就没法把别人的
+  // 账号锁 15 分钟；也在 bcrypt 之前，省 CPU。题目一次性，错了前端要重新取一张。
+  if (!captchas.consume(captchaId, captchaAngle)) {
+    return res.status(400).json({ error: "验证失败，请再试一次", captcha: true });
+  }
 
   const retryAfter = limiter.attempt(clientIp(req), name);
   if (retryAfter) {
