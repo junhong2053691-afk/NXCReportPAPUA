@@ -2,26 +2,52 @@
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <meta name="color-scheme" content="light dark">
   <title>&#30331;&#24405; - NXC Report</title>
   <link rel="icon" href="/favicon.ico" sizes="any">
   <link rel="icon" type="image/png" href="/brand/favicon-32.png">
   <link rel="apple-touch-icon" href="/brand/apple-touch-icon.png">
   <script src="/js/theme-boot.js"></script>
-  <script src="/js/i18n.js?v=20261107brand1"></script>
-  <link rel="stylesheet" href="/css/style.css?v=20261107brand1">
+  <script src="/js/i18n.js?v=20261107login1"></script>
+  <link rel="stylesheet" href="/css/style.css?v=20261107login1">
 </head>
 <body class="login-body">
+  <canvas id="login-flow" class="login-flow" aria-hidden="true"></canvas>
   <main class="login-page">
-    <section class="login-box glass-panel" aria-labelledby="login-title">
-      <img class="login-brand" src="/brand/nxc-icon.png" alt="" width="56" height="56">
+    <section class="login-showcase" aria-label="NXC Report">
+      <div class="login-wordmark">
+        <img src="/brand/nxc-icon.png" alt="" width="64" height="64">
+        <div>
+          <p class="login-kicker">Command Center</p>
+          <h1 translate="no"><span class="wm-nxc">NXC</span><span class="wm-report">Report</span></h1>
+        </div>
+      </div>
+      <p class="login-tagline">&#22810;&#20844;&#21496;&#36164;&#37329;&#27969;&#27700;&#65292;&#19968;&#23631;&#23545;&#24179;</p>
+      <p class="login-lede">&#20805;&#20540;&#12289;&#25552;&#29616;&#12289;&#36134;&#21333;&#27969;&#27700;&#19982;&#36328;&#20844;&#21496;&#24448;&#26469;&#65292;&#23454;&#26102;&#21516;&#27493;&#12289;&#23457;&#25209;&#20837;&#36134;&#12289;&#33258;&#21160;&#23545;&#24179;&#12290;</p>
+      <ul class="login-features">
+        <li>
+          <span class="login-feature-icon" aria-hidden="true"><i data-lucide="building-2"></i></span>
+          <div><strong>&#22810;&#20844;&#21496;&#25968;&#25454;&#38548;&#31163;</strong><span>&#27599;&#23478;&#20844;&#21496;&#29420;&#31435;&#21516;&#27493;&#12289;&#29420;&#31435;&#36134;&#26412;</span></div>
+        </li>
+        <li>
+          <span class="login-feature-icon" aria-hidden="true"><i data-lucide="scale"></i></span>
+          <div><strong>&#23457;&#25209;&#20837;&#36134;&#65292;&#23454;&#26102;&#23545;&#24179;</strong><span>&#26032;&#27969;&#27700;&#20808;&#36827;&#24453;&#23457;&#25209;&#65292;&#20313;&#39069;&#26377;&#25454;&#21487;&#26597;</span></div>
+        </li>
+        <li>
+          <span class="login-feature-icon" aria-hidden="true"><i data-lucide="bell-ring"></i></span>
+          <div><strong>Telegram &#20313;&#39069;&#25253;&#35686;</strong><span>&#36229;&#36807;&#38408;&#20540;&#21363;&#25512;&#36865;&#65292;&#22238;&#33853;&#33258;&#21160;&#25764;&#22238;</span></div>
+        </li>
+      </ul>
+    </section>
+
+    <section class="login-box" aria-labelledby="login-title">
       <div class="login-heading">
-        <div style="display:flex;justify-content:flex-end;margin-bottom:6px">
+        <div class="login-heading-top">
+          <p class="login-kicker">Secure Sign-in</p>
           <button type="button" class="lang-toggle" id="lang-toggle" translate="no" aria-label="&#20999;&#25442;&#35821;&#35328;" title="&#20999;&#25442;&#35821;&#35328;"><span data-lang-choice="zh">&#20013;</span><span data-lang-choice="en">EN</span></button>
         </div>
-        <p class="login-kicker">Command Center</p>
-        <h1 id="login-title">NXC Report</h1>
+        <h2 id="login-title">&#27426;&#36814;&#22238;&#26469;</h2>
         <p>&#20351;&#29992;&#24050;&#20998;&#37197;&#30340;&#36134;&#21495;&#23433;&#20840;&#30331;&#24405;</p>
       </div>
       <form id="login-form" novalidate>
@@ -50,6 +76,7 @@
   </main>
   <script src="/js/login-boot.js"></script>
   <script src="/vendor/lucide-1.65.0.min.js"></script>
-  <script src="/js/login.js?v=20260925i18n1"></script>
+  <script src="/js/login-flow.js?v=20261107login2"></script>
+  <script src="/js/login.js?v=20261107login2"></script>
 </body>
 </html>

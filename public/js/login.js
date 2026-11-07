@@ -7,10 +7,16 @@ const errorElement = document.getElementById("error");
 
 function renderLoginIcons() {
   if (!window.lucide || typeof window.lucide.createIcons !== "function") return;
-  window.lucide.createIcons({
-    attrs: { "stroke-width": 1.8, "aria-hidden": "true" },
-    nameAttr: "data-lucide",
-  });
+  try {
+    window.lucide.createIcons({
+      attrs: { "stroke-width": 1.8, "aria-hidden": "true" },
+      nameAttr: "data-lucide",
+    });
+    // Same contract as app.js renderIcons: hides the text fallbacks ("Show").
+    document.documentElement.classList.add("lucide-ready");
+  } catch (e) {
+    document.documentElement.classList.remove("lucide-ready");
+  }
 }
 
 function setSubmitting(on) {
