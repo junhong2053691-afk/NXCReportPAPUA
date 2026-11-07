@@ -1967,28 +1967,12 @@ Object.assign(I18N.en, {
 Object.assign(I18N.zh, {
   "使用已分配的账号安全登录": "使用已分配的账号安全登录",
   "数据与支付操作按公司隔离": "数据与支付操作按公司隔离",
-  "欢迎回来": "欢迎回来",
-  "多公司资金流水，一屏对平": "多公司资金流水，一屏对平",
-  "充值、提现、账单流水与跨公司往来，实时同步、审批入账、自动对平。": "充值、提现、账单流水与跨公司往来，实时同步、审批入账、自动对平。",
-  "多公司数据隔离": "多公司数据隔离",
-  "每家公司独立同步、独立账本": "每家公司独立同步、独立账本",
-  "审批入账，实时对平": "审批入账，实时对平",
-  "新流水先进待审批，余额有据可查": "新流水先进待审批，余额有据可查",
-  "Telegram 余额报警": "Telegram 余额报警",
-  "超过阈值即推送，回落自动撤回": "超过阈值即推送，回落自动撤回",
+  "多公司资金对账后台": "多公司资金对账后台",
 });
 Object.assign(I18N.en, {
   "使用已分配的账号安全登录": "Sign in securely with the account you were given",
   "数据与支付操作按公司隔离": "Data and payment operations are isolated per company",
-  "欢迎回来": "Welcome back",
-  "多公司资金流水，一屏对平": "Every company's money flow, reconciled on one screen",
-  "充值、提现、账单流水与跨公司往来，实时同步、审批入账、自动对平。": "Deposits, withdrawals, ledgers and inter-company transfers — synced live, approved into the books, reconciled automatically.",
-  "多公司数据隔离": "Per-company isolation",
-  "每家公司独立同步、独立账本": "Each company syncs and keeps its own ledger",
-  "审批入账，实时对平": "Approve, then reconcile live",
-  "新流水先进待审批，余额有据可查": "New transactions wait for approval, so every balance is traceable",
-  "Telegram 余额报警": "Telegram balance alerts",
-  "超过阈值即推送，回落自动撤回": "Pushed when over threshold, retracted when it drops back",
+  "多公司资金对账后台": "Multi-company reconciliation console",
 });
 
 // batch F: MONTHLY REPORT

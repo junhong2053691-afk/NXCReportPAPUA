@@ -4,79 +4,87 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <meta name="color-scheme" content="light dark">
-  <title>&#30331;&#24405; - NXC Report</title>
+  <title>登录 - NXC Report</title>
   <link rel="icon" href="/favicon.ico" sizes="any">
   <link rel="icon" type="image/png" href="/brand/favicon-32.png">
   <link rel="apple-touch-icon" href="/brand/apple-touch-icon.png">
   <script src="/js/theme-boot.js"></script>
-  <script src="/js/i18n.js?v=20261107login1"></script>
-  <link rel="stylesheet" href="/css/style.css?v=20261107login1">
+  <script src="/js/i18n.js?v=20261107dial1"></script>
+  <link rel="stylesheet" href="/css/style.css?v=20261107dial1">
+  <link rel="stylesheet" href="/css/login.css?v=20261107dial1">
 </head>
-<body class="login-body">
-  <canvas id="login-flow" class="login-flow" aria-hidden="true"></canvas>
-  <main class="login-page">
-    <section class="login-showcase" aria-label="NXC Report">
-      <div class="login-wordmark">
-        <img src="/brand/nxc-icon.png" alt="" width="64" height="64">
-        <div>
-          <p class="login-kicker">Command Center</p>
-          <h1 translate="no"><span class="wm-nxc">NXC</span><span class="wm-report">Report</span></h1>
-        </div>
-      </div>
-      <p class="login-tagline">&#22810;&#20844;&#21496;&#36164;&#37329;&#27969;&#27700;&#65292;&#19968;&#23631;&#23545;&#24179;</p>
-      <p class="login-lede">&#20805;&#20540;&#12289;&#25552;&#29616;&#12289;&#36134;&#21333;&#27969;&#27700;&#19982;&#36328;&#20844;&#21496;&#24448;&#26469;&#65292;&#23454;&#26102;&#21516;&#27493;&#12289;&#23457;&#25209;&#20837;&#36134;&#12289;&#33258;&#21160;&#23545;&#24179;&#12290;</p>
-      <ul class="login-features">
-        <li>
-          <span class="login-feature-icon" aria-hidden="true"><i data-lucide="building-2"></i></span>
-          <div><strong>&#22810;&#20844;&#21496;&#25968;&#25454;&#38548;&#31163;</strong><span>&#27599;&#23478;&#20844;&#21496;&#29420;&#31435;&#21516;&#27493;&#12289;&#29420;&#31435;&#36134;&#26412;</span></div>
-        </li>
-        <li>
-          <span class="login-feature-icon" aria-hidden="true"><i data-lucide="scale"></i></span>
-          <div><strong>&#23457;&#25209;&#20837;&#36134;&#65292;&#23454;&#26102;&#23545;&#24179;</strong><span>&#26032;&#27969;&#27700;&#20808;&#36827;&#24453;&#23457;&#25209;&#65292;&#20313;&#39069;&#26377;&#25454;&#21487;&#26597;</span></div>
-        </li>
-        <li>
-          <span class="login-feature-icon" aria-hidden="true"><i data-lucide="bell-ring"></i></span>
-          <div><strong>Telegram &#20313;&#39069;&#25253;&#35686;</strong><span>&#36229;&#36807;&#38408;&#20540;&#21363;&#25512;&#36865;&#65292;&#22238;&#33853;&#33258;&#21160;&#25764;&#22238;</span></div>
-        </li>
-      </ul>
-    </section>
+<body class="lg-body">
+  <canvas id="lg-bg" class="lg-bg" aria-hidden="true"></canvas>
 
-    <section class="login-box" aria-labelledby="login-title">
-      <div class="login-heading">
-        <div class="login-heading-top">
-          <p class="login-kicker">Secure Sign-in</p>
-          <button type="button" class="lang-toggle" id="lang-toggle" translate="no" aria-label="&#20999;&#25442;&#35821;&#35328;" title="&#20999;&#25442;&#35821;&#35328;"><span data-lang-choice="zh">&#20013;</span><span data-lang-choice="en">EN</span></button>
-        </div>
-        <h2 id="login-title">&#27426;&#36814;&#22238;&#26469;</h2>
-        <p>&#20351;&#29992;&#24050;&#20998;&#37197;&#30340;&#36134;&#21495;&#23433;&#20840;&#30331;&#24405;</p>
+  <div class="lg-tools">
+    <button type="button" class="lg-tool" id="lang-toggle" translate="no" aria-label="切换语言" title="切换语言">
+      <i data-lucide="languages"></i>
+      <span data-lang-choice="zh">中</span><span data-lang-choice="en">EN</span>
+    </button>
+    <button type="button" class="lg-tool" id="lg-theme" aria-label="切换主题" title="切换主题">
+      <span class="lg-theme-dark"><i data-lucide="moon"></i></span>
+      <span class="lg-theme-light"><i data-lucide="sun"></i></span>
+    </button>
+  </div>
+
+  <main class="lg-page">
+    <div class="lg-dial" id="lg-dial">
+      <canvas id="lg-dial-canvas" class="lg-dial-canvas" aria-hidden="true"></canvas>
+      <div class="lg-dial-core">
+        <!-- Single-ink NXC Report wordmark: slanted NXC, orbit with a travelling point, spaced REPORT. -->
+        <svg class="lg-wordmark" id="lg-wordmark" viewBox="0 0 336 72" role="img" aria-label="NXC Report">
+          <g transform="skewX(-14) translate(14 0)" fill="currentColor">
+            <path d="M0 6h17l31 37V6h17v60H48L17 29v37H0z"/>
+            <path d="M72 6h20l13 18 13-18h20l-23 30 23 30h-20l-13-18-13 18H72l23-30z"/>
+            <path d="M200 6h-34c-18 0-26 10-26 30s8 30 26 30h34V50h-31c-8 0-12-4-12-14s4-14 12-14h31z"/>
+          </g>
+          <g transform="rotate(-17 108 38)">
+            <ellipse class="lg-wm-orbit" cx="108" cy="38" rx="84" ry="19" fill="none" stroke-width="2.2"/>
+            <circle class="lg-wm-dot" r="4.6">
+              <animateMotion dur="6s" repeatCount="indefinite" path="M24,38 a84,19 0 1,1 168,0 a84,19 0 1,1 -168,0"/>
+            </circle>
+            <circle class="lg-wm-dot lg-wm-dot-sm" r="2.8">
+              <animateMotion dur="6s" begin="-3s" repeatCount="indefinite" path="M24,38 a84,19 0 1,1 168,0 a84,19 0 1,1 -168,0"/>
+            </circle>
+          </g>
+          <text x="216" y="64" class="lg-wm-report">REPORT</text>
+        </svg>
+        <h1 class="lg-title">多公司资金对账后台</h1>
       </div>
-      <form id="login-form" novalidate>
-        <div class="form-group">
-          <label for="username">&#36134;&#21495; ID</label>
-          <input type="text" id="username" name="username" autocomplete="username" autocapitalize="none" spellcheck="false" required>
+    </div>
+
+    <form id="login-form" class="lg-form" novalidate aria-labelledby="lg-form-title">
+      <h2 id="lg-form-title" class="lg-visually-hidden">登录</h2>
+      <div class="lg-field">
+        <label for="username">账号 ID</label>
+        <input type="text" id="username" name="username" autocomplete="username" autocapitalize="none" spellcheck="false" required>
+      </div>
+      <div class="lg-field">
+        <label for="password">密码</label>
+        <div class="password-field">
+          <input type="password" id="password" name="password" autocomplete="current-password" required>
+          <button type="button" class="password-toggle icon-btn" id="password-toggle" aria-label="显示密码" aria-pressed="false">
+            <i data-lucide="eye"></i>
+            <span class="icon-fallback" aria-hidden="true">Show</span>
+          </button>
         </div>
-        <div class="form-group">
-          <label for="password">&#23494;&#30721;</label>
-          <div class="password-field">
-            <input type="password" id="password" name="password" autocomplete="current-password" required>
-            <button type="button" class="password-toggle icon-btn" id="password-toggle" aria-label="&#26174;&#31034;&#23494;&#30721;" aria-pressed="false">
-              <i data-lucide="eye"></i>
-              <span class="icon-fallback" aria-hidden="true">Show</span>
-            </button>
-          </div>
-        </div>
-        <div id="error" class="error-msg" role="alert" aria-live="assertive" hidden></div>
-        <button type="submit" class="btn btn-primary login-submit" id="login-submit">
-          <span class="btn-label">&#30331;&#24405;</span>
-          <span class="btn-spinner" aria-hidden="true"></span>
-        </button>
-      </form>
-      <p class="login-footnote">&#25968;&#25454;&#19982;&#25903;&#20184;&#25805;&#20316;&#25353;&#20844;&#21496;&#38548;&#31163;</p>
-    </section>
+      </div>
+      <div id="error" class="error-msg lg-error" role="alert" aria-live="assertive" hidden></div>
+      <button type="submit" class="lg-submit login-submit" id="login-submit">
+        <span class="btn-label">登录</span>
+        <span class="btn-spinner" aria-hidden="true"></span>
+      </button>
+    </form>
+
+    <footer class="lg-foot">
+      <span>数据与支付操作按公司隔离</span>
+      <span translate="no">© 2026 NXC Report</span>
+    </footer>
   </main>
+
   <script src="/js/login-boot.js"></script>
   <script src="/vendor/lucide-1.65.0.min.js"></script>
-  <script src="/js/login-flow.js?v=20261107login2"></script>
-  <script src="/js/login.js?v=20261107login2"></script>
+  <script src="/js/login-dial.js?v=20261107dial1"></script>
+  <script src="/js/login.js?v=20261107dial1"></script>
 </body>
 </html>
