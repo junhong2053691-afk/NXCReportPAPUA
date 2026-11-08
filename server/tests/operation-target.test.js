@@ -45,7 +45,7 @@ test("渠道：同名户口靠户名和账号区分", () => {
 });
 
 test("页面接入：删除/恢复/封禁/解封/归档都带明细，明细不翻译", () => {
-  const src = fs.readFileSync(path.join(__dirname, "../../public/js/bank-accounts.js"), "utf8");
+  const src = ["bank-ledger.js", "bank-channels.js", "bank-common.js"].map((f) => fs.readFileSync(path.join(__dirname, "../../public/js", f), "utf8")).join("\n");
   assert.match(src, /window\.ledgerTargetDetail\(/);
   assert.match(src, /window\.bankTargetDetail\(/);
   assert.match(src, /target: `账单流水 #\$\{id\}`,\s*detail: ledgerTargetFor\(/, "删除流水要带明细");
@@ -58,5 +58,5 @@ test("页面接入：删除/恢复/封禁/解封/归档都带明细，明细不�
   assert.match(app, /id="app-dialog-target"[^>]*translate="no"/);
   const page = fs.readFileSync(path.join(__dirname, "../index.js"), "utf8");
   assert.match(page, /id="reason-modal-detail"[^>]*translate="no"|translate="no"[^>]*id="reason-modal-detail"/);
-  assert.ok(page.indexOf("/js/operation-target.js") > 0 && page.indexOf("/js/operation-target.js") < page.indexOf("/js/bank-accounts.js?"));
+  assert.ok(page.indexOf("/js/operation-target.js") > 0 && page.indexOf("/js/operation-target.js") < page.indexOf("/js/bank-ledger.js?"));
 });

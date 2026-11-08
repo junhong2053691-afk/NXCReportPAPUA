@@ -10,7 +10,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 
-const src = fs.readFileSync(path.join(__dirname, "../../public/js/bank-accounts.js"), "utf8");
+const src = ["bank-ledger.js", "bank-channels.js", "bank-common.js"].map((f) => fs.readFileSync(path.join(__dirname, "../../public/js", f), "utf8")).join("\n");
 
 function functionBody(name) {
   const start = src.indexOf(`function ${name}(`);

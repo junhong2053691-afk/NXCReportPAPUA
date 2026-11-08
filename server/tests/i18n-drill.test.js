@@ -10,7 +10,7 @@ const path = require("node:path");
 const { accountEventLabel, accountKindLabel } = require("../../public/js/display-format");
 const { I18N } = require("../../public/js/i18n");
 
-const src = fs.readFileSync(path.join(__dirname, "../../public/js/bank-accounts.js"), "utf8");
+const src = ["bank-ledger.js", "bank-channels.js", "bank-common.js"].map((f) => fs.readFileSync(path.join(__dirname, "../../public/js", f), "utf8")).join("\n");
 const page = fs.readFileSync(path.join(__dirname, "../index.js"), "utf8");
 
 test("操作历史的事件码与类型码转成中文，且都在中英字典里", () => {

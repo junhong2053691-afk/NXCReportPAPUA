@@ -304,11 +304,14 @@ async function loadUser() {
     if (el) el.textContent = user.name + " (" + user.username + ")";
     const userLabel = document.querySelector(".user-label");
     if (userLabel) userLabel.textContent = user.role === "admin" ? "Admin" : "Operator";
+    // operator 只能进银行这两页（服务端 OPERATOR_PAGES 是同一份名单，这里只管藏链接）。
+    // 「流水记录」分组对 operator 可见，里面的支付设置被上面这条藏掉；其余分组整组藏。
+    const operatorPages = new Set(["bank-ledger", "bank-channels"]);
     document.querySelectorAll("[data-page]").forEach((link) => {
-      link.hidden = user.role === "operator" && link.dataset.page !== "bank-accounts";
+      link.hidden = user.role === "operator" && !operatorPages.has(link.dataset.page);
     });
     document.querySelectorAll(".nav-group").forEach((group) => {
-      if (user.role === "operator") group.hidden = true;
+      if (user.role === "operator" && group.id !== "nav-bank-group") group.hidden = true;
     });
     const adminLink = document.getElementById("nav-admin");
     if (adminLink) adminLink.hidden = user.role !== "admin";
@@ -543,8 +546,8 @@ function updateMobileTabbarBadge(n) {
   badge.textContent = n > 99 ? "99+" : String(n);
 }
 
-// 底部标签栏：支付渠道页注册了 window.bankMobileTab，就地执行；其他页面不拦，
-// <a href="/bank-accounts.html#动作"> 照常跳过去，由那边读 hash 执行。
+// 底部标签栏：当日流水页注册了 window.bankMobileTab，就地执行；其他页面不拦，
+// <a href="/bank-ledger.html#动作"> 照常跳过去，由那边读 hash 执行。
 function setupMobileTabbar() {
   const bar = document.getElementById("mobile-tabbar");
   if (!bar) return;
@@ -565,25 +568,25 @@ function setupMobileTabbar() {
   });
 }
 
+// 侧边栏「流水记录」分组：标题是链接（进当日流水），右侧箭头只展开 / 收起，不跳页。
+// 不用 <details>：summary 里放链接点下去会同时切换展开（server/index.js 的 pageLayout）。
+function setupNavGroupToggle() {
+  document.querySelectorAll(".nav-group-link .nav-group-toggle").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      const group = btn.closest(".nav-group-link");
+      const children = document.getElementById(btn.getAttribute("aria-controls"));
+      if (!group || !children) return;
+      const open = !group.classList.contains("open");
+      group.classList.toggle("open", open);
+      children.hidden = !open;
+      btn.setAttribute("aria-expanded", open ? "true" : "false");
+    });
+  });
+}
+
+// 2026-11 起侧边栏不再挂待处理角标（用户决定：接单区直接摊在当日流水上），只剩手机底栏。
 function updateBankPendingBadge(total) {
-  const n = Number(total || 0);
-  updateMobileTabbarBadge(n);
-  const link = document.querySelector('.sidebar nav a[data-page="bank-accounts"]');
-  if (!link) return;
-  let badge = link.querySelector(".nav-pending-badge");
-  if (n <= 0) {
-    if (badge) badge.remove();
-    return;
-  }
-  if (!badge) {
-    badge = document.createElement("span");
-    badge.className = "nav-pending-badge";
-    link.appendChild(badge);
-  }
-  badge.textContent = String(n);
-  // The badge is rebuilt whenever the count appears, so the escalation state has
-  // to be re-applied or it would be lost on the next poll.
-  setPendingBadgeUrgent(platformPendingAlarm ? platformPendingAlarm.stage() === "loud" : false);
+  updateMobileTabbarBadge(Number(total || 0));
 }
 
 // Unapproved platform transactions used to loop a siren until somebody clicked
@@ -592,9 +595,9 @@ function updateBankPendingBadge(total) {
 // the first few minutes, then one play, repeating on a slow cadence.
 let platformPendingAlarm = null;
 
+// 升级到「响」时，手机底栏角标变急（侧边栏角标已取消）。
 function setPendingBadgeUrgent(urgent) {
-  const link = document.querySelector('.sidebar nav a[data-page="bank-accounts"]');
-  const badge = link && link.querySelector(".nav-pending-badge");
+  const badge = document.getElementById("mobile-tabbar-badge");
   if (badge) badge.classList.toggle("nav-pending-badge--urgent", !!urgent);
 }
 
@@ -654,6 +657,7 @@ if (typeof document !== "undefined") {
     startBankPendingWatcher();
     setupMobileTabbar();
     setupBackToTop();
+    setupNavGroupToggle();
   });
 }
 

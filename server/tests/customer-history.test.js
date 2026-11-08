@@ -150,6 +150,8 @@ test("customer history links cover customer views and stay out of payment-channe
   const read = (...parts) => fs.readFileSync(path.join(projectRoot, ...parts), "utf8");
   assert.match(read("public", "js", "referrer-report.js"), /customerLink\(c\.name/);
   assert.match(read("public", "js", "audit-history.js"), /customerLink\(txCustomerLabel, tx\.customer_id, tx\.mobile\)/);
-  assert.doesNotMatch(read("public", "js", "bank-accounts.js"), /customerLink\(/);
+  for (const f of ["bank-ledger.js", "bank-channels.js", "bank-common.js"]) {
+    assert.doesNotMatch(read("public", "js", f), /customerLink\(/);
+  }
   assert.doesNotMatch(read("public", "js", "bank-settings.js"), /customerLink\(/);
 });

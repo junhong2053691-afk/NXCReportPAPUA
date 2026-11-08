@@ -33,13 +33,13 @@ test("多家一起填：搜索框整串当一个「+ 使用」（服务端再按
   assert.deepEqual(kinds(cstatusSheetRows(NAMES, "EZ68, PK7", "", { allowAdd: true })), ["add:EZ68, PK7"]);
 });
 
-test("页面接入：五个输入框都带 data-cstatus-pick，脚本在 bank-accounts.js 之前", () => {
+test("页面接入：五个输入框都带 data-cstatus-pick，脚本在 bank-ledger.js 之前", () => {
   const page = fs.readFileSync(path.join(__dirname, "../index.js"), "utf8");
   assert.match(page, /id="trf-cstatus"[^>]*data-cstatus-pick/);
   assert.match(page, /id="drain-cstatus"[^>]*data-cstatus-pick/);
   const at = page.indexOf("/js/cstatus-sheet.js");
-  assert.ok(at > 0 && at < page.indexOf("/js/bank-accounts.js?"));
-  const src = fs.readFileSync(path.join(__dirname, "../../public/js/bank-accounts.js"), "utf8");
+  assert.ok(at > 0 && at < page.indexOf("/js/bank-ledger.js?"));
+  const src = fs.readFileSync(path.join(__dirname, "../../public/js/bank-ledger.js"), "utf8");
   assert.match(src, /class="pend-cstatus"[^>]*data-cstatus-pick/);
   assert.match(src, /class="pend-split-cstatus"[^>]*data-cstatus-pick/);
   assert.match(src, /f === "c_status"\) attrs \+= " data-cstatus-pick"/, "流水表格的 C STATUS");

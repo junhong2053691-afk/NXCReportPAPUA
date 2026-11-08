@@ -73,7 +73,7 @@ test("没有入账：照样有抬头，期间写 -，合计 0.00", () => {
 });
 
 test("页面接入：按钮叫「下载申诉记录 (CSV)」，走新接口；路由只认 req.companyId", () => {
-  const src = fs.readFileSync(path.join(__dirname, "../../public/js/bank-accounts.js"), "utf8");
+  const src = fs.readFileSync(path.join(__dirname, "../../public/js/bank-channels.js"), "utf8");
   assert.doesNotMatch(src, /下载 Excel/);
   assert.match(src, /下载申诉记录 \(CSV\)/);
   assert.match(src, /\/api\/banks\/\$\{[^}]+\}\/appeal-deposits/);
@@ -82,5 +82,5 @@ test("页面接入：按钮叫「下载申诉记录 (CSV)」，走新接口；�
   assert.match(routes, /router\.get\("\/:id\/appeal-deposits"[\s\S]{0,200}appealDeposits\(getDb\(\), companyId\(req\)/);
   const page = fs.readFileSync(path.join(__dirname, "../index.js"), "utf8");
   const at = page.indexOf("/js/appeal-csv.js");
-  assert.ok(at > 0 && at < page.indexOf("/js/bank-accounts.js?"));
+  assert.ok(at > 0 && at < page.indexOf("/js/bank-channels.js?"));
 });

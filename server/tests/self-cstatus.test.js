@@ -66,8 +66,11 @@ test("选项列表把本公司的名字标成 is_self（录入下拉藏掉，管
   addCStatusOption(db, "alpha", "EZ68", "alpha");
   const opts = Object.fromEntries(listCStatusOptions(db, "alpha").map((o) => [o.name, o.is_self]));
   assert.deepEqual(opts, { RX66: 0, LH: 0, EZ68: 1 });
-  const page = require("node:fs").readFileSync(require("node:path").join(__dirname, "../../public/js/bank-accounts.js"), "utf8");
-  assert.match(page, /function cStatusNames\(\)[\s\S]{0,300}is_self/, "录入用的 datalist 要过滤 is_self");
+  const read = (f) => require("node:fs").readFileSync(require("node:path").join(__dirname, "../../public/js", f), "utf8");
+  assert.match(read("bank-common.js"), /function cStatusNames\(options\)[\s\S]{0,300}is_self/, "录入用的 datalist 要过滤 is_self");
+  for (const f of ["bank-ledger.js", "bank-channels.js"]) {
+    assert.match(read(f), /function cStatusNames\(\) \{\s*return BC\.cStatusNames\(cStatusOptions\);/, `${f} 的候选走 bank-common`);
+  }
 });
 
 test("页面接入：手工流水新增 / 改 C STATUS 时校验；拆分协助方 placeholder 不再写「例如 EZ」", () => {
@@ -75,6 +78,6 @@ test("页面接入：手工流水新增 / 改 C STATUS 时校验；拆分协助�
   const path = require("node:path");
   const routes = fs.readFileSync(path.join(__dirname, "../routes/banks.js"), "utf8");
   assert.ok((routes.match(/assertNotSelfCStatus\(/g) || []).length >= 2, "POST 与 PUT /ledger 都要校验");
-  const page = fs.readFileSync(path.join(__dirname, "../../public/js/bank-accounts.js"), "utf8");
+  const page = ["bank-ledger.js", "bank-channels.js", "bank-common.js"].map((f) => fs.readFileSync(path.join(__dirname, "../../public/js", f), "utf8")).join("\n");
   assert.doesNotMatch(page, /placeholder="例如 EZ"/);
 });

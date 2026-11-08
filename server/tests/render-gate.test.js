@@ -37,7 +37,7 @@ test("remember 只记不判：前台画过之后，后台拿到同一份数据�
 });
 
 test("页面接入：后台刷新走 background，前台加载不跳过", () => {
-  const src = fs.readFileSync(path.join(__dirname, "../../public/js/bank-accounts.js"), "utf8");
+  const src = fs.readFileSync(path.join(__dirname, "../../public/js/bank-ledger.js"), "utf8");
   const start = src.indexOf("function refreshSharedWorkspace(");
   const body = src.slice(start, src.indexOf("\n  }\n", start));
   assert.match(body, /loadBanks\(\{ background: true \}\)/);
@@ -45,5 +45,5 @@ test("页面接入：后台刷新走 background，前台加载不跳过", () => 
   assert.match(body, /loadDailyReport\(\{ background: true \}\)/);
   const page = fs.readFileSync(path.join(__dirname, "../index.js"), "utf8");
   const gate = page.indexOf("/js/render-gate.js");
-  assert.ok(gate > 0 && gate < page.indexOf("/js/bank-accounts.js?"), "render-gate.js 要在 bank-accounts.js 之前加载");
+  assert.ok(gate > 0 && gate < page.indexOf("/js/bank-ledger.js?"), "render-gate.js 要在 bank-ledger.js 之前加载");
 });

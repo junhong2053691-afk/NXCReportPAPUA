@@ -157,7 +157,7 @@ $env:TUNNEL_EDGE_IP_VERSION="4"
 ### 声音报警 (`public/js/alarm.js`)
 
 全站唯一的报警状态机，由 `server/index.js` 在 `app.js` **之前**注入。两个用户：
-`app.js` 的平台待审批、`bank-accounts.js` 的 C STATUS 未对平。
+`app.js` 的平台待审批、`bank-ledger.js` 的 C STATUS 未对平。
 
 **铁律：永不 `loop`。** 这个模块存在的理由就是替掉「一出问题立刻响、且响到你点掉为止」。
 分级是：问题出现后静默 `FIRST_DELAY_MS`（5 分钟，只有视觉提示）→ 响**一遍** →
@@ -171,7 +171,7 @@ $env:TUNNEL_EDGE_IP_VERSION="4"
   `loadDailyReport` 上，靠它驱动升级会差出好几分钟。
 - **signature 决定「是不是同一个问题」**。待审批故意**不把笔数写进 signature**：清掉 2 笔还剩 1 笔
   不该重置静默期，而 0→1 该重置。未对平则用 `reconcileSignature()`（含差额），差额一变就是新问题。
-- `onStageChange` 回调会重入调用方的渲染函数（`bank-accounts.js` 有 `reconcileRendering` 守门），
+- `onStageChange` 回调会重入调用方的渲染函数（`bank-ledger.js` 有 `reconcileRendering` 守门），
   加新用户时注意别写成无限递归。
 - 测试 `server/tests/alarm.test.js`：注入假 `now` 与假播放器，**「静默期内一次都不播」和
   「重建实例不重响」两条断言是守着上面两段的**，别为了让新行为通过就删。
@@ -217,9 +217,12 @@ $env:TUNNEL_EDGE_IP_VERSION="4"
 | `/` | `home.js` | 首页看板 |
 | `/transactions.html` | `transactions.js` | 实时交易 |
 | `/customers.html` | `customers.js` | 客户列表 + 分群 |
-| `/bank-accounts.html` | `bank-accounts.js` | 支付渠道 + 账单流水 |
+| `/bank-ledger.html` | `bank-ledger.js` | 当日流水：流水表格 + 接单区（平台单审批 / 已跳过）+ 调钱 + 今日报表 / C STATUS |
+| `/bank-channels.html` | `bank-channels.js` | 支付渠道：全部渠道汇总 + 运营中 / 封禁中 / 已归档 + 渠道编辑 / 转出余额 |
 | `/company-settings.html` | `company-settings.js` | 公司/API + 各公司 Telegram Bot（admin） |
 | `/telegram-settings.html` | `telegram-settings.js` | 总控 Bot、总开关、运行参数、推送状态（admin） |
+
+> 2026-11 拆页：原 `/bank-accounts.html`（`bank-accounts.js`）拆成侧边栏「流水记录」分组下的当日流水与支付渠道，旧地址 302 到当日流水（`#channels` 再转去支付渠道）。两页共用的格式化、STATUS 词表与余额口径在 `bank-common.js`。operator 只能进这两页（`server/index.js` 的 `OPERATOR_PAGES` 与 `app.js` 的 `loadUser` 是同一份名单）。接单区常驻当日流水页：后台刷新只做增量，员工动过的行（`data-dirty`）绝不重画，被别人处理掉的只标灰；刷新时切页签必须带 `{ silent: true }`，否则会把平台待审批报警顺手 ack 掉。
 
 ## 支付渠道 & 账单流水 (`/api/banks`)
 
@@ -239,7 +242,7 @@ $env:TUNNEL_EDGE_IP_VERSION="4"
 | POST/PUT/DELETE | `/api/banks/ledger/:id` | 流水 CRUD，会联动账户余额 |
 | GET | `/api/banks/suggestions` | 银行名自动补全 |
 
-### 前端快捷录入（`bank-accounts.js`）
+### 前端快捷录入（`bank-ledger.js`）
 
 > ⚠️ 下表已过时：页面上没有这些按钮了，`startAdding` 没有任何调用方。新流水目前只来自
 > 审批和调钱，表格里只能编辑已有行。`POST /api/banks/ledger` 接口本身还在，照样要守校验。
@@ -261,7 +264,7 @@ $env:TUNNEL_EDGE_IP_VERSION="4"
 - 入账 → `trf_amount`，status = `bank transfer`
 - 出账 → `help_amount`，status = `bank trf`
 - 跨公司代操作：BANK ACC 可留空，C STATUS 填对方公司
-- 落哪个字段由 **status** 决定（`bank-accounts.js` 的 `splitHelpTrf` + `OUT_STATUSES`），
+- 落哪个字段由 **status** 决定（`bank-ledger.js` 的 `splitHelpTrf` + `OUT_STATUSES`），
   不看金额正负。所以 status = `withdraw` 时 HELP TRF 列的钱一定进 `help_amount`
 
 ### C STATUS 表的方向（与银行余额相反，别改平）

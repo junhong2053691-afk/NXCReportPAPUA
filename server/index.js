@@ -140,13 +140,13 @@ app.use("/api/audit", require("./routes/audit"));
 // 手机底部标签栏（CSS 只在 ≤700 显示）。员工（operator）只能进支付渠道页，所以放的是
 // 那一页里的四个动作而不是页面；「菜单」打开侧栏，对所有角色显示——≤700 没有汉堡按钮了，
 // operator 切换公司、退出登录、切主题都靠它。
-// 用 <a href> 而不是 button：在别的页点了照常跳到 /bank-accounts.html#<动作>，由
-// bank-accounts.js 读 hash 执行；在支付渠道页本页则由 app.js 拦下直接执行。
+// 用 <a href> 而不是 button：在别的页点了照常跳到 /bank-ledger.html#<动作>，由
+// bank-ledger.js 读 hash 执行；在当日流水页本页则由 app.js 拦下直接执行。「渠道」直接进支付渠道页。
 const MOBILE_TABBAR = `<nav class="mobile-tabbar" id="mobile-tabbar" aria-label="快捷操作">
-<a href="/bank-accounts.html#pending" data-tab-action="pending"><i data-lucide="clipboard-check"></i><span>待处理</span><b class="mobile-tabbar-badge" id="mobile-tabbar-badge" hidden></b></a>
-<a href="/bank-accounts.html#ledger" data-tab-action="ledger"><i data-lucide="list"></i><span>流水</span></a>
-<a href="/bank-accounts.html#transfer" data-tab-action="transfer"><i data-lucide="arrow-left-right"></i><span>调钱</span></a>
-<a href="/bank-accounts.html#channels" data-tab-action="channels"><i data-lucide="landmark"></i><span>渠道</span></a>
+<a href="/bank-ledger.html#pending" data-tab-action="pending"><i data-lucide="clipboard-check"></i><span>待处理</span><b class="mobile-tabbar-badge" id="mobile-tabbar-badge" hidden></b></a>
+<a href="/bank-ledger.html#ledger" data-tab-action="ledger"><i data-lucide="list"></i><span>流水</span></a>
+<a href="/bank-ledger.html#transfer" data-tab-action="transfer"><i data-lucide="arrow-left-right"></i><span>调钱</span></a>
+<a href="/bank-channels.html" data-tab-action="channels"><i data-lucide="landmark"></i><span>渠道</span></a>
 <button type="button" data-tab-action="menu" aria-controls="sidebar"><i data-lucide="menu"></i><span>菜单</span></button>
 </nav>
 <button type="button" class="back-to-top" id="back-to-top" aria-label="回到顶部" title="回到顶部" hidden><i data-lucide="arrow-up"></i></button>`;
@@ -156,7 +156,14 @@ function pageLayout(title, active, body, script) {
     ["home", "/", "\u603b\u89c8", "layout-dashboard"],
     ["transactions", "/transactions.html", "\u4ea4\u6613", "arrow-left-right"],
     ["customers", "/customers.html", "\u5ba2\u6237", "users"],
-    ["bank-accounts", "/bank-accounts.html", "\u652f\u4ed8\u6e20\u9053", "landmark"],
+  ];
+  // 流水记录分组（总览正下方）：标题本身链到当日流水，右侧箭头只负责展开 / 收起，
+  // 不能用 <details><summary>——summary 里放链接点下去会同时切换展开。operator 只能进
+  // 当日流水与支付渠道（requirePageAccess），支付设置由 app.js 的 loadUser 按角色藏掉。
+  const bankNav = [
+    ["bank-ledger", "/bank-ledger.html", "\u5f53\u65e5\u6d41\u6c34", "list"],
+    ["bank-channels", "/bank-channels.html", "\u652f\u4ed8\u6e20\u9053", "landmark"],
+    ["bank-settings", "/bank-settings.html", "\u652f\u4ed8\u8bbe\u7f6e", "sliders-horizontal"],
   ];
   const insightNav = [
     ["daily-archive", "/daily-archive.html", "\u5386\u53f2\u65e5\u62a5", "calendar-days"],
@@ -175,18 +182,23 @@ function pageLayout(title, active, body, script) {
   const settingsNav = [
     ["audit-history", "/audit-history.html", "\u64cd\u4f5c\u5386\u53f2", "history"],
     ["admin", "/admin-users.html", "\u8d26\u53f7\u7ba1\u7406", "shield-check"],
-    ["bank-settings", "/bank-settings.html", "\u652f\u4ed8\u8bbe\u7f6e", "sliders-horizontal"],
     ["telegram-settings", "/telegram-settings.html", "Telegram", "send"],
     ["company-settings", "/company-settings.html", "\u516c\u53f8 / API", "settings"],
   ];
-  const nav = [...primaryNav, ...insightNav, ...monthlyNav, ...settingsNav];
+  const nav = [...primaryNav, ...bankNav, ...insightNav, ...monthlyNav, ...settingsNav];
   const activeItem = nav.find(([key]) => key === active) || nav[0];
   const navLink = ([key, href, label, icon], id) => {
     const cls = key === active ? ' class="active"' : "";
     const idAttr = id ? ` id="${id}" hidden` : "";
     return `<a href="${href}" data-page="${key}"${cls}${idAttr}><i data-lucide="${icon}"></i><span>${label}</span></a>`;
   };
-  const primaryLinks = primaryNav.map((item) => navLink(item)).join("");
+  const homeLink = navLink(primaryNav[0]);
+  const primaryLinks = primaryNav.slice(1).map((item) => navLink(item)).join("");
+  const bankLinks = bankNav
+    .map((item) => navLink(item, item[0] === "bank-settings" ? "nav-bank-settings" : ""))
+    .join("");
+  const bankOpen = bankNav.some(([key]) => key === active);
+  const bankGroup = `<div class="nav-group nav-group-link${bankOpen ? " open" : ""}" id="nav-bank-group"><div class="nav-group-head"><a href="/bank-ledger.html" class="nav-group-title${bankOpen ? " is-current" : ""}"><i data-lucide="wallet"></i><span>\u6d41\u6c34\u8bb0\u5f55</span></a><button type="button" class="nav-group-toggle" aria-expanded="${bankOpen ? "true" : "false"}" aria-controls="nav-bank-children" aria-label="\u5c55\u5f00\u6216\u6536\u8d77\u6d41\u6c34\u8bb0\u5f55"><i data-lucide="chevron-down" class="nav-chevron"></i></button></div><div class="nav-children" id="nav-bank-children"${bankOpen ? "" : " hidden"}>${bankLinks}</div></div>`;
   const insightLinks = insightNav.map((item) => navLink(item)).join("");
   const settingsLinks = settingsNav
     .map((item) => navLink(item, item[0] === "admin" ? "nav-admin" : `nav-${item[0]}`))
@@ -200,7 +212,7 @@ function pageLayout(title, active, body, script) {
     .filter(Boolean)
     .map((src) => `<script src="${src}"></script>`)
     .join("");
-  return `<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="color-scheme" content="light dark"><title>${title} - NXC Report</title><link rel="icon" href="/favicon.ico" sizes="any"><link rel="icon" type="image/png" href="/brand/favicon-32.png"><link rel="apple-touch-icon" href="/brand/apple-touch-icon.png"><link rel="stylesheet" href="/css/style.css?v=20260812transferfix1"></head><body><a class="skip-link" href="#main-content">\u8df3\u5230\u4e3b\u5185\u5bb9</a><div class="ambient-field" aria-hidden="true"><span></span><span></span></div><div class="sidebar-backdrop" id="sidebar-backdrop"></div><button type="button" class="mobile-menu-btn icon-btn" id="mobile-menu-btn" aria-label="\u6253\u5f00\u5bfc\u822a" aria-controls="sidebar" aria-expanded="false"><i data-lucide="menu"></i><span class="icon-fallback" aria-hidden="true">Menu</span></button><div class="layout"><aside class="sidebar" id="sidebar" aria-label="\u4e3b\u5bfc\u822a"><div class="brand-mark"><img class="brand-symbol" src="/brand/nxc-icon.png" alt="" width="38" height="38"><div><h2>NXC</h2><p>Report</p></div></div><div class="company-bar glass-control" id="company-bar"><label for="company-select">\u5f53\u524d\u516c\u53f8</label><select id="company-select" aria-describedby="company-sync"></select><span id="company-sync" class="company-sync-hint" aria-live="polite">\u6b63\u5728\u8bfb\u53d6...</span></div><nav class="nav-stack" aria-label="\u5de5\u4f5c\u533a"><div class="nav-section nav-primary">${primaryLinks}</div><details class="nav-group"${insightOpen}><summary><span class="nav-summary-label"><i data-lucide="sparkles"></i><span>\u6d1e\u5bdf</span></span><i data-lucide="chevron-down" class="nav-chevron"></i></summary><div class="nav-children">${insightLinks}</div></details><details class="nav-group" id="nav-monthly-group"${monthlyOpen} hidden><summary><span class="nav-summary-label"><i data-lucide="calendar-range"></i><span>MONTHLY REPORT</span></span><i data-lucide="chevron-down" class="nav-chevron"></i></summary><div class="nav-children">${monthlyLinks}</div></details><details class="nav-group" id="nav-settings-group"${settingsOpen} hidden><summary><span class="nav-summary-label"><i data-lucide="sliders-horizontal"></i><span>\u8bbe\u7f6e</span></span><i data-lucide="chevron-down" class="nav-chevron"></i></summary><div class="nav-children">${settingsLinks}</div></details></nav><div class="sidebar-footer"><div class="user-info"><div class="user-avatar" aria-hidden="true">OP</div><div class="user-copy"><span class="user-label">Operator</span><strong id="current-user" translate="no">-</strong></div><button type="button" class="sidebar-theme-btn icon-btn" aria-label="切换主题" title="切换主题"><i data-lucide="moon"></i></button><button type="button" class="logout-btn icon-btn" id="logout-btn" aria-label="\u9000\u51fa\u767b\u5f55" title="\u9000\u51fa\u767b\u5f55"><i data-lucide="log-out"></i></button></div></div></aside><main class="main" id="main-content" tabindex="-1"><header class="topbar glass-panel"><div class="topbar-heading"><div class="topbar-kicker">NXC Report</div><div class="topbar-title">${activeItem[2]}</div></div><div class="topbar-actions"><div class="sync-state" id="global-sync-state" data-state="loading" role="status" aria-live="polite"><span class="sync-indicator" aria-hidden="true"></span><span class="sync-copy"><strong id="global-sync-text">\u6b63\u5728\u8bfb\u53d6\u540c\u6b65\u72b6\u6001</strong><small id="global-sync-time"></small></span></div><button type="button" class="lang-toggle" id="lang-toggle" translate="no" aria-label="\u5207\u6362\u8bed\u8a00" title="\u5207\u6362\u8bed\u8a00"><span data-lang-choice="zh">中</span><span data-lang-choice="en">EN</span></button><button type="button" class="theme-toggle icon-btn" id="theme-toggle" aria-label="\u5207\u6362\u4e3b\u9898" title="\u5207\u6362\u4e3b\u9898"><i data-lucide="moon"></i></button></div></header><section class="page-shell">${body}</section></main></div>${MOBILE_TABBAR}<script src="/vendor/lucide-1.65.0.min.js"></script><script src="/vendor/gsap-3.12.5.min.js"></script><script src="/js/alarm.js?v=20260930alarm1"></script><script src="/js/modal-guard.js?v=20261106drill1"></script><script src="/js/app.js?v=20260802platformsound3"></script><script src="/js/customer-detail.js?v=20260731bankfix4"></script>${extra}</body></html>`;
+  return `<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="color-scheme" content="light dark"><title>${title} - NXC Report</title><link rel="icon" href="/favicon.ico" sizes="any"><link rel="icon" type="image/png" href="/brand/favicon-32.png"><link rel="apple-touch-icon" href="/brand/apple-touch-icon.png"><link rel="stylesheet" href="/css/style.css?v=20260812transferfix1"></head><body><a class="skip-link" href="#main-content">\u8df3\u5230\u4e3b\u5185\u5bb9</a><div class="ambient-field" aria-hidden="true"><span></span><span></span></div><div class="sidebar-backdrop" id="sidebar-backdrop"></div><button type="button" class="mobile-menu-btn icon-btn" id="mobile-menu-btn" aria-label="\u6253\u5f00\u5bfc\u822a" aria-controls="sidebar" aria-expanded="false"><i data-lucide="menu"></i><span class="icon-fallback" aria-hidden="true">Menu</span></button><div class="layout"><aside class="sidebar" id="sidebar" aria-label="\u4e3b\u5bfc\u822a"><div class="brand-mark"><img class="brand-symbol" src="/brand/nxc-icon.png" alt="" width="38" height="38"><div><h2>NXC</h2><p>Report</p></div></div><div class="company-bar glass-control" id="company-bar"><label for="company-select">\u5f53\u524d\u516c\u53f8</label><select id="company-select" aria-describedby="company-sync"></select><span id="company-sync" class="company-sync-hint" aria-live="polite">\u6b63\u5728\u8bfb\u53d6...</span></div><nav class="nav-stack" aria-label="\u5de5\u4f5c\u533a"><div class="nav-section nav-primary">${homeLink}</div>${bankGroup}<div class="nav-section nav-primary">${primaryLinks}</div><details class="nav-group"${insightOpen}><summary><span class="nav-summary-label"><i data-lucide="sparkles"></i><span>\u6d1e\u5bdf</span></span><i data-lucide="chevron-down" class="nav-chevron"></i></summary><div class="nav-children">${insightLinks}</div></details><details class="nav-group" id="nav-monthly-group"${monthlyOpen} hidden><summary><span class="nav-summary-label"><i data-lucide="calendar-range"></i><span>MONTHLY REPORT</span></span><i data-lucide="chevron-down" class="nav-chevron"></i></summary><div class="nav-children">${monthlyLinks}</div></details><details class="nav-group" id="nav-settings-group"${settingsOpen} hidden><summary><span class="nav-summary-label"><i data-lucide="sliders-horizontal"></i><span>\u8bbe\u7f6e</span></span><i data-lucide="chevron-down" class="nav-chevron"></i></summary><div class="nav-children">${settingsLinks}</div></details></nav><div class="sidebar-footer"><div class="user-info"><div class="user-avatar" aria-hidden="true">OP</div><div class="user-copy"><span class="user-label">Operator</span><strong id="current-user" translate="no">-</strong></div><button type="button" class="sidebar-theme-btn icon-btn" aria-label="切换主题" title="切换主题"><i data-lucide="moon"></i></button><button type="button" class="logout-btn icon-btn" id="logout-btn" aria-label="\u9000\u51fa\u767b\u5f55" title="\u9000\u51fa\u767b\u5f55"><i data-lucide="log-out"></i></button></div></div></aside><main class="main" id="main-content" tabindex="-1"><header class="topbar glass-panel"><div class="topbar-heading"><div class="topbar-kicker">NXC Report</div><div class="topbar-title">${activeItem[2]}</div></div><div class="topbar-actions"><div class="sync-state" id="global-sync-state" data-state="loading" role="status" aria-live="polite"><span class="sync-indicator" aria-hidden="true"></span><span class="sync-copy"><strong id="global-sync-text">\u6b63\u5728\u8bfb\u53d6\u540c\u6b65\u72b6\u6001</strong><small id="global-sync-time"></small></span></div><button type="button" class="lang-toggle" id="lang-toggle" translate="no" aria-label="\u5207\u6362\u8bed\u8a00" title="\u5207\u6362\u8bed\u8a00"><span data-lang-choice="zh">中</span><span data-lang-choice="en">EN</span></button><button type="button" class="theme-toggle icon-btn" id="theme-toggle" aria-label="\u5207\u6362\u4e3b\u9898" title="\u5207\u6362\u4e3b\u9898"><i data-lucide="moon"></i></button></div></header><section class="page-shell">${body}</section></main></div>${MOBILE_TABBAR}<script src="/vendor/lucide-1.65.0.min.js"></script><script src="/vendor/gsap-3.12.5.min.js"></script><script src="/js/alarm.js?v=20260930alarm1"></script><script src="/js/modal-guard.js?v=20261106drill1"></script><script src="/js/app.js?v=20260802platformsound3"></script><script src="/js/customer-detail.js?v=20260731bankfix4"></script>${extra}</body></html>`;
 }
 
 const pageRoutes = {
@@ -351,7 +363,7 @@ const pageRoutes = {
   "/bank-settings.html": pageLayout(
     "\u652f\u4ed8\u8bbe\u7f6e",
     "bank-settings",
-    `<div class="page-toolbar"><h1>\u652f\u4ed8\u8bbe\u7f6e</h1><a class="btn btn-outline btn-sm" href="/bank-accounts.html">\u8fd4\u56de\u652f\u4ed8\u6e20\u9053</a></div>
+    `<div class="page-toolbar"><h1>\u652f\u4ed8\u8bbe\u7f6e</h1><a class="btn btn-outline btn-sm" href="/bank-ledger.html">\u8fd4\u56de\u5f53\u65e5\u6d41\u6c34</a></div>
 <div class="settings-grid bank-settings-grid">
 <section class="data-panel">
 <h2>STATUS</h2>
@@ -412,19 +424,18 @@ const pageRoutes = {
 </div>`,
     "/js/telegram-settings.js?v=20260924tgadmin2"
   ),
-  "/bank-accounts.html": pageLayout(
-    "\u652f\u4ed8\u6e20\u9053",
-    "bank-accounts",
+  "/bank-ledger.html": pageLayout(
+    "\u5f53\u65e5\u6d41\u6c34",
+    "bank-ledger",
     `<div class="sheet-app bkv2">
 <div class="bk-toolbar">
 <div class="bk-tools">
 <input type="date" id="sheet-date" class="sheet-date">
+<select id="sheet-bank-filter" class="sheet-filter sheet-bank-filter" aria-label="按渠道筛选流水"><option value="all">全部渠道</option></select>
 <select id="sheet-status-filter" class="sheet-filter"><option value="">ALL</option></select>
 <input type="text" id="sheet-search" class="sheet-search" placeholder="搜索 STATUS / TRANS ID / USERNAME / NAME">
 </div>
 <div class="bk-actions">
-<button class="btn btn-outline btn-sm" id="sheet-pending-btn" type="button"><i data-lucide="clipboard-check"></i>待处理 <span id="sheet-pending-count" class="badge-count">0</span></button>
-<button class="btn btn-outline btn-sm" id="sheet-manage-banks" title="渠道管理"><i data-lucide="landmark"></i>渠道</button>
 <details class="bk-more-menu">
 <summary class="btn btn-outline btn-sm"><i data-lucide="ellipsis"></i>更多</summary>
 <div class="bk-more-popover">
@@ -446,16 +457,19 @@ const pageRoutes = {
 <div class="bk-kpi bk-kpi-help"><em>HELP TRF</em><strong id="sum-help">0.00</strong></div>
 </div>
 <div class="reconcile-alert" id="reconcile-alert" hidden role="status" aria-live="polite"></div>
-<div class="bk-pending-summary" id="bk-pending-summary" role="status" aria-live="polite">
-<div class="bk-pending-summary-copy"><strong>待处理工作</strong><span id="bk-pending-summary-text"></span></div>
-<div class="bk-pending-summary-actions">
-<button type="button" class="bk-pending-action bk-pending-transfer" id="sheet-transfer-btn"><i data-lucide="arrow-left-right"></i>调钱</button>
-<button type="button" class="bk-pending-action" id="bk-pending-platform">平台接单 <b id="bk-pending-platform-count">0</b></button>
-<button type="button" class="bk-pending-action" id="bk-pending-skipped">Skipped <b id="bk-pending-skipped-count">0</b></button>
-<button type="button" class="btn btn-primary btn-xs" id="bk-pending-open-all">查看待处理</button>
+<section class="bk-intake" id="bk-intake" aria-labelledby="bk-intake-title">
+<div class="bk-intake-head">
+<button type="button" class="bk-intake-toggle" id="bk-intake-toggle" aria-expanded="true" aria-controls="bk-intake-body"><i data-lucide="chevron-down"></i><span id="bk-intake-title">接单区</span></button>
+<div class="bk-live" id="bk-live" hidden></div>
+<div class="pending-tabs" role="tablist" aria-label="待审批类型"><button type="button" class="btn btn-outline btn-xs pending-tab active" data-tab="tx" role="tab" aria-selected="true" aria-controls="pending-tx-panel">平台订单</button><button type="button" class="btn btn-outline btn-xs pending-tab" data-tab="skipped" role="tab" aria-selected="false" tabindex="-1" aria-controls="pending-skipped-panel">已跳过</button></div>
+<span class="bk-intake-empty" id="bk-intake-empty" hidden>✅ 暂无待审批</span>
+<div class="bk-intake-actions"><button type="button" class="bk-pending-action bk-pending-transfer" id="sheet-transfer-btn"><i data-lucide="arrow-left-right"></i>调钱</button><button type="button" class="icon-btn bk-intake-close" id="bk-intake-close" aria-label="关闭接单区"><i data-lucide="x"></i></button></div>
 </div>
+<div class="bk-intake-body" id="bk-intake-body">
+<div id="pending-tx-panel"><div class="pending-toolbar"><input type="search" id="pending-search" class="sheet-search" placeholder="搜索 TRANS ID / 用户 / 金额" aria-label="搜索平台单" autocomplete="off"><select id="pending-type" aria-label="平台单类型"><option value="">全部类型</option><option value="DEPOSIT">DEPOSIT</option><option value="WITHDRAW">WITHDRAW</option></select></div><div class="table-wrap data-surface"><table class="bank-table"><thead><tr><th>TYPE</th><th>DATE / TIME</th><th>TRANS ID</th><th>USER</th><th>AMT</th><th>MODE</th><th>BANK / C STATUS</th><th>REMARK</th><th></th></tr></thead><tbody id="pending-tx-rows"></tbody></table></div><div class="pending-more"><span id="pending-more-count" translate="no"></span><button type="button" class="btn btn-outline btn-xs" id="pending-more-btn" hidden>显示更多</button></div></div>
+<div id="pending-skipped-panel" hidden><div class="table-wrap data-surface"><table class="bank-table"><thead><tr><th>TYPE</th><th>TIME</th><th>TRANS ID</th><th>USER</th><th>AMT</th><th>SKIPPED AT</th><th>BY</th><th></th></tr></thead><tbody id="pending-skipped-rows"></tbody></table></div></div>
 </div>
-<div class="bk-rail" id="sheet-tabs"></div>
+</section>
 <div class="bk-report-wrap collapsed" id="sheet-upper-wrap">
 <button type="button" class="bk-collapse-btn" id="sheet-collapse-btn" aria-expanded="false">今日报表 ▸</button>
 <div class="bk-report-grid" id="sheet-upper">
@@ -489,49 +503,11 @@ const pageRoutes = {
 </section>
 </div></div>
 
-<div class="modal-overlay" id="bank-modal"><div class="modal bank-modal">
-<h2 id="bank-modal-title">支付渠道</h2>
-<div class="form-group"><label>TYPE</label>
-<select id="f-kind"><option value="nominee">人头</option><option value="ghost">幽灵</option><option value="payment_gateway">PaymentGateway</option></select></div>
-<div class="form-group ac-wrap"><label>BankBranch</label><input id="f-bankbranch" autocomplete="off"><ul class="ac-dropdown" id="ac-bankbranch"></ul></div>
-<div class="form-group"><label>NAME</label><input id="f-name"></div>
-<div class="form-group"><label>BSB</label><input id="f-bsb" maxlength="10"></div>
-<div class="form-group"><label>ACCOUNT</label><input id="f-account"></div>
-<div class="form-group"><label>PAYID</label><input id="f-payid"></div>
-<div class="form-group"><label>REMARK</label><input id="f-note"></div>
-<div class="form-group"><label>\u4f59\u989d\u4e0a\u9650\u62a5\u8b66</label><input id="f-alert-threshold" inputmode="decimal" autocomplete="off" placeholder="\u7559\u7a7a = \u4e0d\u542f\u7528"><small class="form-hint">\u4f59\u989d\u8fbe\u5230\u8be5\u91d1\u989d\u65f6\u63a8\u9001 Telegram\u3002\u8dcc\u56de\u9608\u503c\u4e0b\u4f1a\u81ea\u52a8\u590d\u4f4d\uff0c\u4e0b\u6b21\u518d\u8fbe\u5230\u4f1a\u91cd\u65b0\u63d0\u9192\u3002</small></div>
-<label class="form-check"><input type="checkbox" id="f-reset-daily"><span>\u6bcf\u5929\u5f52\u96f6\u5206\u5f00\u7b97</span></label>
-<p id="bank-modal-err" class="form-error"></p>
-<div class="actions"><button class="btn btn-outline btn-sm" id="bank-cancel-btn">取消</button><button class="btn btn-success btn-sm" id="bank-save-btn">保存</button></div>
-</div></div>
-
-<div class="modal-overlay" id="banks-list-modal"><div class="modal bkd-modal">
-<div class="bkd-modal-heading"><h2>\u6e20\u9053\u7ba1\u7406</h2><button class="btn btn-success btn-sm" id="add-bank-btn" type="button"><i data-lucide="plus"></i>新渠道</button></div>
-<div class="bkd-cleanup-bar" id="bkd-cleanup-bar" role="status" aria-live="polite"></div>
-<div class="bkd-tabs" id="bkd-tabs" role="tablist" aria-label="\u6e20\u9053\u72b6\u6001">
-<button type="button" class="bkd-tab active" data-tab="operating" role="tab" aria-selected="true" aria-controls="bkd-panel">\u8fd0\u8425\u4e2d</button>
-<button type="button" class="bkd-tab" data-tab="banned" role="tab" aria-selected="false" aria-controls="bkd-panel">\u5c01\u7981\u4e2d</button>
-<button type="button" class="bkd-tab" data-tab="archived" role="tab" aria-selected="false" aria-controls="bkd-panel">\u5df2\u5f52\u6863</button>
-</div>
-<div class="bkd-toolbar"><input type="search" id="bkd-search" class="sheet-search" autocomplete="off" placeholder="\u641c\u7d22\u94f6\u884c / \u6237\u540d / \u8d26\u53f7"></div>
-<div class="bkd-panel" id="bkd-panel" role="tabpanel"></div>
-<div class="pager" id="bkd-pager" hidden></div>
-<div class="actions"><button class="btn btn-outline btn-sm" id="banks-list-close">\u5173\u95ed</button></div>
-</div></div>
-
 <div class="modal-overlay" id="deleted-ledger-modal"><div class="modal modal-lg">
 <h2>最近删除流水</h2>
 <p class="modal-note">误删的流水会先进入这里，点恢复后会回到账单流水并自动重算余额。</p>
 <div class="table-wrap data-surface"><table class="bank-table m-cards m-deleted"><thead><tr><th>删除时间</th><th>TIME</th><th>STATUS</th><th>TRANS ID</th><th>IN</th><th>OUT</th><th>HELP/TRF</th><th>BANK</th><th>USER / NAME</th><th></th></tr></thead><tbody id="deleted-ledger-rows"></tbody></table></div>
 <div class="actions"><button class="btn btn-outline btn-sm" id="deleted-ledger-close">关闭</button></div>
-</div></div>
-
-<div class="modal-overlay" id="pending-modal"><div class="modal modal-lg">
-<h2>待处理</h2>
-<div class="pending-tabs"><button type="button" class="btn btn-outline btn-xs pending-tab active" data-tab="tx" aria-controls="pending-tx-panel">平台订单</button><button type="button" class="btn btn-outline btn-xs pending-tab" data-tab="skipped" aria-controls="pending-skipped-panel">已跳过</button></div>
-<div id="pending-tx-panel"><div class="pending-toolbar"><input type="search" id="pending-search" class="sheet-search" placeholder="搜索 TRANS ID / 用户 / 金额" aria-label="搜索平台单" autocomplete="off"><select id="pending-type" aria-label="平台单类型"><option value="">全部类型</option><option value="DEPOSIT">DEPOSIT</option><option value="WITHDRAW">WITHDRAW</option></select></div><div class="table-wrap data-surface"><table class="bank-table"><thead><tr><th>TYPE</th><th>DATE / TIME</th><th>TRANS ID</th><th>USER</th><th>AMT</th><th>MODE</th><th>BANK / C STATUS</th><th>REMARK</th><th></th></tr></thead><tbody id="pending-tx-rows"></tbody></table></div><div class="pending-more"><span id="pending-more-count" translate="no"></span><button type="button" class="btn btn-outline btn-xs" id="pending-more-btn" hidden>显示更多</button></div></div>
-<div id="pending-skipped-panel" hidden><div class="table-wrap data-surface"><table class="bank-table"><thead><tr><th>TYPE</th><th>TIME</th><th>TRANS ID</th><th>USER</th><th>AMT</th><th>SKIPPED AT</th><th>BY</th><th></th></tr></thead><tbody id="pending-skipped-rows"></tbody></table></div></div>
-<div class="actions"><button class="btn btn-outline btn-sm" id="pending-close">关闭</button></div>
 </div></div>
 
 <div class="modal-overlay" id="transfer-modal"><div class="modal transfer-modal">
@@ -548,19 +524,6 @@ const pageRoutes = {
 <div class="form-group"><label>REMARK</label><input id="trf-remark"></div>
 <p id="trf-err" class="form-error" role="alert" aria-live="polite"></p>
 <div class="actions"><button class="btn btn-outline btn-sm" id="trf-cancel">取消</button><button class="btn btn-success btn-sm" id="trf-submit">保存</button></div>
-</div></div>
-
-<div class="modal-overlay" id="drain-modal"><div class="modal drain-modal">
-<h2>转出封禁户余额</h2>
-<div class="reason-target"><div class="reason-target-detail" id="drain-target" translate="no"></div></div>
-<div class="form-group"><label for="drain-mode">去向</label><select id="drain-mode"><option value="bank">本公司户口</option><option value="company">别家公司</option></select></div>
-<div class="form-group" id="drain-bank-group"><label for="drain-bank">收款户口</label><select id="drain-bank"></select></div>
-<div class="form-group" id="drain-cstatus-group" hidden><label for="drain-cstatus">C STATUS（对方公司）</label><input id="drain-cstatus" list="cstatus-datalist" data-cstatus-pick autocomplete="off"></div>
-<div class="form-group"><label for="drain-amount">金额</label><input id="drain-amount" inputmode="decimal" autocomplete="off" aria-describedby="drain-amount-hint"><small class="form-hint" id="drain-amount-hint" translate="no"></small></div>
-<div class="form-group"><label for="drain-remark">REMARK</label><input id="drain-remark" autocomplete="off"></div>
-<p class="modal-note">本公司户口：记两笔，封禁户 BANK TRF 出、收款户 BANK TRANSFER 入，C STATUS 留空。别家公司：只记封禁户一笔 BANK TRF 出，C STATUS 填对方，对方自己记入账。户口保持封禁；钱拿回后户口还要用的，请用「解封」。</p>
-<p id="drain-err" class="form-error" role="alert" aria-live="polite"></p>
-<div class="actions"><button class="btn btn-outline btn-sm" id="drain-cancel" type="button">取消</button><button class="btn btn-success btn-sm" id="drain-submit" type="button">确认转出</button></div>
 </div></div>
 
 <div class="modal-overlay" id="cstatus-modal"><div class="modal">
@@ -581,7 +544,64 @@ const pageRoutes = {
 <p id="reason-modal-error" class="form-error" role="alert" aria-live="polite"></p>
 <div class="actions"><button class="btn btn-outline btn-sm" id="reason-modal-cancel" type="button">取消</button><button class="btn btn-danger btn-sm" id="reason-modal-confirm" type="button">确认</button></div>
 </div></div>`,
-    ["/js/ledger-bank-pick.js?v=20261106drill3", "/js/operation-target.js?v=20261106drill1", "/js/render-gate.js?v=20261106drill1", "/js/pending-filter.js?v=20261106drill1", "/js/display-format.js?v=20261106drill2", "/js/appeal-csv.js?v=20261106drill1", "/js/cstatus-sheet.js?v=20261106sheet1", "/js/bank-accounts.js?v=20261106sheet1"]
+    ["/js/ledger-bank-pick.js?v=20261106drill3", "/js/operation-target.js?v=20261106drill1", "/js/render-gate.js?v=20261106drill1", "/js/pending-filter.js?v=20261106drill1", "/js/display-format.js?v=20261106drill2", "/js/cstatus-sheet.js?v=20261106sheet1", "/js/bank-common.js?v=20261109ledger1", "/js/bank-ledger.js?v=20261109ledger1"]
+  ),
+  "/bank-channels.html": pageLayout(
+    "\u652f\u4ed8\u6e20\u9053",
+    "bank-channels",
+    `<div class="channels-app" id="bank-channels-page">
+<section class="ch-summary" aria-label="全部渠道">
+<div class="ch-summary-copy"><span class="bk-summary-kicker">ALL CHANNELS</span><strong>全部渠道</strong><span>点击渠道行可筛选流水</span></div>
+<div class="ch-summary-stat"><small>总余额</small><strong id="ch-total-balance" translate="no">0.00</strong></div>
+<div class="ch-summary-stat"><small>人头</small><strong id="ch-count-nominee" translate="no">0</strong></div>
+<div class="ch-summary-stat"><small>幽灵</small><strong id="ch-count-ghost" translate="no">0</strong></div>
+<div class="ch-summary-stat" id="ch-count-pg-wrap" hidden><small>PG</small><strong id="ch-count-pg" translate="no">0</strong></div>
+<button class="btn btn-success btn-sm" id="add-bank-btn" type="button"><i data-lucide="plus"></i>新渠道</button>
+</section>
+<div class="bkd-cleanup-bar" id="bkd-cleanup-bar" role="status" aria-live="polite"></div>
+<div class="ch-toolbar">
+<div class="bkd-tabs" id="bkd-tabs" role="tablist" aria-label="\u6e20\u9053\u72b6\u6001">
+<button type="button" class="bkd-tab active" data-tab="operating" role="tab" aria-selected="true" aria-controls="bkd-panel">\u8fd0\u8425\u4e2d</button>
+<button type="button" class="bkd-tab" data-tab="banned" role="tab" aria-selected="false" aria-controls="bkd-panel">\u5c01\u7981\u4e2d</button>
+<button type="button" class="bkd-tab" data-tab="archived" role="tab" aria-selected="false" aria-controls="bkd-panel">\u5df2\u5f52\u6863</button>
+</div>
+<input type="search" id="bkd-search" class="sheet-search" autocomplete="off" placeholder="\u641c\u7d22\u94f6\u884c / \u6237\u540d / \u8d26\u53f7">
+</div>
+<div class="ch-month-bar" id="ch-month-bar" hidden><label class="ch-month-pick"><span>\u5c01\u7981\u6708\u4efd</span><select id="ch-month-select" aria-label="\u5c01\u7981\u6708\u4efd"></select></label><div class="ch-month-total" id="ch-month-total" role="status" aria-live="polite"></div></div>
+<div class="bkd-panel ch-panel" id="bkd-panel" role="tabpanel"></div>
+<div class="pager" id="bkd-pager" hidden></div>
+<datalist id="cstatus-datalist"></datalist>
+</div>
+
+<div class="modal-overlay" id="bank-modal"><div class="modal bank-modal">
+<h2 id="bank-modal-title">支付渠道</h2>
+<div class="form-group"><label>TYPE</label>
+<select id="f-kind"><option value="nominee">人头</option><option value="ghost">幽灵</option><option value="payment_gateway">PaymentGateway</option></select></div>
+<div class="form-group ac-wrap"><label>BankBranch</label><input id="f-bankbranch" autocomplete="off"><ul class="ac-dropdown" id="ac-bankbranch"></ul></div>
+<div class="form-group"><label>NAME</label><input id="f-name"></div>
+<div class="form-group"><label>BSB</label><input id="f-bsb" maxlength="10"></div>
+<div class="form-group"><label>ACCOUNT</label><input id="f-account"></div>
+<div class="form-group"><label>PAYID</label><input id="f-payid"></div>
+<div class="form-group"><label>REMARK</label><input id="f-note"></div>
+<div class="form-group"><label>\u4f59\u989d\u4e0a\u9650\u62a5\u8b66</label><input id="f-alert-threshold" inputmode="decimal" autocomplete="off" placeholder="\u7559\u7a7a = \u4e0d\u542f\u7528"><small class="form-hint">\u4f59\u989d\u8fbe\u5230\u8be5\u91d1\u989d\u65f6\u63a8\u9001 Telegram\u3002\u8dcc\u56de\u9608\u503c\u4e0b\u4f1a\u81ea\u52a8\u590d\u4f4d\uff0c\u4e0b\u6b21\u518d\u8fbe\u5230\u4f1a\u91cd\u65b0\u63d0\u9192\u3002</small></div>
+<label class="form-check"><input type="checkbox" id="f-reset-daily"><span>\u6bcf\u5929\u5f52\u96f6\u5206\u5f00\u7b97</span></label>
+<p id="bank-modal-err" class="form-error"></p>
+<div class="actions"><button class="btn btn-outline btn-sm" id="bank-cancel-btn">取消</button><button class="btn btn-success btn-sm" id="bank-save-btn">保存</button></div>
+</div></div>
+
+<div class="modal-overlay" id="drain-modal"><div class="modal drain-modal">
+<h2>转出封禁户余额</h2>
+<div class="reason-target"><div class="reason-target-detail" id="drain-target" translate="no"></div></div>
+<div class="form-group"><label for="drain-mode">去向</label><select id="drain-mode"><option value="bank">本公司户口</option><option value="company">别家公司</option></select></div>
+<div class="form-group" id="drain-bank-group"><label for="drain-bank">收款户口</label><select id="drain-bank"></select></div>
+<div class="form-group" id="drain-cstatus-group" hidden><label for="drain-cstatus">C STATUS（对方公司）</label><input id="drain-cstatus" list="cstatus-datalist" data-cstatus-pick autocomplete="off"></div>
+<div class="form-group"><label for="drain-amount">金额</label><input id="drain-amount" inputmode="decimal" autocomplete="off" aria-describedby="drain-amount-hint"><small class="form-hint" id="drain-amount-hint" translate="no"></small></div>
+<div class="form-group"><label for="drain-remark">REMARK</label><input id="drain-remark" autocomplete="off"></div>
+<p class="modal-note">本公司户口：记两笔，封禁户 BANK TRF 出、收款户 BANK TRANSFER 入，C STATUS 留空。别家公司：只记封禁户一笔 BANK TRF 出，C STATUS 填对方，对方自己记入账。户口保持封禁；钱拿回后户口还要用的，请用「解封」。</p>
+<p id="drain-err" class="form-error" role="alert" aria-live="polite"></p>
+<div class="actions"><button class="btn btn-outline btn-sm" id="drain-cancel" type="button">取消</button><button class="btn btn-success btn-sm" id="drain-submit" type="button">确认转出</button></div>
+</div></div>`,
+    ["/js/ledger-bank-pick.js?v=20261106drill3", "/js/operation-target.js?v=20261106drill1", "/js/render-gate.js?v=20261106drill1", "/js/display-format.js?v=20261106drill2", "/js/appeal-csv.js?v=20261106drill1", "/js/cstatus-sheet.js?v=20261106sheet1", "/js/bank-common.js?v=20261109ledger1", "/js/bank-channels.js?v=20261109ledger1"]
   ),
   "/audit-history.html": pageLayout(
     "\u64cd\u4f5c\u5386\u53f2",
@@ -691,7 +711,7 @@ const globalFeedbackHtml = '<div class="app-toast-stack" id="app-toast-stack" ar
 // i18n.js holds the dictionary + translation engine. It is injected into <head> (ahead of the
 // render-blocking stylesheet) so the first paint is already in the saved language, instead of
 // painting Chinese and rewriting it after the two vendored scripts at the end of <body> load.
-const i18nHeadHtml = '<script src="/js/i18n.js?v=20261107brand1"></script>';
+const i18nHeadHtml = '<script src="/js/i18n.js?v=20261109ledger1"></script>';
 // One full translation pass at the end of <body>, where the whole document
 // exists but the two vendored scripts below have not been fetched yet. Anything
 // painted while they load is already in the right language. Must come after
@@ -704,23 +724,26 @@ for (const route of Object.keys(pageRoutes)) {
     .replace('<link rel="stylesheet" href="/css/style.css?v=20260812transferfix1">', i18nHeadHtml + '<link rel="stylesheet" href="/css/style.css?v=20260812transferfix1">')
     .replace('<div class="company-bar glass-control" id="company-bar">', '<div class="company-bar glass-control" id="company-bar">' + companyCompactEntryHtml)
     .replace('<script src="/vendor/lucide-1.65.0.min.js"></script>', globalFeedbackHtml + i18nBootHtml + '<script src="/vendor/lucide-1.65.0.min.js"></script>')
-    .replace('/css/style.css?v=20260812transferfix1', '/css/style.css?v=20261107brand1')
+    .replace('/css/style.css?v=20260812transferfix1', '/css/style.css?v=20261109ledger1')
     .replace('/js/customer-detail.js?v=20260731bankfix4', '/js/customer-detail.js?v=20260817customerhistory1')
     .replace('/css/style.css?v=20260802topbarflow1', '/css/style.css?v=20261001archive1')
-    .replace('/js/app.js?v=20260802platformsound3', '/js/app.js?v=20261106drill2');
+    .replace('/js/app.js?v=20260802platformsound3', '/js/app.js?v=20261109ledger1');
 }
 
 function requireAdminPage(req, res, next) {
   return requireLogin(req, res, function () {
-    if (req.session.user.role !== "admin") return res.redirect("/bank-accounts.html");
+    if (req.session.user.role !== "admin") return res.redirect("/bank-ledger.html");
     next();
   });
 }
 
+// operator 只能进银行这两页（支付设置在 ADMIN_ONLY_PAGES）。app.js 的 loadUser 有同一份名单。
+const OPERATOR_PAGES = new Set(["/bank-ledger.html", "/bank-channels.html"]);
+
 function requirePageAccess(req, res, next) {
   return requireLogin(req, res, function () {
-    if (req.session.user.role === "operator" && req.path !== "/bank-accounts.html") {
-      return res.redirect("/bank-accounts.html");
+    if (req.session.user.role === "operator" && !OPERATOR_PAGES.has(req.path)) {
+      return res.redirect("/bank-ledger.html");
     }
     next();
   });
@@ -748,6 +771,12 @@ for (const [route, html] of Object.entries(pageRoutes)) {
 
 app.get("/deposits.html", requirePageAccess, (_req, res) => res.redirect("/transactions.html"));
 app.get("/withdrawals.html", requirePageAccess, (_req, res) => res.redirect("/transactions.html"));
+// 2026-11 拆页：旧地址（书签、手机底栏的老链接）一律到当日流水。302 而不是 301——301 会被
+// 浏览器永久缓存。浏览器跳转时自己保留 #hash；#channels 由 bank-ledger.js 再转去支付渠道页。
+app.get("/bank-accounts.html", (req, res) => {
+  const q = req.originalUrl.indexOf("?");
+  res.redirect(302, "/bank-ledger.html" + (q >= 0 ? req.originalUrl.slice(q) : ""));
+});
 
 app.use(express.static(publicDir));
 

@@ -1039,7 +1039,7 @@ body.modal-open { overflow: hidden; }
    负的 bottom / margin 抵掉 .modal 的 20px 内边距，贴住真正的底边。
    :where() 让 :not 不加特异性，下面 ≤768 / ≤700 两条同特异性规则靠源码顺序覆盖它。
    待处理 / 渠道管理自己是固定头尾的 flex 结构，不参与。 */
-.modal-overlay:not(.app-dialog-overlay):not(:where(#pending-modal, #banks-list-modal)) .modal > .actions {
+.modal-overlay:not(.app-dialog-overlay):not(:where(#bk-intake, #banks-list-modal)) .modal > .actions {
   position: sticky;
   bottom: -20px;
   z-index: 2;
@@ -2883,43 +2883,19 @@ tr:hover .bank-bal-btns { opacity: 1; }
   color: #38bdf8;
 }
 
-#pending-modal .modal {
-  display: flex;
-  flex-direction: column;
-  width: min(1280px, 96vw);
-  max-width: min(1280px, 96vw);
-  height: min(88dvh, 760px);
-  max-height: min(88dvh, 760px);
-  overflow: hidden;
-  background: var(--surface-solid);
-  -webkit-backdrop-filter: none;
-  backdrop-filter: none;
-}
 /* 待处理：搜索 / 类型筛选 / 显示更多（见 pending-filter.js）。 */
-#pending-modal .pending-toolbar { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 8px; }
-#pending-modal .pending-toolbar input { flex: 1 1 220px; min-width: 0; }
-#pending-modal .pending-toolbar select { flex: 0 0 auto; width: auto; }
-#pending-modal .pending-more { display: flex; align-items: center; justify-content: center; gap: 10px; padding: 8px 0 0; color: var(--text-soft); font-size: 12px; }
-#pending-modal .pending-more:has(#pending-more-count:empty) { display: none; }
+#bk-intake .pending-toolbar { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 8px; }
+#bk-intake .pending-toolbar input { flex: 1 1 220px; min-width: 0; }
+#bk-intake .pending-toolbar select { flex: 0 0 auto; width: auto; }
+#bk-intake .pending-more { display: flex; align-items: center; justify-content: center; gap: 10px; padding: 8px 0 0; color: var(--text-soft); font-size: 12px; }
+#bk-intake .pending-more:has(#pending-more-count:empty) { display: none; }
 /* 面板里多了工具栏和「显示更多」，表格不能再占 100% 高，否则底下那条被 overflow:hidden 切掉。 */
-#pending-modal #pending-tx-panel { display: flex; flex-direction: column; }
-#pending-modal #pending-tx-panel .table-wrap { flex: 1 1 auto; min-height: 0; height: auto; }
-#pending-modal {
-  background: rgba(15, 23, 42, .18);
-  -webkit-backdrop-filter: none;
-  backdrop-filter: none;
-}
-#pending-modal .pending-tabs { flex: 0 0 auto; }
-#pending-modal .actions {
-  flex: 0 0 auto;
-  margin: 12px 0 0;
-  padding: 12px 0 0;
-  border-top: 1px solid var(--border);
-  background: var(--surface-solid);
-}
+#bk-intake #pending-tx-panel { display: flex; flex-direction: column; }
+#bk-intake #pending-tx-panel .table-wrap { flex: 1 1 auto; min-height: 0; height: auto; }
+#bk-intake .pending-tabs { flex: 0 0 auto; }
 #pending-tx-panel,
 #pending-skipped-panel { flex: 1 1 auto; min-height: 0; overflow: hidden; }
-#pending-modal .table-wrap {
+#bk-intake .table-wrap {
   max-height: none;
   height: 100%;
   overflow: scroll;
@@ -2932,58 +2908,58 @@ tr:hover .bank-bal-btns { opacity: 1; }
   backdrop-filter: none;
   -webkit-overflow-scrolling: touch;
 }
-#pending-modal .bank-table {
+#bk-intake .bank-table {
   width: 100%;
   min-width: 1210px;
   table-layout: fixed;
   background: var(--surface-solid);
 }
-#pending-modal .bank-table th,
-#pending-modal .bank-table td {
+#bk-intake .bank-table th,
+#bk-intake .bank-table td {
   padding: 8px 10px;
   white-space: nowrap;
   background: var(--surface-solid);
   background-image: none;
 }
-#pending-modal .bank-table thead th {
+#bk-intake .bank-table thead th {
   background: var(--surface-2);
 }
-#pending-modal .bank-table tbody tr:hover td {
+#bk-intake .bank-table tbody tr:hover td {
   background: var(--surface-2);
 }
-#pending-modal .bank-table th:nth-child(1) { width: 70px; }
-#pending-modal .bank-table th:nth-child(2) { width: 174px; }
-#pending-modal .bank-table th:nth-child(3) { width: 125px; }
-#pending-modal .bank-table th:nth-child(4) { width: 170px; }
-#pending-modal .bank-table th:nth-child(5) { width: 80px; text-align: right; }
-#pending-modal .bank-table th:nth-child(6) { width: 146px; }
-#pending-modal .bank-table th:nth-child(7) { width: 220px; }
-#pending-modal .bank-table th:nth-child(8) { width: 100px; }
-#pending-modal .bank-table th:nth-child(9) { width: 125px; }
-#pending-modal .bank-table td:nth-child(4),
-#pending-modal .bank-table td:nth-child(7),
-#pending-modal .bank-table td:nth-child(8) {
+#bk-intake .bank-table th:nth-child(1) { width: 70px; }
+#bk-intake .bank-table th:nth-child(2) { width: 174px; }
+#bk-intake .bank-table th:nth-child(3) { width: 125px; }
+#bk-intake .bank-table th:nth-child(4) { width: 170px; }
+#bk-intake .bank-table th:nth-child(5) { width: 80px; text-align: right; }
+#bk-intake .bank-table th:nth-child(6) { width: 146px; }
+#bk-intake .bank-table th:nth-child(7) { width: 220px; }
+#bk-intake .bank-table th:nth-child(8) { width: 100px; }
+#bk-intake .bank-table th:nth-child(9) { width: 125px; }
+#bk-intake .bank-table td:nth-child(4),
+#bk-intake .bank-table td:nth-child(7),
+#bk-intake .bank-table td:nth-child(8) {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-#pending-modal .bank-table td:nth-child(7) { overflow: visible; }
-#pending-modal .bank-table td:nth-child(5) {
+#bk-intake .bank-table td:nth-child(7) { overflow: visible; }
+#bk-intake .bank-table td:nth-child(5) {
   text-align: right;
   font-family: var(--font-mono);
 }
-#pending-modal select,
-#pending-modal input {
+#bk-intake select,
+#bk-intake input {
   width: 100%;
   min-width: 0;
 }
-#pending-modal .pend-datetime {
+#bk-intake .pend-datetime {
   display: grid;
   grid-template-columns: 48px minmax(0, 1fr);
   align-items: center;
   gap: 6px;
   min-width: 0;
 }
-#pending-modal .pend-date {
+#bk-intake .pend-date {
   position: relative;
   display: inline-flex;
   align-items: center;
@@ -3002,11 +2978,11 @@ tr:hover .bank-bal-btns { opacity: 1; }
   cursor: pointer;
   transition: border-color var(--motion-fast) var(--ease), box-shadow var(--motion-fast) var(--ease), background var(--motion-fast) var(--ease);
 }
-#pending-modal .pend-date:hover {
+#bk-intake .pend-date:hover {
   border-color: var(--border-strong);
   background: var(--surface-strong);
 }
-#pending-modal .pend-date::after {
+#bk-intake .pend-date::after {
   content: "";
   position: absolute;
   right: 3px;
@@ -3018,11 +2994,11 @@ tr:hover .bank-bal-btns { opacity: 1; }
   transform: rotate(45deg);
   pointer-events: none;
 }
-#pending-modal .pend-date:focus-within {
+#bk-intake .pend-date:focus-within {
   border-color: var(--focus);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--focus) 16%, transparent);
 }
-#pending-modal .pend-date-input {
+#bk-intake .pend-date-input {
   position: absolute;
   inset: 0;
   width: 100%;
@@ -3034,7 +3010,7 @@ tr:hover .bank-bal-btns { opacity: 1; }
   opacity: .01;
   cursor: pointer;
 }
-#pending-modal .pend-date-input::-webkit-calendar-picker-indicator {
+#bk-intake .pend-date-input::-webkit-calendar-picker-indicator {
   position: absolute;
   inset: 0;
   width: auto;
@@ -3042,16 +3018,16 @@ tr:hover .bank-bal-btns { opacity: 1; }
   margin: 0;
   cursor: pointer;
 }
-#pending-modal .pend-time {
+#bk-intake .pend-time {
   min-width: 0;
   padding-inline: 7px 4px;
   font-size: 12px;
 }
-#pending-modal .pend-mode,
-#pending-modal .pend-cstatus {
+#bk-intake .pend-mode,
+#bk-intake .pend-cstatus {
   margin-bottom: 4px;
 }
-#pending-modal .pend-help-summary {
+#bk-intake .pend-help-summary {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -3066,9 +3042,9 @@ tr:hover .bank-bal-btns { opacity: 1; }
   font-size: 11px;
   font-weight: var(--weight-black);
 }
-#pending-modal .pend-help-summary[hidden] { display: none; }
-#pending-modal .pend-help-summary span { overflow: hidden; text-overflow: ellipsis; }
-#pending-modal .pend-split-panel {
+#bk-intake .pend-help-summary[hidden] { display: none; }
+#bk-intake .pend-help-summary span { overflow: hidden; text-overflow: ellipsis; }
+#bk-intake .pend-split-panel {
   width: 100%;
   min-width: 0;
   box-sizing: border-box;
@@ -3078,7 +3054,7 @@ tr:hover .bank-bal-btns { opacity: 1; }
   border-radius: var(--radius-xs);
   background: color-mix(in srgb, var(--surface-2) 78%, var(--surface-solid));
 }
-#pending-modal .pend-split-self-label {
+#bk-intake .pend-split-self-label {
   margin: 2px 0 3px;
   color: var(--text-soft);
   font-size: 10px;
@@ -3086,19 +3062,19 @@ tr:hover .bank-bal-btns { opacity: 1; }
   letter-spacing: .04em;
   text-transform: uppercase;
 }
-#pending-modal .pend-split-self {
+#bk-intake .pend-split-self {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 76px;
   align-items: center;
   gap: 4px;
   margin-bottom: 7px;
 }
-#pending-modal .pend-split-self-columns { grid-template-columns: minmax(0, 1fr) 76px; }
-#pending-modal .pend-split-self-bank,
-#pending-modal .pend-split-self-amount { min-height: 30px; padding: 5px 6px; font-size: 11px; }
-#pending-modal .pend-split-self-amount { text-align: right; font-family: var(--font-mono); }
-#pending-modal .pend-split-self-bank:disabled { opacity: .58; cursor: not-allowed; }
-#pending-modal .pend-split-summary {
+#bk-intake .pend-split-self-columns { grid-template-columns: minmax(0, 1fr) 76px; }
+#bk-intake .pend-split-self-bank,
+#bk-intake .pend-split-self-amount { min-height: 30px; padding: 5px 6px; font-size: 11px; }
+#bk-intake .pend-split-self-amount { text-align: right; font-family: var(--font-mono); }
+#bk-intake .pend-split-self-bank:disabled { opacity: .58; cursor: not-allowed; }
+#bk-intake .pend-split-summary {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -3109,16 +3085,16 @@ tr:hover .bank-bal-btns { opacity: 1; }
   font-weight: var(--weight-bold);
   white-space: nowrap;
 }
-#pending-modal .pend-split-summary b { color: var(--primary-text); font-variant-numeric: tabular-nums; }
-#pending-modal .pend-split-remaining { color: var(--orange); font-variant-numeric: tabular-nums; }
-#pending-modal .pend-split-columns,
-#pending-modal .pend-split-row {
+#bk-intake .pend-split-summary b { color: var(--primary-text); font-variant-numeric: tabular-nums; }
+#bk-intake .pend-split-remaining { color: var(--orange); font-variant-numeric: tabular-nums; }
+#bk-intake .pend-split-columns,
+#bk-intake .pend-split-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 76px 28px;
   align-items: center;
   gap: 4px;
 }
-#pending-modal .pend-split-columns {
+#bk-intake .pend-split-columns {
   padding: 0 3px 3px;
   color: var(--muted);
   font-size: 9px;
@@ -3126,29 +3102,29 @@ tr:hover .bank-bal-btns { opacity: 1; }
   letter-spacing: .08em;
   text-transform: uppercase;
 }
-#pending-modal .pend-split-row { margin-top: 4px; }
-#pending-modal .pend-split-row input { min-height: 30px; padding: 5px 6px; font-size: 11px; }
-#pending-modal .pend-split-amount { text-align: right; font-family: var(--font-mono); }
-#pending-modal .pend-split-remove {
+#bk-intake .pend-split-row { margin-top: 4px; }
+#bk-intake .pend-split-row input { min-height: 30px; padding: 5px 6px; font-size: 11px; }
+#bk-intake .pend-split-amount { text-align: right; font-family: var(--font-mono); }
+#bk-intake .pend-split-remove {
   display: inline-grid;
   place-items: center;
   width: 28px;
   min-height: 30px;
   padding: 0;
 }
-#pending-modal .pend-split-remove svg { width: 14px; height: 14px; }
-#pending-modal .pend-split-add { margin-top: 6px; min-height: 30px; }
-#pending-modal .pend-split-error {
+#bk-intake .pend-split-remove svg { width: 14px; height: 14px; }
+#bk-intake .pend-split-add { margin-top: 6px; min-height: 30px; }
+#bk-intake .pend-split-error {
   min-height: 14px;
   margin: 4px 0 0;
   color: var(--red);
   font-size: 10px;
   font-weight: var(--weight-bold);
 }
-#pending-modal .bank-table td:last-child {
+#bk-intake .bank-table td:last-child {
   overflow: visible;
 }
-#pending-modal .bank-table td:last-child .btn {
+#bk-intake .bank-table td:last-child .btn {
   margin: 0 4px 4px 0;
 }
 #pending-skipped-panel .bank-table {
@@ -3180,7 +3156,7 @@ tr:hover .bank-bal-btns { opacity: 1; }
 
 /* USER（账号 / 姓名）不截断：审批时要核对姓名，省略号会把「Harmanjot Singh Jhamant」
    切成半个名字。只换行，不加宽列，其他列不受影响。全宽度生效。 */
-#pending-modal .bank-table td:nth-child(4) {
+#bk-intake .bank-table td:nth-child(4) {
   white-space: normal;
   overflow: visible;
   overflow-wrap: anywhere;
@@ -3193,18 +3169,18 @@ tr:hover .bank-bal-btns { opacity: 1; }
    换成别的结构就得两份渲染。列靠 nth-child 定位，改 server/index.js 里的表头顺序时这里要跟着改。
    标签文字用 ::before 写死英文列名（与表头一致），不进 i18n 字典。 */
 @media (max-width: 700px) {
-  #pending-modal .table-wrap {
+  #bk-intake .table-wrap {
     overflow-x: hidden;
     overflow-y: auto;
     scrollbar-gutter: auto;
     border: 0;
     background: transparent;
   }
-  #pending-modal .bank-table,
+  #bk-intake .bank-table,
   #pending-skipped-panel .bank-table { display: block; width: 100%; min-width: 0; table-layout: auto; background: transparent; }
-  #pending-modal .bank-table thead { display: none; }
-  #pending-modal .bank-table tbody { display: block; }
-  #pending-modal .bank-table tbody tr {
+  #bk-intake .bank-table thead { display: none; }
+  #bk-intake .bank-table tbody { display: block; }
+  #bk-intake .bank-table tbody tr {
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
     gap: 8px 12px;
@@ -3214,8 +3190,8 @@ tr:hover .bank-bal-btns { opacity: 1; }
     border-radius: var(--radius-sm);
     background: var(--surface-solid);
   }
-  #pending-modal .bank-table tbody td,
-  #pending-modal .bank-table tbody tr:hover td {
+  #bk-intake .bank-table tbody td,
+  #bk-intake .bank-table tbody tr:hover td {
     display: block;
     width: auto;
     min-width: 0;
@@ -3228,14 +3204,14 @@ tr:hover .bank-bal-btns { opacity: 1; }
     text-align: left;
   }
   /* 空状态那一行（colspan）照常占满。 */
-  #pending-modal .bank-table tbody td[colspan] { grid-column: 1 / -1; text-align: center; }
+  #bk-intake .bank-table tbody td[colspan] { grid-column: 1 / -1; text-align: center; }
 
   /* iOS 输入框字号 < 16px 会在聚焦时整页放大。 */
-  #pending-modal select,
-  #pending-modal input { min-height: 44px; font-size: 16px; }
+  #bk-intake select,
+  #bk-intake input { min-height: 44px; font-size: 16px; }
 
   /* 平台订单：TYPE | AMT / USER / TRANS ID / DATE·TIME / MODE / BANK / REMARK / 按钮 */
-  #pending-modal #pending-tx-rows tr[data-txid] {
+  #bk-intake #pending-tx-rows tr[data-txid] {
     grid-template-areas:
       "type amt"
       "user user"
@@ -3246,19 +3222,19 @@ tr:hover .bank-bal-btns { opacity: 1; }
       "remark remark"
       "act act";
   }
-  #pending-modal #pending-tx-rows td:nth-child(1) { grid-area: type; align-self: center; font-size: 12px; font-weight: var(--weight-black); letter-spacing: .04em; color: var(--text-soft); }
-  #pending-modal #pending-tx-rows td:nth-child(2) { grid-area: dt; }
-  #pending-modal #pending-tx-rows td:nth-child(3) { grid-area: txid; color: var(--muted); font-size: 12px; }
-  #pending-modal #pending-tx-rows td:nth-child(4) { grid-area: user; font-size: 15px; font-weight: var(--weight-bold); color: var(--text); }
-  #pending-modal #pending-tx-rows td:nth-child(5) { grid-area: amt; align-self: center; text-align: right; font-size: 18px; font-weight: var(--weight-black); }
-  #pending-modal #pending-tx-rows td:nth-child(6) { grid-area: mode; }
-  #pending-modal #pending-tx-rows td:nth-child(7) { grid-area: bank; }
-  #pending-modal #pending-tx-rows td:nth-child(8) { grid-area: remark; }
-  #pending-modal #pending-tx-rows td:nth-child(9) { grid-area: act; display: flex; gap: 10px; padding-top: 4px; }
-  #pending-modal #pending-tx-rows td:nth-child(3)::before { content: "TRANS ID  "; white-space: pre; font-weight: var(--weight-bold); }
-  #pending-modal #pending-tx-rows td:nth-child(6)::before,
-  #pending-modal #pending-tx-rows td:nth-child(7)::before,
-  #pending-modal #pending-tx-rows td:nth-child(8)::before {
+  #bk-intake #pending-tx-rows td:nth-child(1) { grid-area: type; align-self: center; font-size: 12px; font-weight: var(--weight-black); letter-spacing: .04em; color: var(--text-soft); }
+  #bk-intake #pending-tx-rows td:nth-child(2) { grid-area: dt; }
+  #bk-intake #pending-tx-rows td:nth-child(3) { grid-area: txid; color: var(--muted); font-size: 12px; }
+  #bk-intake #pending-tx-rows td:nth-child(4) { grid-area: user; font-size: 15px; font-weight: var(--weight-bold); color: var(--text); }
+  #bk-intake #pending-tx-rows td:nth-child(5) { grid-area: amt; align-self: center; text-align: right; font-size: 18px; font-weight: var(--weight-black); }
+  #bk-intake #pending-tx-rows td:nth-child(6) { grid-area: mode; }
+  #bk-intake #pending-tx-rows td:nth-child(7) { grid-area: bank; }
+  #bk-intake #pending-tx-rows td:nth-child(8) { grid-area: remark; }
+  #bk-intake #pending-tx-rows td:nth-child(9) { grid-area: act; display: flex; gap: 10px; padding-top: 4px; }
+  #bk-intake #pending-tx-rows td:nth-child(3)::before { content: "TRANS ID  "; white-space: pre; font-weight: var(--weight-bold); }
+  #bk-intake #pending-tx-rows td:nth-child(6)::before,
+  #bk-intake #pending-tx-rows td:nth-child(7)::before,
+  #bk-intake #pending-tx-rows td:nth-child(8)::before {
     display: block;
     margin-bottom: 4px;
     color: var(--muted);
@@ -3266,23 +3242,23 @@ tr:hover .bank-bal-btns { opacity: 1; }
     font-weight: var(--weight-bold);
     letter-spacing: .04em;
   }
-  #pending-modal #pending-tx-rows td:nth-child(6)::before { content: "MODE"; }
-  #pending-modal #pending-tx-rows td:nth-child(7)::before { content: "BANK / C STATUS"; }
-  #pending-modal #pending-tx-rows td:nth-child(8)::before { content: "REMARK"; }
-  #pending-modal .pend-remark { width: 100%; }
-  #pending-modal .pend-split-row { grid-template-columns: minmax(0, 1fr) 96px 44px; }
-  #pending-modal .pend-split-self,
-  #pending-modal .pend-split-self-columns { grid-template-columns: minmax(0, 1fr) 96px; }
-  #pending-modal .pend-split-columns { grid-template-columns: minmax(0, 1fr) 96px 44px; }
-  #pending-modal .pend-split-row input,
-  #pending-modal .pend-split-self-bank,
-  #pending-modal .pend-split-self-amount { min-height: 44px; font-size: 16px; }
-  #pending-modal .pend-split-remove { width: 44px; height: 44px; border-color: var(--border-strong); color: var(--red); }
-  #pending-modal .pend-split-remove svg { width: 18px; height: 18px; }
-  #pending-modal .pend-split-add { min-height: 44px; width: 100%; }
+  #bk-intake #pending-tx-rows td:nth-child(6)::before { content: "MODE"; }
+  #bk-intake #pending-tx-rows td:nth-child(7)::before { content: "BANK / C STATUS"; }
+  #bk-intake #pending-tx-rows td:nth-child(8)::before { content: "REMARK"; }
+  #bk-intake .pend-remark { width: 100%; }
+  #bk-intake .pend-split-row { grid-template-columns: minmax(0, 1fr) 96px 44px; }
+  #bk-intake .pend-split-self,
+  #bk-intake .pend-split-self-columns { grid-template-columns: minmax(0, 1fr) 96px; }
+  #bk-intake .pend-split-columns { grid-template-columns: minmax(0, 1fr) 96px 44px; }
+  #bk-intake .pend-split-row input,
+  #bk-intake .pend-split-self-bank,
+  #bk-intake .pend-split-self-amount { min-height: 44px; font-size: 16px; }
+  #bk-intake .pend-split-remove { width: 44px; height: 44px; border-color: var(--border-strong); color: var(--red); }
+  #bk-intake .pend-split-remove svg { width: 18px; height: 18px; }
+  #bk-intake .pend-split-add { min-height: 44px; width: 100%; }
 
   /* 已跳过：TYPE | AMT / USER / TRANS ID / TIME / SKIPPED AT · BY / 按钮 */
-  #pending-modal #pending-skipped-rows tr[data-txid] {
+  #bk-intake #pending-skipped-rows tr[data-txid] {
     grid-template-areas:
       "type amt"
       "user user"
@@ -3291,19 +3267,19 @@ tr:hover .bank-bal-btns { opacity: 1; }
       "at by"
       "act act";
   }
-  #pending-modal #pending-skipped-rows td:nth-child(1) { grid-area: type; font-size: 12px; font-weight: var(--weight-black); color: var(--text-soft); }
-  #pending-modal #pending-skipped-rows td:nth-child(2) { grid-area: time; font-size: 12px; }
-  #pending-modal #pending-skipped-rows td:nth-child(3) { grid-area: txid; color: var(--muted); font-size: 12px; }
-  #pending-modal #pending-skipped-rows td:nth-child(4) { grid-area: user; font-size: 15px; font-weight: var(--weight-bold); overflow-wrap: anywhere; }
-  #pending-modal #pending-skipped-rows td:nth-child(5) { grid-area: amt; text-align: right; font-size: 18px; font-weight: var(--weight-black); }
-  #pending-modal #pending-skipped-rows td:nth-child(6) { grid-area: at; color: var(--muted); font-size: 12px; }
-  #pending-modal #pending-skipped-rows td:nth-child(7) { grid-area: by; color: var(--muted); font-size: 12px; text-align: right; }
-  #pending-modal #pending-skipped-rows td:nth-child(8) { grid-area: act; display: flex; gap: 10px; padding-top: 4px; }
-  #pending-modal #pending-skipped-rows td:nth-child(3)::before { content: "TRANS ID  "; white-space: pre; font-weight: var(--weight-bold); }
-  #pending-modal #pending-skipped-rows td:nth-child(6)::before { content: "SKIPPED  "; white-space: pre; font-weight: var(--weight-bold); }
+  #bk-intake #pending-skipped-rows td:nth-child(1) { grid-area: type; font-size: 12px; font-weight: var(--weight-black); color: var(--text-soft); }
+  #bk-intake #pending-skipped-rows td:nth-child(2) { grid-area: time; font-size: 12px; }
+  #bk-intake #pending-skipped-rows td:nth-child(3) { grid-area: txid; color: var(--muted); font-size: 12px; }
+  #bk-intake #pending-skipped-rows td:nth-child(4) { grid-area: user; font-size: 15px; font-weight: var(--weight-bold); overflow-wrap: anywhere; }
+  #bk-intake #pending-skipped-rows td:nth-child(5) { grid-area: amt; text-align: right; font-size: 18px; font-weight: var(--weight-black); }
+  #bk-intake #pending-skipped-rows td:nth-child(6) { grid-area: at; color: var(--muted); font-size: 12px; }
+  #bk-intake #pending-skipped-rows td:nth-child(7) { grid-area: by; color: var(--muted); font-size: 12px; text-align: right; }
+  #bk-intake #pending-skipped-rows td:nth-child(8) { grid-area: act; display: flex; gap: 10px; padding-top: 4px; }
+  #bk-intake #pending-skipped-rows td:nth-child(3)::before { content: "TRANS ID  "; white-space: pre; font-weight: var(--weight-bold); }
+  #bk-intake #pending-skipped-rows td:nth-child(6)::before { content: "SKIPPED  "; white-space: pre; font-weight: var(--weight-bold); }
 
-  #pending-modal #pending-tx-rows td:nth-child(9) .btn,
-  #pending-modal #pending-skipped-rows td:nth-child(8) .btn {
+  #bk-intake #pending-tx-rows td:nth-child(9) .btn,
+  #bk-intake #pending-skipped-rows td:nth-child(8) .btn {
     flex: 1 1 0;
     min-height: 48px;
     margin: 0;
@@ -3330,13 +3306,13 @@ tr:hover .bank-bal-btns { opacity: 1; }
 
 /* 尺寸规则必须用 ID 选择器。.bkd-modal 是类选择器，和下面 @media(max-width:768px)
    以及横屏那两条 `.modal { max-height: ... }` 特异性相同、源码顺序又在它之后，于是
-   窄屏时 .bkd-modal 的高度会被覆盖掉。#pending-modal .modal 写成 ID 前缀正是为此。
+   窄屏时 .bkd-modal 的高度会被覆盖掉。#bk-intake .modal 写成 ID 前缀正是为此。
 
    这里还修掉了「封禁段把运营中挤出视野」的根因：
    - .bkd-modal 没有 overflow:hidden，继承 .modal 的 overflow-y:auto；
    - .bkd-body 有 overflow-y:auto 却缺 min-height:0，flex 子项默认 min-height:auto
      让它被内容顶到自然高度，内部滚动永不生效；
-   两者叠加的结果是整个弹窗一起滚。#pending-modal 早就解对了，这里照抄。 */
+   两者叠加的结果是整个弹窗一起滚。#bk-intake 早就解对了，这里照抄。 */
 #banks-list-modal .modal {
   display: flex;
   flex-direction: column;
@@ -3564,7 +3540,7 @@ tr:hover .bank-bal-btns { opacity: 1; }
   th { position: static; font-size: 12px; }
   td { max-width: 220px; font-size: 14px; }
   .modal { padding: 16px; max-height: calc(100dvh - 24px); }
-  .modal-overlay:not(.app-dialog-overlay):not(:where(#pending-modal, #banks-list-modal)) .modal > .actions {
+  .modal-overlay:not(.app-dialog-overlay):not(:where(#bk-intake, #banks-list-modal)) .modal > .actions {
     bottom: -16px;
     margin: 16px -16px -16px;
     padding: 12px 16px;
@@ -3719,7 +3695,7 @@ tr:hover .bank-bal-btns { opacity: 1; }
     border-radius: 0;
     background: var(--surface-solid);
   }
-  #pending-modal .modal,
+  #bk-intake .modal,
   #banks-list-modal .modal {
     width: 100%;
     max-width: none;
@@ -3732,7 +3708,7 @@ tr:hover .bank-bal-btns { opacity: 1; }
      这个弹窗有 padding-top，所以这里 top 归零。 */
   #banks-list-modal .modal > .modal-close { top: 0; margin: 0 -6px -44px 0; }
   #banks-list-modal .bkd-modal-heading { padding-right: 58px; }
-  #pending-modal .actions,
+  #bk-intake .actions,
   #banks-list-modal .actions { padding-bottom: max(12px, env(safe-area-inset-bottom)); }
 }
 
@@ -4716,8 +4692,8 @@ body.tr-drawer-open { overflow: hidden; }
   .table-wrap > table.sticky-2 > tfoot > tr > td:nth-child(2):not([colspan]) { left: 44px; }
   .table-wrap > table.sticky-2 > tfoot > tr > td:first-child:not([colspan]) { width: 44px; min-width: 44px; max-width: 44px; box-shadow: none; }
   /* 待处理弹窗在手机上是卡片，不是横滚表格。 */
-  #pending-modal .table-wrap th,
-  #pending-modal .table-wrap td { position: static; max-width: none; box-shadow: none; }
+  #bk-intake .table-wrap th,
+  #bk-intake .table-wrap td { position: static; max-width: none; box-shadow: none; }
 }
 @media (max-width: 460px) {
   /* 首页：充值 / 提现并排，总客户占一整行；净输赢本来就独占。 */
@@ -4960,4 +4936,237 @@ body.tr-drawer-open { overflow: hidden; }
   }
   .back-to-top[hidden] { display: none; }
   .back-to-top svg { width: 20px; height: 20px; }
+}
+/* ===== 流水记录分组（侧边栏，server/index.js 的 pageLayout）=====
+   标题是链接（进当日流水），右侧箭头只展开 / 收起。.nav-children 自带 display:grid，
+   会盖过 [hidden] 的 UA 样式，所以这里显式补一条。 */
+.nav-group-link .nav-group-head { display: flex; align-items: center; gap: 2px; }
+.nav-group-link .nav-group-title { flex: 1 1 auto; min-width: 0; }
+.nav-group-link .nav-group-title.is-current { color: var(--text); font-weight: var(--weight-bold); }
+.nav-group-toggle {
+  flex: 0 0 auto;
+  display: inline-grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-soft);
+  cursor: pointer;
+}
+.nav-group-toggle:hover { background: var(--surface-2); color: var(--text); }
+.nav-group-toggle svg { width: 16px; height: 16px; }
+.nav-group-link.open .nav-chevron { transform: rotate(180deg); }
+.nav-group-link .nav-children[hidden] { display: none; }
+@media (min-width: 769px) {
+  :root[data-sidebar="collapsed"] .nav-group-toggle { display: none; }
+}
+
+/* ===== 接单区（当日流水，原「待处理」弹窗）=====
+   表格、卡片、拆分面板等样式沿用原 #pending-modal 那批（已改挂 #bk-intake）。
+   宽屏常驻在 KPI 下面，区内限高滚动；手机上不占页面，底栏「待处理」以全屏浮层打开。 */
+.bk-intake {
+  min-width: 0;
+  border: 1px solid color-mix(in srgb, var(--orange) 30%, var(--border));
+  border-left: 4px solid var(--orange);
+  border-radius: var(--radius);
+  background: var(--surface-solid);
+  box-shadow: var(--inset-highlight), var(--shadow-sm);
+}
+.bk-intake.is-empty { border-color: var(--border); border-left-color: var(--border-strong); }
+.bk-intake-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 8px 10px; }
+.bk-intake-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 4px 6px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  font-weight: var(--weight-black);
+  cursor: pointer;
+}
+.bk-intake-toggle:hover { background: var(--surface-2); }
+.bk-intake-toggle svg { width: 16px; height: 16px; transition: transform .18s var(--ease); }
+.bk-intake.is-collapsed .bk-intake-toggle svg { transform: rotate(-90deg); }
+#bk-intake .pending-tabs { margin: 0; }
+.bk-intake-empty { color: var(--text-soft); font-size: 12px; }
+.bk-intake-empty[hidden] { display: none; }
+.bk-intake-actions { display: flex; align-items: center; gap: 8px; margin-left: auto; }
+.bk-intake-close { display: none; }
+.bk-intake-body { padding: 0 10px 10px; }
+.bk-intake.is-collapsed .bk-intake-body,
+.bk-intake.is-empty .bk-intake-body,
+.bk-intake.is-empty .pending-tabs { display: none; }
+#bk-intake .table-wrap { height: auto; max-height: min(52vh, 460px); }
+#bk-intake #pending-tx-panel,
+#bk-intake #pending-skipped-panel { overflow: visible; }
+/* 宽屏：整张表一屏摊开，不左右滚（用户 2026-11-09 要求）。原来是 min-width 1210px 的固定
+   列宽，这里改成固定列 + USER / REMARK 两列分剩下的宽度；日期叠在时间上面，审批 / 跳过
+   上下摆。选择器多带一层 #pending-tx-panel，压过上面那批 #bk-intake .bank-table 的列宽。 */
+@media (min-width: 701px) {
+  #bk-intake .table-wrap { overflow-x: hidden; overflow-y: auto; }
+  #bk-intake .bank-table,
+  #bk-intake #pending-skipped-panel .bank-table { min-width: 0; }
+  #bk-intake #pending-tx-panel .bank-table th,
+  #bk-intake #pending-tx-panel .bank-table td { padding: 6px; }
+  #bk-intake #pending-tx-panel .bank-table th:nth-child(1) { width: 64px; }
+  #bk-intake #pending-tx-panel .bank-table th:nth-child(2) { width: 112px; }
+  #bk-intake #pending-tx-panel .bank-table th:nth-child(3) { width: 104px; }
+  #bk-intake #pending-tx-panel .bank-table th:nth-child(4) { width: auto; }
+  #bk-intake #pending-tx-panel .bank-table th:nth-child(5) { width: 84px; }
+  #bk-intake #pending-tx-panel .bank-table th:nth-child(6) { width: 112px; }
+  #bk-intake #pending-tx-panel .bank-table th:nth-child(7) { width: 196px; }
+  #bk-intake #pending-tx-panel .bank-table th:nth-child(8) { width: auto; }
+  #bk-intake #pending-tx-panel .bank-table th:nth-child(9) { width: 76px; }
+  #bk-intake #pending-tx-panel .bank-table td:nth-child(1) { font-size: 11px; }
+  #bk-intake #pending-tx-panel .bank-table td:nth-child(3) { white-space: normal; overflow-wrap: anywhere; font-size: 11px; }
+  #bk-intake #pending-tx-panel .pend-datetime { grid-template-columns: minmax(0, 1fr); gap: 4px; }
+  #bk-intake #pending-tx-panel .pend-date { min-height: 26px; }
+  #bk-intake #pending-tx-panel .bank-table td:last-child .btn { display: flex; width: 100%; margin: 0 0 4px; }
+  #bk-intake #pending-skipped-panel .bank-table th { width: auto; }
+}
+/* 窄一点的宽屏（平板、半屏窗口）九列一排会把 USER / REMARK 挤成一个字宽：每单排成两行，
+   「类型 | 单号 | 用户 | 金额」/「日期时间 | 模式 | BANK | REMARK」，审批 / 跳过跨两行在最右。
+   同手机卡片一样只靠 CSS，DOM 与事件不动；列靠 nth-child 定位，改表头顺序时要跟着改。 */
+@media (min-width: 701px) and (max-width: 1180px) {
+  #bk-intake #pending-tx-panel .bank-table thead { display: none; }
+  #bk-intake #pending-tx-panel .bank-table,
+  #bk-intake #pending-tx-panel .bank-table tbody { display: block; }
+  #bk-intake #pending-tx-rows tr {
+    display: grid;
+    grid-template-columns: 156px 120px minmax(0, 1.2fr) minmax(0, 1fr) 80px;
+    grid-template-areas: "type txid user amt act" "dt mode bank remark act";
+    align-items: start;
+    border-bottom: 1px solid var(--border);
+  }
+  #bk-intake #pending-tx-rows tr > td { display: block; min-width: 0; border: 0; }
+  #bk-intake #pending-tx-rows tr > td[colspan] { grid-column: 1 / -1; text-align: center; }
+  #bk-intake #pending-tx-rows td:nth-child(1) { grid-area: type; font-weight: var(--weight-black); color: var(--text-soft); }
+  #bk-intake #pending-tx-rows td:nth-child(2) { grid-area: dt; }
+  #bk-intake #pending-tx-rows td:nth-child(3) { grid-area: txid; color: var(--muted); }
+  #bk-intake #pending-tx-rows td:nth-child(4) { grid-area: user; font-weight: var(--weight-bold); color: var(--text); }
+  #bk-intake #pending-tx-rows td:nth-child(5) { grid-area: amt; text-align: right; font-size: 15px; font-weight: var(--weight-black); }
+  #bk-intake #pending-tx-rows td:nth-child(6) { grid-area: mode; }
+  #bk-intake #pending-tx-rows td:nth-child(7) { grid-area: bank; }
+  #bk-intake #pending-tx-rows td:nth-child(8) { grid-area: remark; }
+  #bk-intake #pending-tx-rows td:nth-child(9) { grid-area: act; align-self: center; }
+  #bk-intake #pending-tx-panel .pend-datetime { grid-template-columns: 48px minmax(0, 1fr); }
+}
+.pend-row-gone td { opacity: .5; }
+.pend-row-gone td:last-child { opacity: 1; }
+.pend-gone-note { display: inline-block; margin-right: 6px; color: var(--orange); font-size: 11px; font-weight: var(--weight-bold); }
+
+@media (max-width: 700px) {
+  .bk-intake { display: none; }
+  .bk-intake.is-sheet-open {
+    position: fixed;
+    inset: 0;
+    z-index: calc(var(--z-modal) - 1);   /* 跳过 / 恢复的原因弹窗要能盖在它上面 */
+    display: flex;
+    flex-direction: column;
+    border: 0;
+    border-radius: 0;
+    padding-top: env(safe-area-inset-top);
+  }
+  .bk-intake.is-sheet-open .bk-intake-head { border-bottom: 1px solid var(--border); padding: 8px 12px; }
+  .bk-intake.is-sheet-open .bk-intake-toggle { pointer-events: none; }
+  .bk-intake.is-sheet-open .bk-intake-toggle svg,
+  .bk-intake.is-sheet-open #sheet-transfer-btn { display: none; }   /* 底栏有「调钱」 */
+  .bk-intake.is-sheet-open .bk-intake-close { display: inline-grid; place-items: center; width: 44px; height: 44px; }
+  .bk-intake.is-sheet-open:not(.is-empty) .bk-intake-body {
+    display: block;
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    padding: 10px 12px max(12px, env(safe-area-inset-bottom));
+  }
+  #bk-intake .table-wrap { max-height: none; }
+  body.bk-intake-locked { overflow: hidden; }
+  /* 钉顶筛选条：「日期 | 状态」/「渠道」/「搜索 | ⋯」。渠道钉在第二行，其余照旧自动排。 */
+  .bkv2 > .bk-toolbar .sheet-bank-filter { grid-column: 1 / 4; grid-row: 2; }
+}
+
+/* ===== 支付渠道页（/bank-channels.html，bank-channels.js）=====
+   行、度量、复制按钮沿用原渠道目录的 .bk-* 样式；页签与详情沿用原渠道管理的 .bkd-*。 */
+.channels-app { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.ch-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 24px;
+  padding: 13px 16px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius);
+  background: linear-gradient(105deg, color-mix(in srgb, var(--primary-soft) 86%, var(--surface)), var(--surface));
+  box-shadow: var(--inset-highlight), var(--shadow-sm);
+}
+.ch-summary-copy { display: grid; gap: 2px; min-width: 0; flex: 1 1 180px; }
+.ch-summary-stat[hidden] { display: none; }
+/* 封禁中 · 按月查看（bank-channels.js 的 renderMonthBar） */
+.ch-month-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px 18px;
+  flex-wrap: wrap;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+}
+.ch-month-bar[hidden] { display: none; }
+.ch-month-pick { display: inline-flex; align-items: center; gap: 8px; color: var(--text-soft); font-size: 12px; }
+.ch-month-pick select { width: auto; min-width: 140px; }
+.ch-month-total { display: flex; align-items: baseline; gap: 6px; color: var(--text-soft); font-size: 12px; }
+.ch-month-total strong { color: var(--text); font: 800 16px/1.1 var(--font-mono); }
+.ch-month-total .ch-month-amount.is-stuck { color: var(--red); }
+.bkd-ban-date { color: var(--muted); font-size: 11px; white-space: nowrap; }
+.ch-summary-copy strong { font-size: 15px; }
+.ch-summary-copy span:last-child { color: var(--muted); font-size: 11px; }
+.ch-summary-stat { display: grid; gap: 2px; text-align: right; }
+.ch-summary-stat small { color: var(--muted); font-size: 10px; }
+.ch-summary-stat strong { color: var(--text); font: 800 20px/1.1 var(--font-mono); }
+.ch-toolbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.ch-toolbar .bkd-tabs {
+  display: flex; align-items: center; gap: 4px; flex-wrap: wrap;
+  padding: 4px;
+  border: 1px solid var(--border); border-radius: var(--radius);
+  background: var(--surface-2);
+}
+.ch-toolbar #bkd-search { flex: 1 1 240px; min-width: 0; max-width: 360px; margin-left: auto; }
+.channels-app #bkd-panel { overflow: visible; min-height: 120px; background: var(--surface); }
+.channels-app .bk-channel-list-head,
+.channels-app .bk-bank-row {
+  grid-template-columns: minmax(64px, .45fr) minmax(170px, 1.1fr) minmax(220px, 1.5fr) minmax(229px, 1.6fr) minmax(250px, 1.25fr);
+  min-width: 960px;
+}
+/* 行之间插了详情体，nth-child 的奇偶会错位，按 article 计。 */
+.channels-app .bk-bank-row:nth-child(even) { background: var(--surface); }
+.channels-app .bk-bank-row:nth-of-type(even) { background: color-mix(in srgb, var(--surface-2) 46%, var(--surface)); }
+/* 操作列：上一行复制、下一行编辑 / 使用中 / 封禁 / 详情，右对齐。 */
+.channels-app .bk-col-actions { flex-direction: column; align-items: flex-end; justify-content: center; gap: 6px; }
+.channels-app .bk-copy-btn { min-height: 30px; }
+.bk-row-acts { display: flex; align-items: center; justify-content: flex-end; gap: 4px; flex-wrap: wrap; }
+.bk-active-toggle { display: inline-flex; align-items: center; gap: 4px; color: var(--text-soft); font-size: 11px; white-space: nowrap; cursor: pointer; }
+.bk-row-body { min-width: 960px; padding: 10px 12px; border-bottom: 1px solid var(--border); background: var(--surface-2); cursor: default; }
+.bk-row-body[hidden] { display: none; }
+:root[data-theme="dark"] .ch-summary { background: linear-gradient(105deg, color-mix(in srgb, var(--primary-soft) 70%, var(--surface)), var(--surface)); }
+@media (max-width: 768px) {
+  .ch-summary-copy { flex-basis: 100%; }
+  .ch-summary #add-bank-btn { flex-basis: 100%; }
+  .channels-app .bk-bank-row { grid-template-columns: 42px minmax(0, 1fr); min-width: 0; }
+  .bk-row-body { min-width: 0; }
+  .channels-app .bk-col-actions { flex-direction: row; align-items: center; justify-content: flex-start; flex-wrap: wrap; }
+  .channels-app .bk-copy-btn { min-height: 44px; }
+  .bk-row-acts { justify-content: flex-start; }
+  .ch-toolbar #bkd-search { max-width: none; margin-left: 0; }
+}
+@media (max-width: 700px) {
+  .channels-app .bk-bank-row { grid-template-columns: 30px minmax(0, 1fr); }
 }

@@ -52,7 +52,7 @@
 | 审计记录和审计 API | `server/lib/auditLog.js`、`server/routes/audit.js` |
 | 客户详情、历史交易 | `server/lib/customerDetail.js`、`public/js/customer-detail.js` |
 | 全局请求、公司切换、公共交互 | `public/js/app.js` |
-| 支付页面交互 | `public/js/bank-accounts.js` |
+| 支付页面交互 | `public/js/bank-ledger.js`（当日流水）、`public/js/bank-channels.js`（支付渠道）、`public/js/bank-common.js`（共用） |
 | 全局样式 | `public/css/style.css` |
 | 已有测试 | `server/tests/audit.test.js`、`server/tests/customer-history.test.js` |
 
@@ -61,7 +61,8 @@
 - `/`：首页看板。
 - `/transactions.html`：交易；旧充值、提现页面会重定向到这里。
 - `/customers.html`：客户和分群。
-- `/bank-accounts.html`：支付渠道、账单流水和待处理平台单。
+- `/bank-ledger.html`：当日流水、接单区（待处理平台单）、调钱。旧地址 `/bank-accounts.html` 302 到这里。
+- `/bank-channels.html`：支付渠道（运营中 / 封禁中 / 已归档）。
 - `/company-settings.html`、`/bank-settings.html`、`/admin-users.html`：管理员设置。
 - `/audit-history.html`：管理员审计历史。
 - `/daily-archive.html`、`/deposit-leaderboard.html`、`/promo-claims.html`、`/referrer-leaderboard.html`、`/referrer-report.html`、`/customer-return.html`：归档、排行榜及报表。
@@ -109,7 +110,7 @@
 | 转账 | `POST /ledger/transfer` |
 | 状态选项 | `/status-options`、`/c-status-options` |
 
-HELP/TRF 涉及 `help_amount`、`trf_amount`、方向、状态和 C STATUS；当前已支持更多状态及拆分审批。具体字段映射查看 `bankApply.js` 和 `bank-accounts.js`，不要仅按旧快捷录入说明重写。默认状态除旧列表外还包括 `amopay`、`test in`、`test out`，并提供公司级选项管理。
+HELP/TRF 涉及 `help_amount`、`trf_amount`、方向、状态和 C STATUS；当前已支持更多状态及拆分审批。具体字段映射查看 `bankApply.js` 和 `bank-ledger.js`，不要仅按旧快捷录入说明重写。默认状态除旧列表外还包括 `amopay`、`test in`、`test out`，并提供公司级选项管理。
 
 ### 审计与客户历史
 
@@ -172,7 +173,9 @@ $env:TUNNEL_EDGE_IP_VERSION = '4'
 ```powershell
 node --check server/index.js
 node --check server/routes/banks.js
-node --check public/js/bank-accounts.js
+node --check public/js/bank-ledger.js
+node --check public/js/bank-channels.js
+node --check public/js/bank-common.js
 npm test
 ```
 

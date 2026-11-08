@@ -176,7 +176,14 @@ router.get("/", (req, res) => {
   `).all(cid);
   const statsMap = {};
   for (const s of stats) statsMap[s.bank_account_id] = s;
-  const enriched = rows.map((r) => enrichBankRow(db, r, statsMap[r.id]));
+  // 最近一次封禁的时间（UTC，datetime('now') 写的），支付渠道页「封禁中」按月查看用。
+  // 解封后再封以最后一次为准；迁移前就已封禁、没留下事件的户为空串。
+  const bannedAt = {};
+  for (const e of db.prepare(`
+    SELECT bank_account_id, MAX(created_at) AS at FROM bank_account_events
+    WHERE company_id = ? AND event = 'banned' GROUP BY bank_account_id
+  `).all(cid)) bannedAt[e.bank_account_id] = e.at || "";
+  const enriched = rows.map((r) => ({ ...enrichBankRow(db, r, statsMap[r.id]), banned_at: bannedAt[r.id] || "" }));
   res.json({ rows: enriched });
 });
 

@@ -37,7 +37,7 @@ test("金额：千分位、两位小数、不出现 -0.00", () => {
 });
 
 test("页面接入：四处 UTC 时间走 sqlUtcToSydney，fmt 走 moneyText，OUT 列带千分位", () => {
-  const src = fs.readFileSync(path.join(__dirname, "../../public/js/bank-accounts.js"), "utf8");
+  const src = ["bank-ledger.js", "bank-channels.js", "bank-common.js"].map((f) => fs.readFileSync(path.join(__dirname, "../../public/js", f), "utf8")).join("\n");
   for (const field of ["deleted_at", "decided_at"]) {
     assert.match(src, new RegExp(`sqlUtcToSydney\\(r\\.${field}\\)`), field);
   }
@@ -48,5 +48,5 @@ test("页面接入：四处 UTC 时间走 sqlUtcToSydney，fmt 走 moneyText，O
   assert.doesNotMatch(src, /\(-Math\.abs\(v\)\)\.toFixed\(2\)/, "OUT 列要有千分位");
   const page = fs.readFileSync(path.join(__dirname, "../index.js"), "utf8");
   const at = page.indexOf("/js/display-format.js");
-  assert.ok(at > 0 && at < page.indexOf("/js/bank-accounts.js?"));
+  assert.ok(at > 0 && at < page.indexOf("/js/bank-ledger.js?"));
 });

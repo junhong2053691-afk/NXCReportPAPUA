@@ -47,8 +47,8 @@ test("页面接入：工具栏、显示更多、追加渲染", () => {
   assert.match(page, /id="pending-type"/);
   assert.match(page, /id="pending-more-btn"/);
   const guard = page.indexOf("/js/pending-filter.js");
-  assert.ok(guard > 0 && guard < page.indexOf("/js/bank-accounts.js?"));
-  const src = fs.readFileSync(path.join(__dirname, "../../public/js/bank-accounts.js"), "utf8");
+  assert.ok(guard > 0 && guard < page.indexOf("/js/bank-ledger.js?"));
+  const src = fs.readFileSync(path.join(__dirname, "../../public/js/bank-ledger.js"), "utf8");
   assert.match(src, /window\.filterPendingRows\(/);
   assert.match(src, /insertAdjacentHTML\("beforeend"/, "显示更多要追加，不能整表重画");
 });

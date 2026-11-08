@@ -1,10 +1,20 @@
 (function () {
   "use strict";
 
+  // 当日流水页（/bank-ledger.html）：流水表格、接单区（平台单审批 / 已跳过）、调钱、
+  // 今日报表、C STATUS 与未对平报警。渠道目录与渠道管理在 bank-channels.js（2026-11 拆页），
+  // 两页共用的格式化与口径在 bank-common.js。
+  //
   // 渠道生命周期判定的唯一入口（镜像见 app.js 的 window.BankLifecycle，真源在
   // server/lib/bankLifecycle.js）。不要在本文件里再写 lifecycle_status 的字面量比较——
   // 改造前那些 `!== "banned"` 的反向白名单会把「已归档」当成可用账户。
   const LC = window.BankLifecycle;
+  const BC = window.BankCommon;
+  const {
+    tr, esc, plainDisplayText, ledgerNameText, fmt, fmtMetric, parseNum,
+    parseStatus, statusLabel, statusClass, statusStyleAttr,
+    bankBranchOf, tabLabel, bankPickerLabel,
+  } = BC;
 
   let bankRows = [];
   let ledgerRows = [];
@@ -12,9 +22,6 @@
   let companyOptions = [];
   const ALL_BANKS = "all";
   let activeBankId = ALL_BANKS;
-  // 手机上渠道列表默认折叠（CSS 只在 ≤700 认这个类）。放模块级是因为渠道栏每 5 秒
-  // 随 refreshSharedWorkspace 整块重渲染，存在 DOM 上会被冲掉。
-  let directoryOpen = false;
   // 手机上流水卡片默认只显示摘要，点开的那几张记在这里（同上，整块重渲染不能丢）。
   const openLedgerCards = new Set();
   const MOBILE_MQ = window.matchMedia ? window.matchMedia("(max-width: 700px)") : { matches: false };
@@ -27,27 +34,16 @@
   let enterSaveCount = 0;
   let enterSaveRow = null;
   let enterSaveTimer = null;
-  let editingBankId = null;
-  let bankModalReturnToList = false;
   let lastPendingTotal = null;
   let editingRowId = null;
   let adding = false;
   let gridPointerFocus = false;
   let trfDirection = "";
-  let bankReorderBusy = false;
-  let draggedBankId = null;
   const RECONCILE_ALARM_SOUND = "/sounds/dragon-studio-alert-444816.mp3";
   let reconcileAlarm = null;
   let reconcileRendering = false;
   let workspaceContextRequest = 0;
   let lastSkippedPendingCount = 0;
-  // 渠道管理弹窗的视图状态。每个页签各自记页码（切回来还在原处），搜索词与展开集合
-  // 跨页签共享。BKD_PAGE_SIZE 把同时渲染的行数钉死，列表再长也不会拖慢弹窗。
-  let bkdTab = "operating";
-  const bkdPage = { operating: 1, banned: 1, archived: 1 };
-  let bkdQuery = "";
-  const bkdExpanded = new Set();
-  const BKD_PAGE_SIZE = 20;
 
   let bankLoadRequest = 0;
   let ledgerLoadRequest = 0;
@@ -70,66 +66,17 @@
   ];
   const PROBLEM_OPTIONS = ["进错钱", "金额不对", "重复入账", "客户认领", "需要检查", "其他问题"];
 
-  let STATUS_LIST = [
-    { n: 0, value: "redeposit", label: "0. REDEP" },
-    { n: 1, value: "deposit", label: "1. DEPOSIT" },
-    { n: 2, value: "withdraw", label: "2. WITHDRAW" },
-    { n: 3, value: "wrong", label: "3. WRONG" },
-    { n: 4, value: "cash in", label: "4. CASH IN" },
-    { n: 5, value: "cash out", label: "5. CASH OUT" },
-    { n: 6, value: "give back", label: "6. GIVE BACK" },
-    { n: 7, value: "expenses", label: "7. EXPENSES" },
-    { n: 8, value: "exchange", label: "8. EXCHANGE" },
-    { n: 9, value: "new", label: "9. NEW" },
-    { value: "bank trf", label: "BANK TRF" },
-    { value: "bank transfer", label: "BANK TRANSFER" },
-    { value: "unclaim", label: "UNCLAIM" },
-    { value: "amopay", label: "AMOPAY" },
-    { value: "test in", label: "TEST IN" },
-    { value: "test out", label: "TEST OUT" },
-  ];
-  let STATUS_BY_NUM = Object.fromEntries(STATUS_LIST.filter((s) => s.n != null).map((s) => [s.n, s.value]));
-  let STATUS_BY_LABEL = Object.fromEntries(STATUS_LIST.map((s) => [s.label.toUpperCase(), s.value]));
-  let STATUS_LABEL = Object.fromEntries(STATUS_LIST.map((s) => [s.value, s.label]));
   const OUT_STATUSES = new Set(["withdraw", "wrong", "cash out", "give back", "expenses", "exchange", "bank trf", "test out"]);
   // Manual IN/OUT must expose the complete directional status sets. Keep the
   // order aligned with the status settings so the dropdown is predictable.
   const IN_HELP_STATUSES = ["deposit", "cash in", "new", "bank transfer", "unclaim", "redeposit", "amopay", "test in"];
   const OUT_HELP_STATUSES = ["withdraw", "wrong", "cash out", "give back", "expenses", "exchange", "bank trf", "test out"];
-  const KIND_LABEL = { nominee: "人头", ghost: "幽灵", payment_gateway: "PaymentGateway" };
   const PICKER_CLOSE = "__close__";
   const PICKER_CLOSE_LABEL = "— 关闭 —";
   const PICKER_BLANK = "__blank__";
   const PICKER_BLANK_LABEL = "— 空白 —";
   const PICKER_ADD = "__add__";
 
-  function tr(s) {
-    return typeof window.dashT === "function" ? window.dashT(s) : s;
-  }
-
-  function esc(s) {
-    return String(s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
-  }
-  function plainDisplayText(value) {
-    const template = document.createElement("template");
-    template.innerHTML = String(value == null ? "" : value);
-    return (template.content.textContent || "").trim();
-  }
-  function ledgerNameText(value) {
-    const text = typeof cleanDisplayName === "function"
-      ? cleanDisplayName(value)
-      : plainDisplayText(value);
-    return text
-      .replace(/\s*[（(][\s\S]*[）)]\s*$/, "")
-      .trim();
-  }
-  function fmt(n) {
-    return window.moneyText(n); // 不出 -0.00（display-format.js）
-  }
-  function fmtMetric(n) {
-    const v = Number(n || 0);
-    return Number.isInteger(v) ? String(v) : fmt(v);
-  }
   function fmtSigned(n) {
     const v = Number(n || 0);
     if (!v) return "0.00";
@@ -140,84 +87,10 @@
     if (!v) return "";
     return `-${fmt(Math.abs(v))}`; // 和 IN 列一样带千分位，parseOut 会去掉逗号
   }
-  function parseNum(v) {
-    if (v === "" || v == null) return 0;
-    const n = parseFloat(String(v).replace(/,/g, ""));
-    return Number.isFinite(n) ? Math.abs(n) : 0;
-  }
   function parseOut(v) {
     if (v === "" || v == null) return 0;
     const n = parseFloat(String(v).replace(/,/g, ""));
     return Number.isFinite(n) ? Math.abs(n) : 0;
-  }
-  function parseStatus(text) {
-    const t = String(text || "").trim();
-    if (!t) return "deposit";
-    const numMatch = t.match(/^(\d+)(?:\.\s*|\s+)/);
-    if (numMatch && STATUS_BY_NUM[Number(numMatch[1])] != null) return STATUS_BY_NUM[Number(numMatch[1])];
-    const upper = t.toUpperCase();
-    if (STATUS_BY_LABEL[upper]) return STATUS_BY_LABEL[upper];
-    if (upper === "REDEP" || upper === "REDEPOSIT") return "redeposit";
-    const byVal = STATUS_LIST.find((s) => s.value === t.toLowerCase());
-    if (byVal) return byVal.value;
-    const byPartial = STATUS_LIST.find((s) => upper.includes(s.label.replace(/^\d+\.\s*/, "").toUpperCase()));
-    return byPartial ? byPartial.value : t.toLowerCase();
-  }
-  function statusLabel(status) {
-    return STATUS_LABEL[status] || String(status || "").toUpperCase();
-  }
-  function statusClass(status) {
-    // Every caller splices this into a class="..." attribute unescaped, so the
-    // whitelist here is what keeps a stored status from closing the attribute.
-    const s = String(status || "").toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9_-]/g, "");
-    return "status-" + s;
-  }
-  let STATUS_COLORS = {
-    redeposit: { accent: "#ca8a04", tint: "rgba(202,138,4,.12)", text: "#713f12" },
-    deposit: { accent: "#10b981", tint: "rgba(16,185,129,.13)", text: "#065f46" },
-    withdraw: { accent: "#e11d48", tint: "rgba(225,29,72,.12)", text: "#991b1b" },
-    wrong: { accent: "#f59e0b", tint: "rgba(245,158,11,.14)", text: "#92400e" },
-    "cash in": { accent: "#2563eb", tint: "rgba(37,99,235,.12)", text: "#1e40af" },
-    "cash out": { accent: "#f43f5e", tint: "rgba(244,63,94,.12)", text: "#9f1239" },
-    "give back": { accent: "#7c3aed", tint: "rgba(124,58,237,.12)", text: "#5b21b6" },
-    expenses: { accent: "#64748b", tint: "rgba(100,116,139,.12)", text: "#475569" },
-    exchange: { accent: "#0ea5e9", tint: "rgba(14,165,233,.12)", text: "#0369a1" },
-    new: { accent: "#22c55e", tint: "rgba(34,197,94,.13)", text: "#166534" },
-    "bank trf": { accent: "#06b6d4", tint: "rgba(6,182,212,.13)", text: "#155e75" },
-    "bank transfer": { accent: "#14b8a6", tint: "rgba(20,184,166,.13)", text: "#115e59" },
-    unclaim: { accent: "#94a3b8", tint: "rgba(148,163,184,.14)", text: "#475569" },
-    amopay: { accent: "#a855f7", tint: "rgba(168,85,247,.12)", text: "#6b21a8" },
-    "test in": { accent: "#059669", tint: "rgba(5,150,105,.12)", text: "#047857" },
-    "test out": { accent: "#f97316", tint: "rgba(249,115,22,.13)", text: "#9a3412" },
-  };
-  function hexToRgba(hex, alpha) {
-    const m = String(hex || "").trim().match(/^#?([0-9a-f]{6})$/i);
-    if (!m) return `rgba(100,116,139,${alpha})`;
-    const n = parseInt(m[1], 16);
-    return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${alpha})`;
-  }
-  function rebuildStatusLookups() {
-    STATUS_BY_NUM = Object.fromEntries(STATUS_LIST.filter((s) => s.n != null).map((s) => [s.n, s.value]));
-    STATUS_BY_LABEL = Object.fromEntries(STATUS_LIST.map((s) => [String(s.label || "").toUpperCase(), s.value]));
-    STATUS_LABEL = Object.fromEntries(STATUS_LIST.map((s) => [s.value, s.label]));
-    STATUS_LIST.forEach((s) => {
-      if (!s.color) return;
-      STATUS_COLORS[s.value] = { accent: s.color, tint: hexToRgba(s.color, 0.13), text: s.color };
-    });
-  }
-  // 只把租户配的【色相】交给 CSS（--ledger-status-accent 来自
-  // bank_status_options.color，在「支付设置」页可改），底色/字色/色条
-  // 一律由 style.css 的「状态色：单一真值来源」块派生：
-  //     color: color-mix(in srgb, var(--st) 70%, var(--text) 30%)
-  // --text 随主题翻转，所以暗色模式不再沿用浅色那套原始高饱和值。
-  //
-  // 这里【绝对不能再内联 background/color/!important】：内联 !important
-  // 压过作者样式表里的一切，正是它让原先 146 行状态色 CSS 全部失效
-  // （包括 56 行专门为暗色写的补丁，从未生效过）。
-  function statusStyleAttr(status) {
-    const c = STATUS_COLORS[parseStatus(status)];
-    const accent = (c && c.accent) || "#64748b";
-    return `--ledger-status-accent:${accent};`;
   }
   function inferRowStatus(r) {
     const st = String(r?.status || "").trim();
@@ -240,25 +113,9 @@
   function isRedepositStatus(status) {
     return parseStatus(status) === "redeposit";
   }
-  // 能出现在录入下拉、渠道 rail、编号与拖拽排序里的账户。封禁与归档都不在内。
+  // 能出现在录入下拉、编号里的账户。封禁与归档都不在内（规则在 bank-common.js）。
   function usableBanks() {
-    return bankRows.filter(LC.isOperating);
-  }
-  function tabLabel(r) {
-    const head = (bankBranchOf(r) || "Bank").slice(0, 12);
-    const sub = (r.account_name || r.payid || "").slice(0, 16);
-    return sub ? `${head} (${sub})` : head;
-  }
-  function bankBranchOf(r) {
-    if (!r) return "";
-    const bb = String(r.bank_branch || "").trim();
-    if (bb) return bb;
-    const bank = String(r.bank || "").trim();
-    const branch = String(r.branch || "").trim();
-    return branch ? `${bank} ${branch}`.trim() : bank;
-  }
-  function bankPickerLabel(b, index) {
-    return `${index + 1}. ${tabLabel(b)}`;
+    return BC.usableBanks(bankRows);
   }
   // 匹配规则在 ledger-bank-pick.js（有测试）：序号后面还有字就必须整段对得上。
   function bankByPickerLabel(text) {
@@ -372,8 +229,7 @@
     });
   }
   function cStatusNames() {
-    // is_self = 本公司自己的名字（别家怎么叫我），录入时不能填，服务端也会拒（见 bankApply.selfCStatusNames）。
-    return cStatusOptions.filter((o) => !Number(o.is_self)).map((o) => o.name);
+    return BC.cStatusNames(cStatusOptions);
   }
   function entryDateTime(timeStr) {
     const t = normalizeTime24(timeStr);
@@ -652,7 +508,7 @@
   }
   function openFieldPicker(inp) {
     const f = inp.getAttribute("data-f");
-    if (f === "status") showGridPicker(inp, STATUS_LIST.map((s) => s.label));
+    if (f === "status") showGridPicker(inp, BC.statusList().map((s) => s.label));
     else if (f === "c_status" && window.isCstatusSheetMobile?.()) {
       // 手机：底部抽屉代替贴框浮层（浮层会被键盘顶走）。新名字照桌面那样先登记成选项。
       hideGridPicker();
@@ -931,16 +787,53 @@
     return api("/api/banks", { bg: true }).then((d) => {
       if (request !== bankLoadRequest) return;
       bankRows = d.rows || [];
-      if (activeBankId !== ALL_BANKS && activeBankId && !bankRows.find((b) => b.id === activeBankId)) {
+      // 筛选只认运营中的渠道（下拉里也只有它们）；?bank= 指向的户被封禁 / 归档了就回到 ALL。
+      if (activeBankId !== ALL_BANKS && activeBankId && !usableBanks().find((b) => b.id === activeBankId)) {
         activeBankId = bankRows.length ? ALL_BANKS : null;
+        syncBankParam();
       } else if (!bankRows.length) {
         activeBankId = null;
       } else if (activeBankId == null) {
         activeBankId = ALL_BANKS;
       }
       if (!gateRender("banks", opts, { rows: bankRows, active: activeBankId })) return;
-      renderTabs();
+      renderBankFilter();
     });
+  }
+  // 工具栏的「渠道」下拉：ALL + 运营中渠道，顺序与编号同支付渠道页。渠道目录挪到支付渠道页
+  // 之后，这是本页唯一的按渠道筛选入口；选中值同步到地址栏 ?bank=，刷新与分享都还在。
+  function renderBankFilter() {
+    updateGridTitle();
+    const sel = document.getElementById("sheet-bank-filter");
+    if (!sel) return;
+    const list = usableBanks();
+    // 「全部渠道」走字典翻译；渠道名是租户数据，逐个 translate="no"。
+    sel.innerHTML = `<option value="${ALL_BANKS}">全部渠道</option>`
+      + list.map((b, i) => `<option value="${b.id}" translate="no">${esc(bankPickerLabel(b, i))}</option>`).join("");
+    sel.value = activeBankId && activeBankId !== ALL_BANKS ? String(activeBankId) : ALL_BANKS;
+    sel.disabled = !list.length;
+  }
+  function syncBankParam() {
+    try {
+      const url = new URL(location.href);
+      if (activeBankId && activeBankId !== ALL_BANKS) url.searchParams.set("bank", String(activeBankId));
+      else url.searchParams.delete("bank");
+      history.replaceState(null, "", url.pathname + url.search + url.hash);
+    } catch (_) {}
+  }
+  function setActiveBank(value) {
+    activeBankId = !value || value === ALL_BANKS ? ALL_BANKS : Number(value);
+    syncBankParam();
+    renderBankFilter();
+    return loadSheet();
+  }
+  function bankFromUrl() {
+    try {
+      const id = Number(new URLSearchParams(location.search).get("bank"));
+      return Number.isInteger(id) && id > 0 ? id : ALL_BANKS;
+    } catch (_) {
+      return ALL_BANKS;
+    }
   }
   function loadSheet(opts) {
     const request = ++ledgerLoadRequest;
@@ -996,16 +889,7 @@
     }).catch(() => {});
   }
   function loadStatusOptions() {
-    return api("/api/banks/status-options", { bg: true }).then((d) => {
-      const rows = (d.options || []).filter((s) => Number(s.active) !== 0);
-      if (rows.length) {
-        STATUS_LIST = rows.map((s) => ({
-          value: String(s.value || "").trim(),
-          label: String(s.label || s.value || "").trim(),
-          color: String(s.color || "").trim(),
-        })).filter((s) => s.value && s.label);
-        rebuildStatusLookups();
-      }
+    return BC.loadStatusOptions().then(() => {
       populateStatusFilter();
       if (!isGridBusy()) renderSheet();
     }).catch(() => {});
@@ -1015,18 +899,13 @@
       const total = Number(d.total || 0);
       const platformCount = Number(d.pending_tx || 0);
       lastSkippedPendingCount = Number(d.skipped_tx || 0);
-      const pendingEl = document.getElementById("sheet-pending-count");
-      if (pendingEl) {
-        pendingEl.textContent = String(total);
-        pendingEl.style.display = total > 0 ? "" : "none";
-      }
       if (typeof window.updateBankPendingBadge === "function") {
         window.updateBankPendingBadge(total);
       }
       if (typeof window.updatePlatformPendingSound === "function") {
         window.updatePlatformPendingSound(platformCount);
       }
-      updatePendingWorkspaceSummary(platformCount, lastSkippedPendingCount);
+      maybeRefreshIntake(platformCount, lastSkippedPendingCount);
       if (lastPendingTotal != null && total > lastPendingTotal) {
         showToast(`有 ${total} 笔待审批`, { tone: "warning" });
       }
@@ -1097,26 +976,64 @@
     });
   }
 
-  function updatePendingWorkspaceSummary(txCount, skippedCount) {
-    const summary = document.getElementById("bk-pending-summary");
-    if (!summary) return;
-    const tx = Number(txCount || 0);
-    const skipped = Number(skippedCount || 0);
-    const total = tx + skipped;
-    const text = document.getElementById("bk-pending-summary-text");
-    const txEl = document.getElementById("bk-pending-platform-count");
-    const skippedEl = document.getElementById("bk-pending-skipped-count");
-    if (txEl) txEl.textContent = String(tx);
-    if (skippedEl) skippedEl.textContent = String(skipped);
-    summary.hidden = false;
-    if (total <= 0) {
-      if (text) text.textContent = "暂无待处理";
-      return;
+  // ---- 接单区 ---------------------------------------------------------------
+  // 原来的「待处理」弹窗，2026-11 摊开到页面上（KPI 下面、今日报表上面），单子来了就看得见，
+  // 不用再点按钮。手机上不占页面：底栏「待处理」把同一个节点以全屏浮层打开（MOBILE_MQ），
+  // 跟以前的弹窗一样，只有一份实现。
+  //
+  // 刷新由 refreshPendingBadge（每 5 / 8 秒）驱动：平台单数或已跳过数一变就拉一次，
+  // 数字没变也每 INTAKE_FALLBACK_MS 补拉一次（一笔进一笔出时数字不变）。
+  const INTAKE_COLLAPSED_KEY = "bk-intake-collapsed";
+  const INTAKE_FALLBACK_MS = 30000;
+  let intakeCounts = null; // 上次画进接单区的 [平台单数, 已跳过数]
+  let intakeLoadedAt = 0;
+
+  function intakeZone() {
+    return document.getElementById("bk-intake");
+  }
+  function setIntakeCollapsed(collapsed, persist) {
+    const zone = intakeZone();
+    if (!zone) return;
+    zone.classList.toggle("is-collapsed", collapsed);
+    document.getElementById("bk-intake-toggle")?.setAttribute("aria-expanded", collapsed ? "false" : "true");
+    if (persist) {
+      try { localStorage.setItem(INTAKE_COLLAPSED_KEY, collapsed ? "1" : "0"); } catch (_) {}
     }
-    const parts = [];
-    if (tx) parts.push(`平台接单 ${tx}`);
-    if (skipped) parts.push(`Skipped ${skipped}`);
-    if (text) text.textContent = parts.join(" · ") + " · 请尽快处理";
+  }
+  function openIntake(tab) {
+    const zone = intakeZone();
+    if (!zone) return Promise.resolve();
+    if (MOBILE_MQ.matches) {
+      zone.classList.add("is-sheet-open");
+      document.body.classList.add("bk-intake-locked");
+      window.requestAnimationFrame(() => document.getElementById("bk-intake-close")?.focus());
+    } else {
+      setIntakeCollapsed(false, true);
+      zone.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+    return loadPendingPanels().then(() => {
+      if (tab) switchPendingTab(tab);
+    });
+  }
+  function closeIntakeSheet() {
+    const zone = intakeZone();
+    if (!zone?.classList.contains("is-sheet-open")) return;
+    zone.classList.remove("is-sheet-open");
+    document.body.classList.remove("bk-intake-locked");
+  }
+  function updateIntakeEmpty(tx, skipped) {
+    const zone = intakeZone();
+    if (!zone) return;
+    const empty = tx + skipped === 0;
+    zone.classList.toggle("is-empty", empty);
+    const note = document.getElementById("bk-intake-empty");
+    if (note) note.hidden = !empty;
+  }
+  function maybeRefreshIntake(tx, skipped) {
+    const changed = !intakeCounts || intakeCounts[0] !== tx || intakeCounts[1] !== skipped;
+    if (changed || Date.now() - intakeLoadedAt > INTAKE_FALLBACK_MS) {
+      loadPendingPanels({ background: true }).catch(() => {});
+    }
   }
 
   function updateWorkspaceCompanyContext() {
@@ -1235,15 +1152,9 @@
     renderFooterTotals();
     renderGrid();
   }
-  // 与后端 bankReport 的 total_balance 同源（isCountedInTotals）：封禁 / 归档 / PG 都不计。
-  function isBalanceExcluded(b) {
-    return !LC.isCountedInTotals(b);
-  }
+  // 与后端 bankReport 的 total_balance 同源（规则在 bank-common.js）。
   function totalBalance() {
-    if (dailyReport?.totals?.total_balance != null) {
-      return Number(dailyReport.totals.total_balance);
-    }
-    return bankRows.reduce((s, r) => isBalanceExcluded(r) ? s : s + Number(r.balance || 0), 0);
+    return BC.totalBalance(bankRows, dailyReport);
   }
   function updateGridTitle() {
     const el = document.getElementById("bk-grid-title");
@@ -1255,150 +1166,6 @@
       el.textContent = b ? `${tr("流水")} · ${tabLabel(b)}` : tr("流水");
     }
   }
-  function bankDisplayBalance(b) {
-    const stats = (dailyReport?.bankRows || []).find((r) => r.id === b.id);
-    return Number(stats?.balance ?? b.balance ?? 0);
-  }
-  function bankDirectoryCopyText(b) {
-    const fields = [
-      ["BSB", b?.bsb],
-      ["ACCOUNT", b?.account_number],
-      ["PAYID", b?.payid],
-    ].filter(([, value]) => String(value ?? "").trim());
-    return fields.length
-      ? fields.map(([label, value]) => `${label} : ${String(value).trim()}`).join("\n")
-      : "未填写银行资料";
-  }
-  function bankDirectoryInfoHtml(b) {
-    const fields = [
-      ["BSB", b.bsb],
-      ["ACCOUNT", b.account_number],
-      ["PAYID", b.payid],
-    ].filter(([, value]) => String(value ?? "").trim());
-    if (!fields.length) return '<div class="bk-bank-info bk-bank-info-empty">未填写银行资料</div>';
-    return `<div class="bk-bank-info" title="点击复制完整银行资料">${fields.map(([label, value]) => {
-      return `<span class="bk-bank-info-line"><span class="bk-bank-info-label">${label}</span><span class="bk-bank-info-value" translate="no">${esc(String(value).trim())}</span></span>`;
-    }).join("")}</div>`;
-  }
-  function bankDirectoryStats(b) {
-    const stats = (dailyReport?.bankRows || []).find((r) => r.id === b.id);
-    return {
-      txCount: Number(stats?.tx_count ?? 0),
-      outflow: Math.abs(Number(stats?.total_outflow ?? b.total_outflow ?? 0)),
-      displayBalance: bankDisplayBalance(b),
-      excluded: isBalanceExcluded(b),
-      isPG: String(b.account_kind || "nominee") === "payment_gateway",
-      overAlert: alertThresholdReached(b),
-    };
-  }
-  // 与后端 bankAlerts.js 的判定口径保持一致：阈值 > 0、运营中、余额 ≥ 阈值。
-  // 这里只是给列表加个视觉提示，真正的报警判定在服务端。
-  function alertThresholdReached(b) {
-    const threshold = Number(b.alert_threshold || 0);
-    if (!(threshold > 0)) return false;
-    if (!LC.isOperating(b)) return false;
-    return Math.round(bankDisplayBalance(b) * 100) >= Math.round(threshold * 100);
-  }
-  function bankDirectoryStatusHtml(b, stats) {
-    const alertFlag = stats.overAlert
-      ? '<span class="bk-flag bk-flag-alert" title="余额已达报警阈值">⚠️</span>'
-      : "";
-    if (stats.isPG) {
-      return '<span class="bk-flag bk-flag-pg" title="PaymentGateway 余额不计入合计">PG</span>' + alertFlag;
-    }
-    // 以前写死英文 Active / Inactive，中文模式下也是英文（员工演练）。中文原文 + 字典翻译。
-    return (
-      (b.active
-        ? '<span class="bk-flag bk-flag-active">使用中</span>'
-        : '<span class="bk-flag bk-flag-idle">未启用</span>') + alertFlag
-    );
-  }
-  function bankDirectoryRowHtml(b, index) {
-    const stats = bankDirectoryStats(b);
-    const selected = b.id === activeBankId;
-    const bankLabel = bankBranchOf(b) || "未命名渠道";
-    const accountName = String(b.account_name || "").trim();
-    const nameHtml = accountName ? `<div class="bk-channel-sub"><span class="bk-name-label">NAME</span><span translate="no">${esc(accountName)}</span></div>` : "";
-    return `<article class="bk-bank-row${selected ? " active" : ""}${stats.isPG ? " bk-bank-row-pg" : ""}" data-id="${b.id}" data-bank-select="${b.id}" tabindex="0" draggable="true" aria-selected="${selected ? "true" : "false"}">
-<div class="bk-col-order"><button type="button" class="bk-order-handle" draggable="true" aria-label="Drag ${esc(bankLabel)} to reorder" title="Drag to reorder"><i data-lucide="grip-vertical"></i></button><span class="bk-row-no">${index + 1}</span></div>
-<div class="bk-col-channel"><span class="bk-field-group-label bk-channel-label">BANK BRANCH</span><div class="bk-channel-name"><strong translate="no">${esc(bankLabel)}</strong>${bankDirectoryStatusHtml(b, stats)}</div>${nameHtml}<div class="bk-channel-meta"><span class="kind-tag kind-${esc(b.account_kind || "nominee")}">${esc(KIND_LABEL[b.account_kind] || b.account_kind || "人头")}</span></div></div>
-<div class="bk-col-info"><span class="bk-field-group-label">银行资料</span>${bankDirectoryInfoHtml(b)}</div>
-<div class="bk-col-balance"><div class="bk-metric-grid"><div class="bk-metric bk-metric-balance"><span>BALANCE</span><strong class="bk-row-balance${stats.excluded ? " bk-balance-excluded" : ""}">${fmt(stats.displayBalance)}</strong></div><div class="bk-metric"><span>COUNT</span><strong>${fmtMetric(stats.txCount)}</strong></div><div class="bk-metric bk-metric-outflow"><span>TOTAL OUTFLOW</span><strong>${fmt(stats.outflow)}</strong></div></div>${stats.excluded ? '<span class="bk-row-flow bk-excluded-note">不计入总余额</span>' : ""}</div>
-<div class="bk-col-actions"><button type="button" class="bk-copy-btn" data-copy-bank-id="${b.id}" title="Copy complete bank information"><i data-lucide="copy"></i><span>Copy info</span></button></div>
-</article>`;
-  }
-  function renderBankDirectory() {
-    const box = document.getElementById("sheet-tabs");
-    if (!box) return;
-    updateGridTitle();
-    if (!bankRows.length) {
-      box.innerHTML = `<div class="bk-rail-empty">${esc(tr("还没有支付渠道"))} - ${esc(tr("点右上角「+ 新渠道」添加"))}</div>`;
-      return;
-    }
-    const railBanks = bankRows.filter(LC.isOperating);
-    // 只数封禁中的。归档账户已经退役清零，把它们算进「已封渠道」就等于把这个入口
-    // 变回一个只会越堆越大的数字——那正是要消灭的东西。
-    const bannedCount = bankRows.filter(LC.isBanned).length;
-    box.innerHTML = `<section class="bk-directory${directoryOpen ? " is-open" : ""}" aria-label="Payment channels">
-<button type="button" class="bk-directory-toggle" aria-expanded="${directoryOpen ? "true" : "false"}" aria-controls="bk-channel-list"><span>渠道列表</span><i data-lucide="chevron-down"></i></button>
-<button type="button" class="bk-directory-summary${activeBankId === ALL_BANKS ? " active" : ""}" data-bank-select="all" aria-pressed="${activeBankId === ALL_BANKS ? "true" : "false"}"><span class="bk-summary-kicker">ALL CHANNELS</span><span class="bk-summary-copy"><strong>全部渠道</strong><span>点击渠道行可筛选流水</span></span><span class="bk-summary-balance"><small>总余额</small><strong>${fmt(totalBalance())}</strong></span><span class="bk-summary-count">${railBanks.length} 个渠道</span></button>
-<div class="bk-channel-list" id="bk-channel-list" role="list" aria-label="Payment channel list"><div class="bk-channel-list-head" aria-hidden="true"><span class="bk-col-order">排序</span><span class="bk-col-channel">BANK BRANCH / NAME</span><span class="bk-col-info">BSB / ACCOUNT / PAYID</span><span class="bk-col-balance">BALANCE / COUNT / TOTAL OUTFLOW</span><span class="bk-col-actions">操作</span></div>${railBanks.map((b, i) => bankDirectoryRowHtml(b, i)).join("")}</div>
-${bannedCount > 0 ? `<button type="button" class="bk-banned-summary" id="rail-banned-btn"><span class="bk-flag bk-flag-banned">封禁</span><span>已封渠道</span><strong>${bannedCount}</strong><small>点击查看详情</small></button>` : ""}
-</section>`;
-    renderIcons(box);
-  }
-  function renderTabs() {
-    renderBankDirectory();
-  }
-  function writeBankClipboard(text) {
-    if (navigator.clipboard?.writeText) return navigator.clipboard.writeText(text);
-    const textarea = document.createElement("textarea");
-    textarea.value = text;
-    textarea.setAttribute("readonly", "");
-    textarea.style.position = "fixed";
-    textarea.style.opacity = "0";
-    document.body.appendChild(textarea);
-    textarea.select();
-    const copied = document.execCommand("copy");
-    textarea.remove();
-    return copied ? Promise.resolve() : Promise.reject(new Error("copy failed"));
-  }
-  function copyBankDirectoryInfo(bankId) {
-    const bank = bankRows.find((row) => row.id === Number(bankId));
-    if (!bank) return;
-    writeBankClipboard(bankDirectoryCopyText(bank))
-      .then(() => showToast("已复制完整银行资料", { tone: "success" }))
-      .catch(() => showToast("复制失败", { tone: "error" }));
-  }
-  function persistBankDirectoryOrder(ordered) {
-    if (bankReorderBusy) return;
-    bankReorderBusy = true;
-    const visibleIds = new Set(ordered.map((b) => b.id));
-    bankRows = ordered.concat(bankRows.filter((b) => !visibleIds.has(b.id)));
-    renderTabs();
-    const requests = ordered.map((bank, index) => api(`/api/banks/${bank.id}`, {
-      method: "PUT",
-      body: JSON.stringify({ sort_order: index }),
-      bg: true,
-    }));
-    Promise.all(requests)
-      .then(() => loadBanks())
-      .then(() => showToast("渠道顺序已保存", { tone: "success" }))
-      .catch(() => {
-        showToast("渠道顺序保存失败", { tone: "error" });
-        return loadBanks().catch(() => {});
-      })
-      .finally(() => { bankReorderBusy = false; });
-  }
-  function moveBankDirectoryRow(bankId, targetIndex) {
-    if (bankReorderBusy) return;
-    const ordered = usableBanks().slice();
-    const sourceIndex = ordered.findIndex((b) => b.id === Number(bankId));
-    if (sourceIndex < 0 || targetIndex < 0 || targetIndex >= ordered.length || sourceIndex === targetIndex) return;
-    const [moved] = ordered.splice(sourceIndex, 1);
-    ordered.splice(targetIndex, 0, moved);
-    persistBankDirectoryOrder(ordered);
-  }
   function renderDailyPanels() {
     renderBanksPanel();
     renderReconcileAlertV2();
@@ -1408,7 +1175,6 @@ ${bannedCount > 0 ? `<button type="button" class="bk-banned-summary" id="rail-ba
   function renderBanksPanel() {
     const sumBal = document.getElementById("sum-balance");
     if (sumBal) sumBal.textContent = fmt(totalBalance());
-    renderTabs();
   }
   function reportValClass(label, value, isMetric) {
     if (isMetric) return "";
@@ -1542,7 +1308,8 @@ ${bannedCount > 0 ? `<button type="button" class="bk-banned-summary" id="rail-ba
     const statusFilter = document.getElementById("sheet-status-filter");
     if (statusFilter) statusFilter.value = "";
     query.value = name;
-    renderTabs();
+    syncBankParam();
+    renderBankFilter();
     loadSheet().then(() => {
       renderGrid();
       query.focus();
@@ -1587,11 +1354,11 @@ ${bannedCount > 0 ? `<button type="button" class="bk-banned-summary" id="rail-ba
     if (sel) {
       sel.setAttribute("translate", "no");
       sel.innerHTML = '<option value="">ALL</option>' +
-        STATUS_LIST.map((s) => `<option value="${esc(s.value)}">${esc(s.label)}</option>`).join("");
+        BC.statusList().map((s) => `<option value="${esc(s.value)}">${esc(s.label)}</option>`).join("");
     }
     if (dl) {
       dl.setAttribute("translate", "no");
-      dl.innerHTML = STATUS_LIST.map((s) => `<option value="${esc(s.label)}">`).join("");
+      dl.innerHTML = BC.statusList().map((s) => `<option value="${esc(s.label)}">`).join("");
     }
   }
   function populateCstatusOptions() {
@@ -1618,431 +1385,7 @@ ${bannedCount > 0 ? `<button type="button" class="bk-banned-summary" id="rail-ba
       + list.map((b, i) => `<option value="${b.id}" translate="no">${esc(bankPickerLabel(b, i))}</option>`).join("");
   }
 
-  function openBankModal(row) {
-    const listModal = document.getElementById("banks-list-modal");
-    bankModalReturnToList = Boolean(listModal?.classList.contains("show"));
-    listModal?.classList.remove("show");
-    editingBankId = row ? row.id : null;
-    document.getElementById("bank-modal-title").textContent = row ? "编辑支付渠道" : "新增支付渠道";
-    document.getElementById("f-kind").value = row?.account_kind || "nominee";
-    document.getElementById("f-bankbranch").value = bankBranchOf(row);
-    document.getElementById("f-name").value = row?.account_name || "";
-    document.getElementById("f-bsb").value = row?.bsb || "";
-    document.getElementById("f-account").value = row?.account_number || "";
-    document.getElementById("f-payid").value = row?.payid || "";
-    document.getElementById("f-note").value = row?.note || "";
-    // 0 表示未启用，显示为空而不是 "0"，和 placeholder「留空 = 不启用」对齐。
-    const threshold = Number(row?.alert_threshold || 0);
-    document.getElementById("f-alert-threshold").value = threshold > 0 ? String(threshold) : "";
-    document.getElementById("f-reset-daily").checked = Boolean(row?.reset_daily_balance);
-    document.getElementById("bank-modal-err").textContent = "";
-    document.getElementById("bank-modal").classList.add("show");
-    window.requestAnimationFrame(() => document.getElementById("f-bankbranch")?.focus());
-  }
-  function restoreBanksListModal(focusSelector) {
-    // 从编辑弹窗回到列表：保住原来的页签 / 页码 / 搜索词，否则改完一个账户就被甩回
-    // 运营中页签的顶部，还得重新找回刚才那一行。
-    openBanksListModal({ keepState: true });
-    window.requestAnimationFrame(() => {
-      (document.querySelector(focusSelector) || document.querySelector(".bkd-tab.active"))?.focus();
-    });
-  }
-  function closeBankModal({ restoreList = true } = {}) {
-    const shouldRestoreList = restoreList && bankModalReturnToList;
-    document.getElementById("bank-modal").classList.remove("show");
-    editingBankId = null;
-    bankModalReturnToList = false;
-    if (shouldRestoreList) restoreBanksListModal("#add-bank-btn");
-  }
-  function saveBankModal() {
-    const bank_branch = document.getElementById("f-bankbranch").value.trim();
-    const account_name = document.getElementById("f-name").value.trim();
-    const account_number = document.getElementById("f-account").value.trim();
-    const payid = document.getElementById("f-payid").value.trim();
-    if (!bank_branch && !account_name && !account_number && !payid) {
-      document.getElementById("bank-modal-err").textContent = "请至少填写 BankBranch、NAME、ACCOUNT 或 PAYID 其中一项";
-      return;
-    }
-    const thresholdRaw = document.getElementById("f-alert-threshold").value.replace(/,/g, "").trim();
-    if (thresholdRaw && !(Number(thresholdRaw) >= 0)) {
-      document.getElementById("bank-modal-err").textContent = "余额上限报警必须是不小于 0 的数字";
-      return;
-    }
-    const body = {
-      bank_branch, account_name,
-      bsb: document.getElementById("f-bsb").value.trim(),
-      account_number, payid,
-      note: document.getElementById("f-note").value.trim(),
-      account_kind: document.getElementById("f-kind").value,
-      reset_daily_balance: document.getElementById("f-reset-daily").checked ? 1 : 0,
-      alert_threshold: thresholdRaw ? Number(thresholdRaw) : 0,
-    };
-    const wasNew = !editingBankId;
-    const shouldRestoreList = bankModalReturnToList;
-    const url = editingBankId ? `/api/banks/${editingBankId}` : "/api/banks";
-    const method = editingBankId ? "PUT" : "POST";
-    api(url, { method, body: JSON.stringify(body) })
-      .then((d) => {
-        closeBankModal({ restoreList: false });
-        // 刻意不切换流水的渠道筛选：以前新建后会筛到新户，流水显示「当天暂无流水」、KPI 变 0，
-        // 调钱弹窗还会预选它，员工把调钱绑到了空户口上（员工演练 4/4）。筛选只由员工自己点。
-        return loadBanks().then(loadSheet).then(loadDailyReport).then(() => {
-          if (shouldRestoreList) restoreBanksListModal(wasNew ? "#add-bank-btn" : `.bkd-edit-btn[data-id="${d.row?.id || ""}"]`);
-        });
-      })
-      .catch((e) => {
-        document.getElementById("bank-modal-err").textContent = e.message || "保存失败，请重试";
-      });
-  }
 
-  function bkdTxRow(r, dir) {
-    const amt = dir === "in"
-      ? Number(r.amount_in || 0) + Number(r.trf_amount || 0)
-      : Number(r.amount_out || 0) + Number(r.help_amount || 0);
-    const name = ledgerNameText(r.name);
-    return `<tr>
-      <td class="mono">${esc(String(r.entry_time || "").slice(0, 16))}</td>
-      <td translate="no"><span class="status-chip ${statusClass(r.status)}">${esc(statusLabel(r.status))}</span></td>
-      <td class="mono">${esc(r.tx_id || "")}</td>
-      <td class="mono bkd-amt ${dir === "in" ? "bkd-in" : "bkd-out"}">${dir === "in" ? "+" : "-"}${fmt(amt)}</td>
-      <td translate="no">${esc(r.username || "")}${name ? ` · ${esc(name)}` : ""}</td>
-    </tr>`;
-  }
-
-  function bkdTxRowFull(r, dir) {
-    const amt = dir === "in"
-      ? Number(r.amount_in || 0) + Number(r.trf_amount || 0)
-      : Number(r.amount_out || 0) + Number(r.help_amount || 0);
-    const user = [r.username, ledgerNameText(r.name), r.c_status].filter(Boolean).join(" · ");
-    return `<tr>
-      <td class="mono">${esc(String(r.entry_time || "").slice(0, 16))}</td>
-      <td translate="no"><span class="status-chip ${statusClass(r.status)}">${esc(statusLabel(r.status))}</span></td>
-      <td class="mono">${esc(r.tx_id || "")}</td>
-      <td class="mono bkd-amt ${dir === "in" ? "bkd-in" : "bkd-out"}">${dir === "in" ? "+" : "-"}${fmt(amt)}</td>
-      <td class="bkd-user-full" translate="no">${esc(user || "-")}</td>
-      <td class="bkd-remark-full" translate="no">${esc(r.remark || "")}</td>
-    </tr>`;
-  }
-
-  // \u94f6\u884c\u7533\u8bc9\u7528\uff1a\u8fd9\u4e2a\u6237\u53e3\u5168\u90e8\u5ba2\u6237\u5165\u8d26 + \u6237\u53e3\u62ac\u5934\u4e0e\u5408\u8ba1\uff08\u670d\u52a1\u7aef appealExport.js\uff0cCSV \u89c1 appeal-csv.js\uff09\u3002
-  // \u4ee5\u524d\u53ea\u5bfc\u6700\u8fd1 10 \u8fdb 10 \u51fa\u3001\u6df7\u7740\u5185\u90e8\u8c03\u94b1\uff0c\u62ff\u53bb\u7533\u8bc9\u4e0d\u591f\u7528\uff08\u5458\u5de5\u6f14\u7ec3\uff0c\u7528\u9014 2026-11-06 \u4e0e\u7528\u6237\u786e\u8ba4\uff09\u3002
-  function downloadBkdCsv(bank) {
-    return api(`/api/banks/${bank.id}/appeal-deposits`)
-      .then((d) => {
-        const csv = window.buildAppealCsv(bank, d.rows || [], { nameOf: ledgerNameText });
-        const blob = new Blob(["\ufeff" + csv], { type: "text/csv;charset=utf-8" });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        const safeName = String(bankBranchOf(bank) || "bank").replace(/[\\/:*?"<>|]+/g, "_");
-        a.download = `${safeName}-appeal-deposits.csv`;
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        URL.revokeObjectURL(url);
-      })
-      .catch((e) => showToast(e.message || "\u4e0b\u8f7d\u5931\u8d25\uff0c\u8bf7\u91cd\u8bd5", { tone: "error" }));
-  }
-
-  // 值一侧全是租户数据（银行名、户名、BSB、账号、PayID、备注、金额），一律 translate="no"：
-  // 否则中英切换会去动它们，也挡不住浏览器自带的自动翻译。标签一侧照常翻译。
-  function bkdInfoPair(label, val, mono) {
-    if (!val && val !== 0) return "";
-    return `<div class="bkd-pair"><span class="bkd-pair-label">${esc(label)}</span><span class="bkd-pair-val${mono ? " mono" : ""}" translate="no">${esc(String(val))}</span></div>`;
-  }
-
-  function loadBkdDetail(bankId, bodyEl) {
-    const b = bankRows.find((r) => r.id === bankId);
-    if (!b) return;
-    bodyEl.dataset.loaded = "1";
-    Promise.all([
-      api(`/api/banks/${bankId}/recent-transactions`, { bg: true }),
-      api(`/api/banks/${bankId}/events`, { bg: true }),
-    ]).then(([txData, evData]) => {
-      const recentIn = txData.recentIn || [];
-      const recentOut = txData.recentOut || [];
-      const events = evData.rows || [];
-
-      const bannedEvent = events.find((e) => e.event === "banned");
-      const bannedInfo = bannedEvent
-        ? `<div class="bkd-ban-info">封禁于 <strong>${esc(window.sqlUtcToSydney(bannedEvent.created_at, { dateOnly: true }))}</strong>${bannedEvent.actor ? ` · ${esc(bannedEvent.actor)}` : ""}${bannedEvent.note ? ` · ${esc(bannedEvent.note)}` : ""}</div>`
-        : "";
-
-      const infoGrid = `<div class="bkd-info-grid">
-        ${bannedInfo}
-        ${bkdInfoPair("银行", bankBranchOf(b))}
-        ${bkdInfoPair("户名", b.account_name)}
-        ${bkdInfoPair("BSB", b.bsb, true)}
-        ${bkdInfoPair("账号 ACC", b.account_number, true)}
-        ${bkdInfoPair("PayID", b.payid)}
-        ${bkdInfoPair("余额", fmt(bankDisplayBalance(b)))}
-        ${bkdInfoPair("备注", b.note)}
-        <div class="bkd-pair"><span class="bkd-pair-label">状态</span><span class="bkd-pair-val">${
-          LC.isArchived(b)
-            ? '<span class="bk-flag bk-flag-archived">已归档</span>'
-            : LC.isBanned(b)
-              ? '<span class="bk-flag bk-flag-banned">封禁中</span>'
-              : (b.active ? '<span class="bk-flag bk-flag-active">使用中</span>' : "未启用")
-        }</span></div>
-      </div>`;
-
-      const txSection = `<div class="bkd-tx-toolbar"><button type="button" class="btn btn-outline btn-xs bkd-download-btn" title="这个户口全部客户入账，带户名、BSB、账号与合计，给银行申诉用">下载申诉记录 (CSV)</button></div><div class="bkd-tx-wrap">
-        <div class="bkd-tx-col">
-          <div class="bkd-tx-title bkd-tx-in-title">最近 10 笔入账</div>
-          ${recentIn.length
-            ? `<table class="bkd-tx-table"><thead><tr><th>时间</th><th>STATUS</th><th>TRANS ID</th><th>IN</th><th>USER / NAME / C STATUS</th><th>REMARK</th></tr></thead><tbody>${recentIn.map((r) => bkdTxRowFull(r, "in")).join("")}</tbody></table>`
-            : '<p class="bkd-empty">暂无入账记录</p>'}
-        </div>
-        <div class="bkd-tx-col">
-          <div class="bkd-tx-title bkd-tx-out-title">最近 10 笔出账</div>
-          ${recentOut.length
-            ? `<table class="bkd-tx-table"><thead><tr><th>时间</th><th>STATUS</th><th>TRANS ID</th><th>OUT</th><th>USER / NAME / C STATUS</th><th>REMARK</th></tr></thead><tbody>${recentOut.map((r) => bkdTxRowFull(r, "out")).join("")}</tbody></table>`
-            : '<p class="bkd-empty">暂无出账记录</p>'}
-        </div>
-      </div>`;
-
-      // 事件码 / 类型码转中文（display-format.js）；操作人与封禁原因是租户数据，不翻译。
-      const evList = events.slice(0, 10).map((e) => {
-        const note = e.event === "created"
-          ? ` · <span>${esc(window.accountKindLabel(e.note))}</span>`
-          : (e.note ? ` · <span translate="no">${esc(e.note)}</span>` : "");
-        return `<li><strong>${esc(window.accountEventLabel(e.event))}</strong><span class="bkd-ev-time"> ${esc(window.sqlUtcToSydney(e.created_at))}</span>${e.actor ? ` · <span translate="no">${esc(e.actor)}</span>` : ""}${note}</li>`;
-      }).join("") || "<li>暂无记录</li>";
-      const evSection = `<details class="bkd-events-wrap"><summary>操作历史</summary><ul class="bkd-events-list">${evList}</ul></details>`;
-
-      bodyEl.innerHTML = `<div class="bkd-detail">${infoGrid}${txSection}${evSection}</div>`;
-      bodyEl.querySelector(".bkd-download-btn")?.addEventListener("click", () => downloadBkdCsv(b));
-    }).catch(() => {
-      bodyEl.innerHTML = '<div class="bkd-empty">加载失败，请重试</div>';
-    });
-  }
-
-  // 「账户里还剩多少钱」的权威口径：后端 enrichBankRow 塞进来的 balance，就是无上界的
-  // balanceFromLedger。待清条和归档按钮的可用性都用它，两者永不打架。
-  // 刻意不用 bankDisplayBalance()——那是页面显示口径，对每日归零账户只给当日净额，
-  // 拿它判断「清干净了没有」会把累计还有钱的账户当成空的。
-  function bankLedgerBalance(b) {
-    return Number(b.balance || 0);
-  }
-  function isBkdCleared(b) {
-    return Math.round(bankLedgerBalance(b) * 100) === 0;
-  }
-
-  function bkdPredicate(tab) {
-    if (tab === "banned") return LC.isBanned;
-    if (tab === "archived") return LC.isArchived;
-    if (tab === "operating") return LC.isOperating;
-    return null;
-  }
-
-  function bkdFiltered(tab) {
-    const pred = bkdPredicate(tab) || LC.isOperating;
-    const q = bkdQuery.trim().toLowerCase();
-    return bankRows.filter((b) => {
-      if (!pred(b)) return false;
-      if (!q) return true;
-      return [bankBranchOf(b), b.account_name, b.account_number, b.payid, b.bsb, b.note]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase()
-        .includes(q);
-    });
-  }
-
-  function buildBkdItem(b) {
-    const status = LC.statusOf(b);
-    const banned = status === "banned";
-    const archived = status === "archived";
-    const idx = usableBanks().findIndex((x) => x.id === b.id);
-    const noTag = idx >= 0 ? `<span class="bk-no">${idx + 1}</span>` : "";
-    const excludedNote = isBalanceExcluded(b)
-      ? `<span class="bkd-excl-tag">${esc(tr("不计汇总"))}</span>`
-      : "";
-    const statusTag = archived
-      ? `<span class="bk-flag bk-flag-archived">${esc(tr("已归档"))}</span>`
-      : banned
-        ? `<span class="bk-flag bk-flag-banned">${esc(tr("封禁中"))}</span>`
-        : (b.active ? `<span class="bk-flag bk-flag-active">${esc(tr("使用中"))}</span>` : "");
-
-    // 操作按钮按状态分化。已归档行不给编辑、不给「使用中」复选框——服务端已强制
-    // active = 0，UI 上也要让「归档即惰性」成立：要改资料先取消归档。
-    let acts = "";
-    if (archived) {
-      acts = `<button type="button" class="btn btn-outline btn-xs bkd-unarchive-btn" data-id="${b.id}">${esc(tr("取消归档"))}</button>`;
-    } else if (banned) {
-      const archiveBtn = isBkdCleared(b)
-        ? `<button type="button" class="btn btn-outline btn-xs bkd-archive-btn" data-id="${b.id}">${esc(tr("归档"))}</button>`
-        : `<button type="button" class="btn btn-outline btn-xs bkd-archive-btn" data-id="${b.id}" disabled title="${esc(tr("尚余"))} ${esc(fmt(bankLedgerBalance(b)))} ${esc(tr("待清"))}">${esc(tr("归档"))}</button>`;
-      acts =
-        `<button type="button" class="btn btn-outline btn-xs bkd-edit-btn" data-id="${b.id}">${esc(tr("编辑"))}</button>`
-        + `<button type="button" class="btn btn-outline btn-xs bkd-unban-btn" data-id="${b.id}">${esc(tr("解封"))}</button>`
-        // 有钱才给「转出余额」：不用解封再封回去（员工演练发现）。
-        + (bankLedgerBalance(b) > 0.004 ? `<button type="button" class="btn btn-outline btn-xs bkd-drain-btn" data-id="${b.id}">${esc(tr("转出余额"))}</button>` : "")
-        + archiveBtn;
-    } else {
-      acts =
-        `<button type="button" class="btn btn-outline btn-xs bkd-edit-btn" data-id="${b.id}">${esc(tr("编辑"))}</button>`
-        + `<input type="checkbox" class="bank-active-chk" data-id="${b.id}" title="${esc(tr("使用中（新充值自动入账）"))}"${b.active ? " checked" : ""}>`
-        + `<button type="button" class="btn btn-outline btn-xs bkd-ban-btn" data-id="${b.id}">${esc(tr("封禁"))}</button>`;
-    }
-
-    const expanded = bkdExpanded.has(b.id);
-    const cls = `bkd-item${banned ? " bkd-item-banned" : ""}${archived ? " bkd-item-archived" : ""}`;
-    // 银行名与户名是租户数据，必须 translate="no"：否则中英切换会把
-    // 「Public Bank Amy」改成「Public 银行 Amy」，顺带也挡住浏览器自带的自动翻译。
-    return `<div class="${cls}" data-id="${b.id}">
-  <div class="bkd-item-head">
-    ${noTag}
-    <span class="kind-tag kind-${esc(b.account_kind || "nominee")}">${esc(KIND_LABEL[b.account_kind] || b.account_kind || "人头")}</span>
-    <span class="bkd-item-name" translate="no">${esc(bankBranchOf(b) || "Bank")}<span class="bkd-item-sub"> ${esc(b.account_name || "")}</span></span>
-    ${statusTag}
-    ${excludedNote}
-    <span class="bkd-item-bal" translate="no">${fmt(bankDisplayBalance(b))}</span>
-    <div class="bkd-item-acts">
-      ${acts}
-      <button type="button" class="btn btn-outline btn-xs bkd-toggle-btn" data-id="${b.id}" aria-expanded="${expanded ? "true" : "false"}">${expanded ? "▾" : "▸"}</button>
-    </div>
-  </div>
-  <div class="bkd-item-body" id="bkd-body-${b.id}"${expanded ? "" : " hidden"} data-loaded="0">
-    <div class="bkd-loading">${esc(tr("加载中..."))}</div>
-  </div>
-</div>`;
-  }
-
-  // \u5e38\u9a7b\u5f85\u6e05\u6761\u3002\u53ea\u770b\u5c01\u7981\u4e2d\u7684\u8d26\u6237\uff1a\u5f52\u6863\u7684\u5df2\u88ab\u95f8\u95e8\u4fdd\u8bc1\u6e05\u96f6\uff0c\u8fd0\u8425\u4e2d\u7684\u672c\u6765\u5c31\u5728\u7528\u3002
-  function renderBkdCleanupBar() {
-    const bar = document.getElementById("bkd-cleanup-bar");
-    if (!bar) return;
-    const dirty = bankRows.filter((b) => LC.isBanned(b) && !isBkdCleared(b));
-    const total = dirty.reduce((s, b) => s + bankLedgerBalance(b), 0);
-    bar.classList.toggle("is-alert", dirty.length > 0);
-    bar.classList.toggle("is-clean", dirty.length === 0);
-    if (!dirty.length) {
-      bar.innerHTML = `<span>${esc(tr("\u5c01\u7981\u4e2d\u65e0\u5f85\u6e05\u7406"))}</span>`;
-      return;
-    }
-    // \u6570\u5b57\u5404\u81ea\u72ec\u7acb\u6210\u8282\u70b9\uff0c\u6587\u672c\u8282\u70b9\u91cc\u4e0d\u6df7\u53d8\u91cf\u2014\u2014i18n \u5f15\u64ce\u6309\u6574\u4e32\u67e5\u5b57\u5178\uff0c\u6df7\u4e86\u5c31\u5f97\u5199
-    // phrase \u89c4\u5219\uff0c\u800c\u53cd\u5411\u89c4\u5219\u5f88\u5bb9\u6613\u8bef\u547d\u4e2d\u771f\u5b9e\u6570\u636e\u3002
-    bar.innerHTML =
-      `<span>${esc(tr("\u5c01\u7981\u4e2d\u5f85\u6e05\u7406"))}</span>`
-      + `<strong translate="no">${dirty.length}</strong>`
-      + `<span>${esc(tr("\u6237 \u00b7 \u5408\u8ba1"))}</span>`
-      + `<strong translate="no">${esc(fmt(total))}</strong>`;
-  }
-
-  function renderBkdTabs() {
-    const wrap = document.getElementById("bkd-tabs");
-    if (!wrap) return;
-    const counts = {
-      operating: bankRows.filter(LC.isOperating).length,
-      banned: bankRows.filter(LC.isBanned).length,
-      archived: bankRows.filter(LC.isArchived).length,
-    };
-    wrap.querySelectorAll(".bkd-tab").forEach((btn) => {
-      const tab = btn.dataset.tab;
-      const on = tab === bkdTab;
-      btn.classList.toggle("active", on);
-      btn.setAttribute("aria-selected", on ? "true" : "false");
-      btn.tabIndex = on ? 0 : -1;
-      // \u8ba1\u6570\u662f\u300c\u8fd9\u4e2a\u72b6\u6001\u4e00\u5171\u51e0\u4e2a\u300d\uff0c\u4e0d\u53d7\u641c\u7d22\u5f71\u54cd\uff1b\u641c\u7d22\u547d\u4e2d\u6570\u7531\u5206\u9875\u5668\u8868\u8fbe\u3002
-      // \u539f\u59cb\u6807\u7b7e\u5b58\u8fdb dataset\uff0c\u907f\u514d\u53cd\u590d\u8ffd\u52a0 (n) \u65f6\u628a\u4e0a\u4e00\u6b21\u7684\u62ec\u53f7\u4e5f\u5f53\u6210\u6807\u7b7e\u3002
-      if (!btn.dataset.label) btn.dataset.label = btn.textContent.trim().replace(/\s*\(\d+\)$/, "");
-      const n = counts[tab] || 0;
-      btn.textContent = n > 0 ? `${btn.dataset.label} (${n})` : btn.dataset.label;
-    });
-  }
-
-  function bkdEmptyText(tab) {
-    if (tab === "banned") return tr("\u6682\u65e0\u5c01\u7981\u6e20\u9053");
-    if (tab === "archived") return tr("\u6682\u65e0\u5df2\u5f52\u6863\u6e20\u9053");
-    return tr("\u6682\u65e0\u8fd0\u8425\u6e20\u9053");
-  }
-
-  function renderBkdPanel() {
-    const panel = document.getElementById("bkd-panel");
-    if (!panel) return;
-    const rows = bkdFiltered(bkdTab);
-    // \u9875\u7801\u94b3\u4f4d\u5fc5\u987b\u5728\u5207\u7247\u4e4b\u524d\uff1a\u5f52\u6863\u6389\u6700\u540e\u4e00\u9875\u6700\u540e\u4e00\u884c\u4e4b\u540e\u9875\u7801\u4f1a\u8d85\u754c\uff0c\u5426\u5219\u9762\u677f\u7a7a\u767d
-    // \u800c\u5206\u9875\u5668\u8fd8\u505c\u5728\u7b2c 3 \u9875\u3002
-    const pages = Math.max(1, Math.ceil(rows.length / BKD_PAGE_SIZE));
-    const page = Math.min(Math.max(1, bkdPage[bkdTab] || 1), pages);
-    bkdPage[bkdTab] = page;
-    const slice = rows.slice((page - 1) * BKD_PAGE_SIZE, page * BKD_PAGE_SIZE);
-
-    panel.innerHTML = slice.length
-      ? slice.map(buildBkdItem).join("")
-      : `<div class="bkd-empty">${esc(bkdQuery.trim() ? tr("\u6ca1\u6709\u5339\u914d\u7684\u6e20\u9053") : bkdEmptyText(bkdTab))}</div>`;
-
-    // \u8d26\u6237\u5c11\u4e8e\u4e00\u9875\u65f6 renderClientPager \u81ea\u5df1\u9690\u85cf\uff0c\u6240\u4ee5\u73b0\u72b6\u4e0b\u96f6\u89c6\u89c9\u4ee3\u4ef7\uff0c\u89c4\u6a21\u957f\u4e0a\u53bb\u81ea\u52a8\u751f\u6548\u3002
-    renderClientPager("bkd-pager", rows.length, page, BKD_PAGE_SIZE, (p) => {
-      bkdPage[bkdTab] = p;
-      renderBkdPanel();
-      panel.scrollTop = 0;
-    });
-    renderIcons(panel);
-
-    // \u5c55\u5f00\u72b6\u6001\u8de8\u5206\u9875\u4e0e\u9875\u7b7e\u4fdd\u7559\uff0c\u660e\u7ec6\u6bcf\u6b21\u91cd\u65b0\u62c9\uff1a\u4f59\u989d\u548c\u6700\u8fd1\u6d41\u6c34\u6b63\u662f\u5c01\u7981 / \u5ba1\u6279\u4e4b\u540e
-    // \u4f1a\u53d8\u7684\u4e1c\u897f\uff0c\u5728\u8fd9\u91cc\u505a\u7f13\u5b58\u7b49\u4e8e\u62ff\u6570\u636e\u51c6\u786e\u6362\u4e00\u6b21\u7f51\u7edc\u8bf7\u6c42\u3002
-    slice.forEach((b) => {
-      if (!bkdExpanded.has(b.id)) return;
-      const bodyEl = document.getElementById(`bkd-body-${b.id}`);
-      if (bodyEl && bodyEl.dataset.loaded === "0") loadBkdDetail(b.id, bodyEl);
-    });
-  }
-
-  function switchBkdTab(tab) {
-    if (!bkdPredicate(tab)) return;
-    bkdTab = tab;
-    renderBkdTabs();
-    renderBkdPanel();
-    const panel = document.getElementById("bkd-panel");
-    if (panel) panel.scrollTop = 0;
-  }
-
-  // opts.tab \u6307\u5b9a\u8fdb\u6765\u65f6\u505c\u5728\u54ea\u4e2a\u9875\u7b7e\uff1bopts.keepState \u7528\u4e8e\u300c\u64cd\u4f5c\u5b8c\u91cd\u5f00\u300d\u2014\u2014\u4fdd\u4f4f\u9875\u7b7e\u3001
-  // \u9875\u7801\u3001\u641c\u7d22\u8bcd\u548c\u5c55\u5f00\u72b6\u6001\uff0c\u5426\u5219\u6bcf\u70b9\u4e00\u6b21\u5c01\u7981\u90fd\u4f1a\u88ab\u7529\u56de\u8fd0\u8425\u4e2d\u9875\u7b7e\u7684\u9876\u90e8\u3002
-  //
-  // \u4e09\u9875\u7b7e\u7684\u7ed3\u6784\u6027\u4f5c\u7528\uff1a\u540c\u4e00\u65f6\u523b\u53ea\u6e32\u67d3\u4e00\u4e2a\u9875\u7b7e\uff0c\u6240\u4ee5\u5c01\u7981\u7684\u6e20\u9053\u518d\u591a\u4e5f\u4e0d\u53ef\u80fd\u628a\u8fd0\u8425\u4e2d
-  // \u7684\u6324\u51fa\u89c6\u91ce\u3002\u8fd9\u4e0d\u662f\u9760\u300c\u9ed8\u8ba4\u6298\u53e0\u300d\u7684\u81ea\u89c9\uff0c\u662f\u7269\u7406\u4e0a\u505a\u4e0d\u5230\u3002
-  function openBanksListModal(opts) {
-    const o = opts || {};
-    if (!o.keepState) {
-      bkdTab = o.tab || "operating";
-      bkdPage.operating = 1;
-      bkdPage.banned = 1;
-      bkdPage.archived = 1;
-      bkdQuery = "";
-      bkdExpanded.clear();
-      const search = document.getElementById("bkd-search");
-      if (search) search.value = "";
-    }
-    renderBkdCleanupBar();
-    renderBkdTabs();
-    renderBkdPanel();
-    document.getElementById("banks-list-modal").classList.add("show");
-  }
-
-  // \u5c01\u7981 / \u89e3\u5c01 / \u5f52\u6863 / \u53d6\u6d88\u5f52\u6863 / \u52fe\u9009\u4f7f\u7528\u4e2d\u7edf\u4e00\u8d70\u8fd9\u91cc\uff1a\u5b58\u8fd8\u6eda\u52a8\u4f4d\u7f6e\u3001\u4fdd\u4f4f\u9875\u7b7e\uff0c
-  // \u5e76\u628a\u7126\u70b9\u515c\u5e95\u5230\u5f53\u524d\u9875\u7b7e\u6309\u94ae\u2014\u2014\u5f52\u6863\u6210\u529f\u540e\u90a3\u4e00\u884c\u4f1a\u79bb\u5f00\u5f53\u524d\u9875\u7b7e\uff0cfocusSelector
-  // \u67e5\u4e0d\u5230\uff0c\u7126\u70b9\u5c31\u4f1a\u6389\u5230 <body>\uff0c\u952e\u76d8\u64cd\u4f5c\u7684\u4eba\u4f1a\u4e22\u5931\u4f4d\u7f6e\u3002
-  function bkdMutate(promise, focusSelector) {
-    const panel = document.getElementById("bkd-panel");
-    const top = panel ? panel.scrollTop : 0;
-    return promise
-      .then(() => loadBanks())
-      .then(() => {
-        openBanksListModal({ keepState: true });
-        const p = document.getElementById("bkd-panel");
-        if (p) p.scrollTop = top;
-        const el = focusSelector ? document.querySelector(focusSelector) : null;
-        (el || document.querySelector(".bkd-tab.active"))?.focus();
-      })
-      .then(() => loadDailyReport())
-      .catch((e) => {
-        if (e && e.cancelled) return;
-        showToast(e?.message || tr("\u64cd\u4f5c\u5931\u8d25"), { tone: "error" });
-      });
-  }
 
   function deletedHelpTrfAmount(r) {
     return Number(r.help_amount || 0) + Number(r.trf_amount || 0);
@@ -2056,11 +1399,6 @@ ${bannedCount > 0 ? `<button type="button" class="bk-banned-summary" id="rail-ba
       name: ledgerNameText(r.name),
       bankLabel: bank ? bankBranchOf(bank) : (bankBranchOf(r) || r.bank_acc || ""),
     });
-  }
-  function bankTargetFor(id) {
-    const b = bankRows.find((x) => String(x.id) === String(id));
-    if (!b) return "";
-    return window.bankTargetDetail(b, { label: bankBranchOf(b), balance: bankLedgerBalance(b) });
   }
   let deletedLedgerById = new Map();
   function renderDeletedLedgerRows(rows) {
@@ -2121,68 +1459,10 @@ ${bannedCount > 0 ? `<button type="button" class="bk-banned-summary" id="rail-ba
     });
   }
 
-  function loadBankEvents(id) {
-    const bodyEl = document.getElementById(`bkd-body-${id}`);
-    if (bodyEl) loadBkdDetail(id, bodyEl);
-  }
 
-  function setupAC(inputId, dropId, field) {
-    const inp = document.getElementById(inputId);
-    if (!inp) return;
-    inp.addEventListener("input", () => {
-      api(`/api/banks/suggestions?field=${field}&q=${encodeURIComponent(inp.value.trim())}`, { bg: true })
-        .then((d) => {
-          const el = document.getElementById(dropId);
-          if (!el) return;
-          const items = d.suggestions || [];
-          if (!items.length) { el.style.display = "none"; return; }
-          // 定位策略交给 CSS，这里只配合：
-          // 表格里的下拉是 position:fixed（.ac-sheet），要逃出 .sheet-table-wrap 的滚动
-          // 容器，所以得写视口坐标；modal 里的是 absolute，靠 CSS 的 top/left 贴住
-          // .ac-wrap。对后者绝不能写 inline 坐标 —— .modal 带 transform + backdrop-filter，
-          // 会成为 containing block，视口坐标等于把 .modal 的位置再加一次（实测偏
-          // 464×47px，下拉直接跑到 modal 外面，用户看不到任何补全建议）。
-          const rect = inp.getBoundingClientRect();
-          if (getComputedStyle(el).position === "fixed") {
-            el.style.left = `${rect.left}px`;
-            el.style.top = `${rect.bottom + 2}px`;
-            el.style.width = `${Math.max(rect.width, 120)}px`;
-          } else {
-            el.style.left = "";
-            el.style.top = "";
-            el.style.width = "";
-          }
-          el.innerHTML = items.map((s) => `<li class="ac-item">${esc(s)}</li>`).join("");
-          el.style.display = "block";
-          el.querySelectorAll(".ac-item").forEach((li) => {
-            li.addEventListener("mousedown", (e) => {
-              e.preventDefault();
-              inp.value = li.textContent;
-              el.style.display = "none";
-            });
-          });
-        });
-    });
-    inp.addEventListener("blur", () => {
-      setTimeout(() => {
-        const el = document.getElementById(dropId);
-        if (el) el.style.display = "none";
-      }, 150);
-    });
-  }
-
-  function openPendingModal(initialTab) {
-    const tabs = document.querySelector(".pending-tabs");
-    if (tabs) {
-      tabs.setAttribute("role", "tablist");
-      tabs.setAttribute("aria-label", "\u5f85\u5ba1\u6279\u7c7b\u578b");
-    }
-    document.getElementById("pending-modal").classList.add("show");
-    loadPendingPanels().then(() => {
-      if (initialTab) switchPendingTab(initialTab);
-    });
-  }
-  function switchPendingTab(tab) {
+  // opts.silent\uff1a\u540e\u53f0\u5237\u65b0\u65f6\u53ea\u662f\u628a\u9875\u7b7e\u72b6\u6001\u753b\u56de\u53bb\uff0c\u4e0d\u7b97\u300c\u4eba\u770b\u8fc7\u4e86\u300d\uff0c\u4e0d\u80fd\u987a\u624b\u628a\u5e73\u53f0\u5f85\u5ba1\u6279
+  // \u62a5\u8b66 ack \u6389\uff08\u63a5\u5355\u533a\u5e38\u9a7b\u9875\u9762\uff0c\u6bcf\u8f6e\u5237\u65b0\u90fd ack \u7684\u8bdd\u62a5\u8b66\u6c38\u8fdc\u4e0d\u4f1a\u54cd\uff09\u3002
+  function switchPendingTab(tab, opts) {
     document.querySelectorAll(".pending-tab").forEach((b) => {
       const active = b.dataset.tab === tab;
       b.classList.toggle("active", active);
@@ -2200,18 +1480,19 @@ ${bannedCount > 0 ? `<button type="button" class="bk-banned-summary" id="rail-ba
       skippedPanel.hidden = tab !== "skipped";
       skippedPanel.style.display = tab === "skipped" ? "" : "none";
     }
-    if (tab === "tx" && typeof window.acknowledgePlatformPendingSound === "function") {
+    if (!opts?.silent && tab === "tx" && typeof window.acknowledgePlatformPendingSound === "function") {
       window.acknowledgePlatformPendingSound();
     }
   }
   function setPendingTabCounts(txCount, skippedCount) {
     lastSkippedPendingCount = Number(skippedCount || 0);
-    updatePendingWorkspaceSummary(txCount, skippedCount);
+    updateIntakeEmpty(txCount, skippedCount);
     document.querySelectorAll(".pending-tab").forEach((b) => {
       const tab = b.dataset.tab;
       const n = tab === "skipped" ? skippedCount : txCount;
       const base = tab === "skipped" ? "已跳过" : "平台订单";
-      b.textContent = n > 0 ? `${base} (${n})` : base;
+      // 笔数单独一个节点：整串「平台订单 (3)」不是字典 key，英文模式下会原样漏出中文。
+      b.innerHTML = `<span>${base}</span>${n > 0 ? ` <span class="pending-tab-count" translate="no">(${n})</span>` : ""}`;
     });
   }
   // 审批行的两个银行下拉：固定顺序、不加位置序号、不按「上次用过」重排（规则与测试见 ledger-bank-pick.js）。
@@ -2268,6 +1549,10 @@ ${bannedCount > 0 ? `<button type="button" class="bk-banned-summary" id="rail-ba
   }
   function bindPendingTxRow(tr) {
     tr.dataset.bound = "1";
+    // 员工动过这一行（日期、时间、模式、BANK、REMARK、拆分……）就标脏：后台刷新绝不重画它。
+    const markDirty = () => { tr.dataset.dirty = "1"; };
+    tr.addEventListener("input", markDirty);
+    tr.addEventListener("change", markDirty);
     const mode = tr.querySelector(".pend-mode");
     const dateInput = tr.querySelector(".pend-date-input");
     const syncPendingDateLabel = () => {
@@ -2345,28 +1630,92 @@ ${bannedCount > 0 ? `<button type="button" class="bk-banned-summary" id="rail-ba
       type: document.getElementById("pending-type")?.value || "",
     });
     pendingTxShown = 0;
-    txBody.innerHTML = pendingTxView.length
-      ? ""
-      : `<tr><td colspan="9" class="sheet-empty">${pendingTxAll.length ? "没有匹配的平台单" : "暂无待审批平台单"}</td></tr>`;
+    txBody.innerHTML = pendingTxView.length ? "" : pendingEmptyRowHtml();
     appendPendingTxRows(window.PENDING_PAGE_SIZE || 50);
   }
-  function loadPendingPanels() {
+  function pendingEmptyRowHtml() {
+    return `<tr class="pending-empty-row"><td colspan="9" class="sheet-empty">${pendingTxAll.length ? "没有匹配的平台单" : "暂无待审批平台单"}</td></tr>`;
+  }
+  // 别人审批 / 跳过掉了一行员工正在填的单：不拿掉（填的东西还在，人能看清发生了什么），
+  // 标灰、锁住，留一个「移除」。
+  function markPendingRowGone(tr) {
+    if (tr.classList.contains("pend-row-gone")) return;
+    tr.classList.add("pend-row-gone");
+    tr.querySelectorAll("input, select, button, textarea").forEach((el) => { el.disabled = true; });
+    tr.lastElementChild?.insertAdjacentHTML("beforeend",
+      '<span class="pend-gone-note">已被他人处理</span><button type="button" class="btn btn-outline btn-xs pend-dismiss">移除</button>');
+  }
+  // 后台刷新只做增量，与 renderPendingTx（搜索 / 类型筛选变了时的整块重画）分开：
+  // 新单按服务端顺序（tx_time 升序）插到该在的位置，已被处理的单拿掉；员工动过的行
+  // （data-dirty）绝不重画，被别人处理掉的只标灰。已经画出来的行一律原样保留。
+  function syncPendingTx() {
+    const txBody = document.getElementById("pending-tx-rows");
+    if (!txBody) return;
+    pendingTxView = window.filterPendingRows(pendingTxAll, {
+      q: document.getElementById("pending-search")?.value || "",
+      type: document.getElementById("pending-type")?.value || "",
+    });
+    const live = new Set(pendingTxAll.map((r) => String(r.tx_id)));
+    const rendered = new Map();
+    txBody.querySelectorAll("tr[data-txid]").forEach((row) => {
+      const id = row.dataset.txid;
+      if (live.has(id)) {
+        if (!row.classList.contains("pend-row-gone")) rendered.set(id, row);
+      } else if (row.dataset.dirty === "1") {
+        markPendingRowGone(row);
+      } else {
+        row.remove();
+      }
+    });
+    const limit = Math.max(pendingTxShown, window.PENDING_PAGE_SIZE || 50);
+    const defaultPendTime = nowTime();
+    let anchor = null;
+    let shown = 0;
+    for (const r of pendingTxView) {
+      if (shown >= limit) break;
+      let row = rendered.get(String(r.tx_id));
+      if (!row) {
+        const holder = document.createElement("tbody");
+        holder.innerHTML = pendingTxRowHtml(r, defaultPendTime);
+        row = holder.firstElementChild;
+        if (anchor) anchor.after(row);
+        else txBody.prepend(row);
+        bindPendingTxRow(row);
+      }
+      anchor = row;
+      shown += 1;
+    }
+    pendingTxShown = shown;
+    const emptyRow = txBody.querySelector("tr.pending-empty-row");
+    if (txBody.querySelector("tr[data-txid]")) emptyRow?.remove();
+    else if (emptyRow) emptyRow.outerHTML = pendingEmptyRowHtml();
+    else txBody.insertAdjacentHTML("beforeend", pendingEmptyRowHtml());
+    updatePendingMore();
+  }
+  let pendingLoadRequest = 0;
+  function loadPendingPanels(opts) {
+    const request = ++pendingLoadRequest;
+    const firstLoad = intakeCounts == null;
     return Promise.all([
       api("/api/banks/pending-tx", { bg: true }),
       api("/api/banks/pending-tx/skipped?limit=100", { bg: true }),
     ]).then(([tx, skipped]) => {
+      if (request !== pendingLoadRequest) return;
       const txRows = tx.rows || [];
       const skippedRows = skipped.rows || [];
+      intakeCounts = [txRows.length, skippedRows.length];
+      intakeLoadedAt = Date.now();
       setPendingTabCounts(txRows.length, skippedRows.length);
-      const activeTab = document.querySelector(".pending-tab.active")?.dataset.tab;
-      if (!activeTab) switchPendingTab(txRows.length ? "tx" : (skippedRows.length ? "skipped" : "tx"));
-      else switchPendingTab(activeTab);
+      const activeTab = document.querySelector(".pending-tab.active")?.dataset.tab || "tx";
+      if (firstLoad) switchPendingTab(txRows.length || !skippedRows.length ? "tx" : "skipped", { silent: true });
+      else switchPendingTab(activeTab, { silent: true });
 
       pendingTxAll = txRows;
-      renderPendingTx();
+      syncPendingTx();
 
+      // 已跳过这一页没有输入框，整块重画即可；数据没变就不碰（按钮别在人点下去之前被换掉）。
       const skippedBody = document.getElementById("pending-skipped-rows");
-      if (skippedBody) {
+      if (skippedBody && gateRender("pending-skipped", opts, skippedRows)) {
         skippedBody.innerHTML = skippedRows.map((r) => {
           const skippedName = ledgerNameText(r.name);
           return `
@@ -2566,58 +1915,6 @@ ${bannedCount > 0 ? `<button type="button" class="bk-banned-summary" id="rail-ba
     document.getElementById("transfer-modal")?.classList.add("show");
   }
 
-  // 封禁户「转出余额」：不解封，转到本公司运营中的户口（记两笔）或转给别家（C STATUS）。
-  // 记法与校验在服务端 bankApply.drainBannedAccount。
-  let drainBankId = 0;
-  let drainSubmitting = false;
-  function syncDrainMode() {
-    const company = document.getElementById("drain-mode")?.value === "company";
-    document.getElementById("drain-bank-group")?.toggleAttribute("hidden", company);
-    document.getElementById("drain-cstatus-group")?.toggleAttribute("hidden", !company);
-  }
-  function openDrainModal(id) {
-    const bank = bankRows.find((b) => String(b.id) === String(id));
-    if (!bank) return;
-    drainBankId = bank.id;
-    const g = (key) => document.getElementById(key);
-    const balance = bankLedgerBalance(bank);
-    g("drain-target").textContent = bankTargetFor(bank.id);
-    g("drain-mode").value = "bank";
-    g("drain-bank").innerHTML = window.bankSelectOptionsHtml(usableBanks(), tabLabel);
-    g("drain-cstatus").value = "";
-    g("drain-amount").value = balance > 0 ? balance.toFixed(2) : "";
-    g("drain-amount-hint").textContent = `BAL ${fmt(balance)}`;
-    g("drain-remark").value = "";
-    g("drain-err").textContent = "";
-    syncDrainMode();
-    g("drain-modal").classList.add("show");
-  }
-  function submitDrain() {
-    if (drainSubmitting || !drainBankId) return;
-    const g = (key) => document.getElementById(key);
-    const err = g("drain-err");
-    const company = g("drain-mode").value === "company";
-    const body = { amount: parseNum(g("drain-amount").value), remark: g("drain-remark").value.trim() };
-    if (company) body.c_status = g("drain-cstatus").value.trim();
-    else body.to_bank_account_id = Number(g("drain-bank").value || 0);
-    if (!(body.amount > 0)) { err.textContent = "请输入转出金额"; return; }
-    if (!company && !body.to_bank_account_id) { err.textContent = "请选择收款户口"; return; }
-    if (company && !body.c_status) { err.textContent = "请填写对方公司的 C STATUS"; return; }
-    drainSubmitting = true;
-    const submit = g("drain-submit");
-    if (submit) submit.disabled = true;
-    api(`/api/banks/${drainBankId}/drain`, { method: "POST", body: JSON.stringify(body) })
-      .then(() => {
-        g("drain-modal").classList.remove("show");
-        showToast("已转出", { tone: "success" });
-        return bkdMutate(Promise.resolve()).then(loadSheet).then(loadDailyReport);
-      })
-      .catch((e) => { err.textContent = e.message || "转出失败，请重试"; })
-      .finally(() => {
-        drainSubmitting = false;
-        if (submit) submit.disabled = false;
-      });
-  }
 
   function openCstatusModal() {
     renderCstatusManage();
@@ -2658,10 +1955,14 @@ ${bannedCount > 0 ? `<button type="button" class="bk-banned-summary" id="rail-ba
 
   const MOBILE_TAB_ACTIONS = ["pending", "ledger", "transfer", "channels"];
   function runMobileTab(action) {
-    if (action === "pending") openPendingModal();
+    if (action === "pending") openIntake("tx");
     else if (action === "transfer") openTransferModal();
-    else if (action === "channels") openBanksListModal({ tab: "operating" });
-    else if (action === "ledger") document.querySelector(".bkv2 .bk-grid-head")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    // 渠道已经是独立的一页（老书签 /bank-accounts.html#channels 也会走到这里）。
+    else if (action === "channels") location.href = "/bank-channels.html";
+    else if (action === "ledger") {
+      closeIntakeSheet();
+      document.querySelector(".bkv2 .bk-grid-head")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
   }
   function runMobileTabFromHash() {
     const action = String(location.hash || "").slice(1);
@@ -2669,6 +1970,15 @@ ${bannedCount > 0 ? `<button type="button" class="bk-banned-summary" id="rail-ba
     // 先清掉 hash：否则刷新页面会再弹一次，关掉弹窗后地址栏也还挂着它。
     try { history.replaceState(null, "", location.pathname + location.search); } catch (_) {}
     runMobileTab(action);
+  }
+  // 换公司：接单区里上一家公司的行（包括填了一半的）全部作废，不能被当成「已被他人处理」留着。
+  function resetIntake() {
+    intakeCounts = null;
+    pendingTxAll = [];
+    pendingTxShown = 0;
+    const txBody = document.getElementById("pending-tx-rows");
+    if (txBody) txBody.innerHTML = "";
+    renderGate.remember("pending-skipped", null); // 下一轮无论数据是什么都重画已跳过
   }
 
   function applyUpperCollapsed(collapsed) {
@@ -2682,9 +1992,39 @@ ${bannedCount > 0 ? `<button type="button" class="bk-banned-summary" id="rail-ba
   }
 
   document.addEventListener("DOMContentLoaded", () => {
+    // 老书签 /bank-accounts.html#channels 经 302 落到这里，hash 原样带着。
+    if (location.hash === "#channels") {
+      location.replace("/bank-channels.html");
+      return;
+    }
     sheetDate = todaySydney();
     const dateEl = document.getElementById("sheet-date");
     if (dateEl) dateEl.value = sheetDate;
+    activeBankId = bankFromUrl();
+
+    let intakeCollapsed = false;
+    try { intakeCollapsed = localStorage.getItem(INTAKE_COLLAPSED_KEY) === "1"; } catch (_) {}
+    setIntakeCollapsed(intakeCollapsed, false);
+    document.getElementById("bk-intake-toggle")?.addEventListener("click", () => {
+      setIntakeCollapsed(!intakeZone()?.classList.contains("is-collapsed"), true);
+    });
+    document.getElementById("bk-intake-close")?.addEventListener("click", closeIntakeSheet);
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && intakeZone()?.classList.contains("is-sheet-open")) closeIntakeSheet();
+    });
+    // 人点进接单区 = 看到了，平台待审批的报警进入静默（跟以前打开弹窗时一样）。
+    intakeZone()?.addEventListener("pointerdown", () => {
+      if (typeof window.acknowledgePlatformPendingSound === "function") window.acknowledgePlatformPendingSound();
+    });
+    // 宽屏 ↔ 手机来回切（转屏、拉窗口）时，浮层状态不能留在宽屏布局上。
+    MOBILE_MQ.addEventListener?.("change", () => { if (!MOBILE_MQ.matches) closeIntakeSheet(); });
+    document.getElementById("sheet-bank-filter")?.addEventListener("change", (e) => {
+      editingRowId = null;
+      adding = false;
+      hideGridPicker();
+      resetEnterSave();
+      setActiveBank(e.target.value);
+    });
 
     let upperCollapsed = true;
     try {
@@ -2699,7 +2039,6 @@ ${bannedCount > 0 ? `<button type="button" class="bk-banned-summary" id="rail-ba
     });
 
     populateStatusFilter();
-    setupAC("f-bankbranch", "ac-bankbranch", "bank_branch");
 
     // 手机底部标签栏：在本页直接执行；从别的页点过来带着 #pending 之类的 hash，
     // 等首轮数据（渠道列表）到齐再执行——调钱表单的 BANK 下拉要靠它填。
@@ -2710,11 +2049,14 @@ ${bannedCount > 0 ? `<button type="button" class="bk-banned-summary" id="rail-ba
       startSyncWatcher(() => reloadAll());
     }
     if (typeof bindCompanySwitch === "function") {
-      bindCompanySwitch(() => reloadAll());
+      bindCompanySwitch(() => {
+        resetIntake();
+        return reloadAll();
+      });
     }
     window.addEventListener("company-changed", refreshWorkspaceContext);
     window.addEventListener("language-changed", () => {
-      renderTabs();
+      renderBankFilter();
       renderGrid();
       applyUpperCollapsed(document.getElementById("sheet-upper-wrap")?.classList.contains("collapsed"));
     });
@@ -2764,82 +2106,6 @@ ${bannedCount > 0 ? `<button type="button" class="bk-banned-summary" id="rail-ba
     document.getElementById("sheet-search")?.addEventListener("input", renderGrid);
     document.getElementById("sheet-status-filter")?.addEventListener("change", renderGrid);
 
-    document.getElementById("sheet-tabs")?.addEventListener("click", (e) => {
-      if (e.target.closest(".bk-directory-toggle")) {
-        directoryOpen = !directoryOpen;
-        renderTabs();
-        return;
-      }
-      const bannedBtn = e.target.closest("#rail-banned-btn");
-      if (bannedBtn) { openBanksListModal({ tab: "banned" }); return; }
-      const copyBankBtn = e.target.closest("[data-copy-bank-id]");
-      if (copyBankBtn) {
-        e.stopPropagation();
-        copyBankDirectoryInfo(copyBankBtn.dataset.copyBankId);
-        return;
-      }
-      const bankSelector = e.target.closest("[data-bank-select]");
-      if (bankSelector && (!e.target.closest("button") || bankSelector.classList.contains("bk-directory-summary"))) {
-        activeBankId = bankSelector.dataset.bankSelect === "all" ? ALL_BANKS : Number(bankSelector.dataset.bankSelect);
-        renderTabs();
-        loadSheet();
-        return;
-      }
-      const copy = e.target.closest(".bk-copy[data-copy]");
-      if (copy) {
-        e.stopPropagation();
-        const text = copy.dataset.copy || "";
-        if (text && navigator.clipboard?.writeText) {
-          navigator.clipboard.writeText(text)
-            .then(() => showToast(`已复制 ${text}`, { tone: "success" }))
-            .catch(() => showToast("复制失败", { tone: "error" }));
-        }
-        return;
-      }
-      return;
-    });
-
-    const bankDirectory = document.getElementById("sheet-tabs");
-    bankDirectory?.addEventListener("keydown", (e) => {
-      const row = e.target.closest(".bk-bank-row");
-      if (!row || e.target.closest("button")) return;
-      if (e.key !== "Enter" && e.key !== " ") return;
-      e.preventDefault();
-      activeBankId = Number(row.dataset.id);
-      renderTabs();
-      loadSheet();
-    });
-    bankDirectory?.addEventListener("dragstart", (e) => {
-      const row = e.target.closest(".bk-bank-row");
-      if (!row || bankReorderBusy) return;
-      draggedBankId = Number(row.dataset.id);
-      row.classList.add("is-dragging");
-      if (e.dataTransfer) {
-        e.dataTransfer.effectAllowed = "move";
-        e.dataTransfer.setData("text/plain", String(draggedBankId));
-      }
-    });
-    bankDirectory?.addEventListener("dragover", (e) => {
-      const row = e.target.closest(".bk-bank-row");
-      if (!row || draggedBankId == null || Number(row.dataset.id) === draggedBankId) return;
-      e.preventDefault();
-      if (e.dataTransfer) e.dataTransfer.dropEffect = "move";
-      bankDirectory.querySelectorAll(".bk-bank-row.is-drag-over").forEach((el) => el.classList.remove("is-drag-over"));
-      row.classList.add("is-drag-over");
-    });
-    bankDirectory?.addEventListener("drop", (e) => {
-      const row = e.target.closest(".bk-bank-row");
-      if (!row || draggedBankId == null) return;
-      e.preventDefault();
-      const targetIndex = usableBanks().findIndex((b) => b.id === Number(row.dataset.id));
-      moveBankDirectoryRow(draggedBankId, targetIndex);
-      draggedBankId = null;
-      bankDirectory.querySelectorAll(".bk-bank-row.is-drag-over, .bk-bank-row.is-dragging").forEach((el) => el.classList.remove("is-drag-over", "is-dragging"));
-    });
-    bankDirectory?.addEventListener("dragend", () => {
-      draggedBankId = null;
-      bankDirectory.querySelectorAll(".bk-bank-row.is-drag-over, .bk-bank-row.is-dragging").forEach((el) => el.classList.remove("is-drag-over", "is-dragging"));
-    });
 
     const grid = document.getElementById("sheet-grid");
     grid?.addEventListener("keydown", handleGridKeydown, true);
@@ -2927,10 +2193,6 @@ ${bannedCount > 0 ? `<button type="button" class="bk-banned-summary" id="rail-ba
       }
     });
 
-    document.getElementById("add-bank-btn")?.addEventListener("click", () => openBankModal(null));
-    document.getElementById("bank-cancel-btn")?.addEventListener("click", closeBankModal);
-    document.getElementById("bank-save-btn")?.addEventListener("click", saveBankModal);
-    document.getElementById("sheet-manage-banks")?.addEventListener("click", () => openBanksListModal({ tab: "operating" }));
     document.getElementById("sheet-deleted-btn")?.addEventListener("click", openDeletedLedgerModal);
     document.getElementById("deleted-ledger-close")?.addEventListener("click", () => {
       document.getElementById("deleted-ledger-modal")?.classList.remove("show");
@@ -2939,135 +2201,7 @@ ${bannedCount > 0 ? `<button type="button" class="bk-banned-summary" id="rail-ba
       const restore = e.target.closest(".deleted-restore");
       if (restore) restoreDeletedLedger(Number(restore.dataset.id));
     });
-    document.getElementById("banks-list-close")?.addEventListener("click", () => {
-      document.getElementById("banks-list-modal").classList.remove("show");
-    });
-    document.getElementById("banks-list-modal")?.addEventListener("click", async (e) => {
-      const tabBtn = e.target.closest(".bkd-tab");
-      if (tabBtn) {
-        switchBkdTab(tabBtn.dataset.tab);
-        return;
-      }
-      const toggle = e.target.closest(".bkd-toggle-btn");
-      if (toggle) {
-        const id = Number(toggle.dataset.id);
-        const bodyEl = document.getElementById(`bkd-body-${id}`);
-        if (!bodyEl) return;
-        const open = !bodyEl.hidden;
-        bodyEl.hidden = open;
-        // \u5c55\u5f00\u96c6\u5408\u662f\u6e32\u67d3\u7684\u771f\u6e90\uff1a\u7ffb\u9875\u6216\u5207\u9875\u7b7e\u540e\u91cd\u65b0\u6e32\u67d3\u65f6\uff0c\u9760\u5b83\u6062\u590d\u5c55\u5f00\u72b6\u6001\u3002
-        if (open) bkdExpanded.delete(id);
-        else bkdExpanded.add(id);
-        toggle.setAttribute("aria-expanded", open ? "false" : "true");
-        toggle.textContent = open ? "\u25b8" : "\u25be";
-        if (!open && bodyEl.dataset.loaded === "0") loadBkdDetail(id, bodyEl);
-        return;
-      }
-      const edit = e.target.closest(".bkd-edit-btn");
-      if (edit) {
-        const row = bankRows.find((b) => String(b.id) === edit.dataset.id);
-        if (row) openBankModal(row);
-        return;
-      }
-      const ban = e.target.closest(".bkd-ban-btn");
-      if (ban) {
-        const note = await showPromptDialog({
-          title: "\u5c01\u7981\u652f\u4ed8\u6e20\u9053",
-          message: "\u5c01\u7981\u540e\u8be5\u6e20\u9053\u5c06\u4e0d\u518d\u53c2\u4e0e\u5f53\u524d\u8fd0\u8425\uff0c\u5e76\u8fdb\u5165\u300c\u5c01\u7981\u4e2d\u300d\u5f85\u6e05\u7406\u961f\u5217\u3002",
-          target: bankTargetFor(ban.dataset.id),
-          label: "\u5c01\u7981\u539f\u56e0\uff08\u53ef\u7559\u7a7a\uff09",
-          maxLength: 500,
-          confirmLabel: "\u786e\u8ba4\u5c01\u7981",
-        });
-        if (note == null) return;
-        bkdMutate(
-          api(`/api/banks/${ban.dataset.id}`, {
-            method: "PUT",
-            body: JSON.stringify({ ban: true, ban_note: note }),
-          })
-        );
-        return;
-      }
-      const drain = e.target.closest(".bkd-drain-btn");
-      if (drain) {
-        openDrainModal(drain.dataset.id);
-        return;
-      }
-      const unban = e.target.closest(".bkd-unban-btn");
-      if (unban) {
-        // 解封以前一点就生效：户口立刻回到审批和调钱的下拉里（员工演练里解封期间又被选中）。
-        const ok = await showConfirmDialog({
-          title: "解封支付渠道",
-          message: "解封后该渠道回到运营中，会重新出现在审批和调钱的银行下拉里。",
-          target: bankTargetFor(unban.dataset.id),
-          confirmLabel: "确认解封",
-          tone: "warning",
-        });
-        if (!ok) return;
-        bkdMutate(
-          api(`/api/banks/${unban.dataset.id}`, { method: "PUT", body: JSON.stringify({ unban: true }) })
-        );
-        return;
-      }
-      const archive = e.target.closest(".bkd-archive-btn");
-      if (archive) {
-        const note = await showPromptDialog({
-          title: "\u5f52\u6863\u652f\u4ed8\u6e20\u9053",
-          message: "\u5f52\u6863\u540e\u8be5\u6e20\u9053\u4e0d\u518d\u51fa\u73b0\u5728\u4efb\u4f55\u5217\u8868\u3001\u4e0b\u62c9\u4e0e Telegram \u63a8\u9001\u4e2d\uff0c\u5386\u53f2\u6d41\u6c34\u5168\u90e8\u4fdd\u7559\u3002\u968f\u65f6\u53ef\u5728\u300c\u5df2\u5f52\u6863\u300d\u9875\u7b7e\u53d6\u6d88\u5f52\u6863\u3002",
-          target: bankTargetFor(archive.dataset.id),
-          label: "\u5f52\u6863\u539f\u56e0\uff08\u53ef\u7559\u7a7a\uff09",
-          maxLength: 500,
-          confirmLabel: "\u786e\u8ba4\u5f52\u6863",
-        });
-        if (note == null) return;
-        bkdMutate(
-          api(`/api/banks/${archive.dataset.id}`, {
-            method: "PUT",
-            body: JSON.stringify({ archive: true, archive_note: note }),
-          }).then(() => {
-            // \u5f52\u6863\u6210\u529f\u540e\u90a3\u4e00\u884c\u79bb\u5f00\u5f53\u524d\u9875\u7b7e\uff0c\u4e0d\u8bf4\u4e00\u58f0\u4eba\u4f1a\u4ee5\u4e3a\u6e20\u9053\u88ab\u5220\u4e86\u3002
-            showToast(tr("\u5df2\u5f52\u6863\uff0c\u53ef\u5728\u300c\u5df2\u5f52\u6863\u300d\u9875\u7b7e\u67e5\u770b"), { tone: "success" });
-          })
-        );
-        return;
-      }
-      const unarchive = e.target.closest(".bkd-unarchive-btn");
-      if (unarchive) {
-        bkdMutate(
-          api(`/api/banks/${unarchive.dataset.id}`, {
-            method: "PUT",
-            body: JSON.stringify({ unarchive: true }),
-          }).then(() => {
-            // \u53d6\u6d88\u5f52\u6863\u56de\u843d\u5230\u300c\u5c01\u7981\u4e2d\u300d\u800c\u4e0d\u662f\u76f4\u63a5\u590d\u6d3b\uff0c\u8981\u518d\u663e\u5f0f\u89e3\u5c01\u4e00\u6b21\u624d\u56de\u8fd0\u8425\u3002
-            showToast(tr("\u5df2\u53d6\u6d88\u5f52\u6863\uff0c\u73b0\u5728\u5728\u300c\u5c01\u7981\u4e2d\u300d\u9875\u7b7e"), { tone: "success" });
-          })
-        );
-        return;
-      }
-      const chk = e.target.closest(".bank-active-chk");
-      if (chk) {
-        bkdMutate(
-          api(`/api/banks/${chk.dataset.id}`, {
-            method: "PUT",
-            body: JSON.stringify({ active: chk.checked ? 1 : 0 }),
-          })
-        );
-        return;
-      }
-    });
 
-    // \u641c\u7d22\u6846\u5728\u9762\u677f\u5916\u9762\uff0c\u6240\u4ee5\u4e0d\u4f1a\u88ab\u91cd\u6e32\u67d3\u51b2\u6389\u7126\u70b9\u3002\u4e0d\u52a0 debounce\uff1a\u8fc7\u6ee4\u7684\u662f\u5341\u51e0\u884c\u7684
-    // \u6570\u7ec4\uff0c\u6e32\u67d3\u884c\u6570\u53c8\u88ab\u5206\u9875\u9489\u6b7b\u5728 20 \u4ee5\u5185\u3002
-    document.getElementById("bkd-search")?.addEventListener("input", (e) => {
-      bkdQuery = e.target.value || "";
-      bkdPage[bkdTab] = 1;
-      renderBkdPanel();
-    });
-
-    document.getElementById("sheet-pending-btn")?.addEventListener("click", () => openPendingModal());
-    document.getElementById("bk-pending-platform")?.addEventListener("click", () => openPendingModal("tx"));
-    document.getElementById("bk-pending-skipped")?.addEventListener("click", () => openPendingModal("skipped"));
-    document.getElementById("bk-pending-open-all")?.addEventListener("click", () => openPendingModal());
     const moreMenu = document.querySelector(".bk-more-menu");
     const moreSummary = moreMenu?.querySelector("summary");
     const morePopover = moreMenu?.querySelector(".bk-more-popover");
@@ -3133,9 +2267,6 @@ ${bannedCount > 0 ? `<button type="button" class="bk-banned-summary" id="rail-ba
       const parsed = parseTransferAmount(document.getElementById("trf-amount")?.value);
       if (parsed.state === "valid") renderTransferPreview(parsed);
     });
-    document.getElementById("pending-close")?.addEventListener("click", () => {
-      document.getElementById("pending-modal").classList.remove("show");
-    });
     document.querySelectorAll(".pending-tab").forEach((btn) => {
       btn.addEventListener("click", () => switchPendingTab(btn.dataset.tab));
     });
@@ -3146,6 +2277,11 @@ ${bannedCount > 0 ? `<button type="button" class="bk-banned-summary" id="rail-ba
       const tr = e.target.closest("tr[data-txid]");
       if (!tr) return;
       const txId = tr.dataset.txid;
+      if (e.target.closest(".pend-dismiss")) {
+        tr.remove();
+        syncPendingTx();
+        return;
+      }
       if (e.target.closest(".pend-skip")) {
         requestOperationReason({
           title: "跳过平台单",
@@ -3157,11 +2293,18 @@ ${bannedCount > 0 ? `<button type="button" class="bk-banned-summary" id="rail-ba
           return api(`/api/banks/pending-tx/${encodeURIComponent(txId)}/skip`, {
             method: "POST",
             body: JSON.stringify({ reason }),
-          }).then(() => { showToast("已跳过，今天内可在「已跳过」恢复", { tone: "success" }); loadPendingPanels(); refreshPendingBadge(); });
+          }).then(() => {
+            // 先拿掉这一行：它是员工自己动过的（脏行），不拿掉会被刷新当成「已被他人处理」。
+            tr.remove();
+            showToast("已跳过，今天内可在「已跳过」恢复", { tone: "success" });
+            loadPendingPanels();
+            refreshPendingBadge();
+          });
         });
         return;
       }
-      if (!e.target.closest(".pend-approve")) return;
+      const approveBtn = e.target.closest(".pend-approve");
+      if (!approveBtn || approveBtn.disabled) return;
       const modeEl = tr.querySelector(".pend-mode");
       const mode = modeEl ? modeEl.value : "bank";
       if (mode === "split" && !updatePendingSplitState(tr)) return;
@@ -3186,11 +2329,19 @@ ${bannedCount > 0 ? `<button type="button" class="bk-banned-summary" id="rail-ba
         body.self_bank_account_id = Number(tr.querySelector(".pend-split-self-bank")?.value || 0) || null;
         body.splits = pendingSplitRows(tr);
       }
+      // 接单区常驻页面，连点两下的机会比弹窗多：请求在途时锁住这一行的审批按钮。
+      approveBtn.disabled = true;
       api(`/api/banks/pending-tx/${encodeURIComponent(txId)}/approve`, {
         method: "POST",
         body: JSON.stringify(body),
-      }).then(() => reloadAll().then(loadPendingPanels))
-        .catch((err) => showToast(err.message || "审批失败", { tone: "error" }));
+      }).then(() => {
+        tr.remove(); // 同上：先拿掉，别被刷新标成「已被他人处理」
+        return reloadAll().then(() => loadPendingPanels());
+      }).catch((err) => {
+        approveBtn.disabled = false;
+        if (mode === "split") updatePendingSplitState(tr);
+        showToast(err.message || "审批失败", { tone: "error" });
+      });
     });
     document.getElementById("pending-skipped-rows")?.addEventListener("click", (e) => {
       const restore = e.target.closest(".pend-restore");
@@ -3232,11 +2383,6 @@ ${bannedCount > 0 ? `<button type="button" class="bk-banned-summary" id="rail-ba
     document.getElementById("trf-cancel")?.addEventListener("click", () => {
       document.getElementById("transfer-modal").classList.remove("show");
     });
-    document.getElementById("drain-mode")?.addEventListener("change", syncDrainMode);
-    document.getElementById("drain-cancel")?.addEventListener("click", () => {
-      document.getElementById("drain-modal").classList.remove("show");
-    });
-    document.getElementById("drain-submit")?.addEventListener("click", submitDrain);
     document.getElementById("trf-submit")?.addEventListener("click", () => {
       const g = (id) => document.getElementById(id);
       if (transferSubmitting) return;

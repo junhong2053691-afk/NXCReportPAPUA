@@ -97,7 +97,7 @@ test("路由只认 req.companyId（不回退 session），前端封禁行有入�
   const path = require("node:path");
   const routes = fs.readFileSync(path.join(__dirname, "../routes/banks.js"), "utf8");
   assert.match(routes, /router\.post\("\/:id\/drain"[\s\S]{0,200}drainBannedAccount\(getDb\(\), companyId\(req\)/);
-  const page = fs.readFileSync(path.join(__dirname, "../../public/js/bank-accounts.js"), "utf8");
+  const page = fs.readFileSync(path.join(__dirname, "../../public/js/bank-channels.js"), "utf8");
   assert.match(page, /bkd-drain-btn/);
   assert.match(page, /\/api\/banks\/\$\{drainBankId\}\/drain/);
 });

@@ -167,7 +167,7 @@ test("status：自定义状态选项同样校验格式", () => {
 });
 
 test("statusClass：即便库里已有恶意值，也闭合不了 class 属性", () => {
-  const source = fs.readFileSync(path.join(ROOT, "public", "js", "bank-accounts.js"), "utf8");
+  const source = fs.readFileSync(path.join(ROOT, "public", "js", "bank-common.js"), "utf8");
   const match = source.match(/function statusClass\(status\) \{[\s\S]*?\n  \}/);
   assert.ok(match, "statusClass 不在预期位置");
   const statusClass = new Function(match[0] + "; return statusClass;")();

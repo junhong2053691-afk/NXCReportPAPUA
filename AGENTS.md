@@ -116,7 +116,8 @@ $env:TUNNEL_EDGE_IP_VERSION="4"
 | `/` | `home.js` | 首页看板 |
 | `/transactions.html` | `transactions.js` | 实时交易 |
 | `/customers.html` | `customers.js` | 客户列表 + 分群 |
-| `/bank-accounts.html` | `bank-accounts.js` | 支付渠道 + 账单流水 |
+| `/bank-ledger.html` | `bank-ledger.js` | 当日流水：流水表格 + 接单区（平台单审批 / 已跳过）+ 调钱 + 今日报表 / C STATUS |
+| `/bank-channels.html` | `bank-channels.js` | 支付渠道：全部渠道汇总 + 运营中 / 封禁中 / 已归档 + 渠道编辑 / 转出余额 |
 | `/company-settings.html` | `company-settings.js` | 公司/API 配置（admin） |
 
 ## 支付渠道 & 账单流水 (`/api/banks`)
@@ -137,7 +138,7 @@ $env:TUNNEL_EDGE_IP_VERSION="4"
 | POST/PUT/DELETE | `/api/banks/ledger/:id` | 流水 CRUD，会联动账户余额 |
 | GET | `/api/banks/suggestions` | 银行名自动补全 |
 
-### 前端快捷录入（`bank-accounts.js`）
+### 前端快捷录入（`bank-ledger.js`）
 
 | 按钮 | mode | 字段 |
 |---|---|---|
