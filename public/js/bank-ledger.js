@@ -798,6 +798,8 @@
       }
       if (!gateRender("banks", opts, { rows: bankRows, active: activeBankId })) return;
       renderBankFilter();
+      renderLivePicker();
+      refreshDepositBankSelects();
     });
   }
   // 工具栏的「渠道」下拉：ALL + 运营中渠道，顺序与编号同支付渠道页。渠道目录挪到支付渠道页
@@ -1502,6 +1504,95 @@
   function pendingBankOptionsHtml() {
     return window.bankSelectOptionsHtml(usableBanks(), tabLabel);
   }
+
+  // ---- 实时收款银行（server/lib/bankLiveReceiving.js）---------------------------
+  // 接单区顶上勾最多 3 个「现在正在收款的户」。充值单的 BANK 下拉只列它们、不预选，末尾留
+  // 「其他渠道…」：客户转进了非实时的户（比如还在用旧户）时，选它就展开完整列表——不留退路
+  // 会在真实对账时把人卡死。一个都没勾就是原来的完整列表。提现单不受影响。
+  const OTHER_BANKS = "__other__";
+  const LIVE_MAX = 3;
+  let liveSaving = false;
+  function liveBanks() {
+    return usableBanks().filter((b) => Number(b.live_receiving));
+  }
+  function depositBankOptionsHtml() {
+    const live = liveBanks();
+    if (!live.length) return pendingBankOptionsHtml();
+    return window.bankSelectOptionsHtml(live, tabLabel)
+      + `<option value="${OTHER_BANKS}">其他渠道…</option>`;
+  }
+  // 实时名单变了：没动过的充值行就地换下拉；员工动过的行（data-dirty）与已展开完整列表的
+  // 不碰——正在选的东西不能在手里被换掉。
+  function refreshDepositBankSelects() {
+    document.querySelectorAll('#pending-tx-rows tr[data-txid]:not([data-dirty="1"]) select.pend-bank-deposit:not([data-expanded])')
+      .forEach((sel) => { sel.innerHTML = depositBankOptionsHtml(); });
+  }
+  function renderLivePicker() {
+    const box = document.getElementById("bk-live");
+    if (!box) return;
+    const usable = usableBanks();
+    box.hidden = !usable.length;
+    if (!usable.length) return;
+    const live = liveBanks();
+    const open = Boolean(box.querySelector(".bk-live-pop:not([hidden])"));
+    const chips = live.map((b) =>
+      `<span class="bk-live-chip"><span translate="no">${esc(tabLabel(b))}</span><button type="button" class="bk-live-remove" data-id="${b.id}" aria-label="取消实时收款" title="取消实时收款"${liveSaving ? " disabled" : ""}>×</button></span>`
+    ).join("");
+    const full = live.length >= LIVE_MAX;
+    const options = usable.map((b) => {
+      const checked = Number(b.live_receiving) === 1;
+      const idle = !Number(b.active);
+      const disabled = liveSaving || idle || (full && !checked);
+      return `<label class="bk-live-option${disabled ? " is-disabled" : ""}"><input type="checkbox" class="bk-live-check" value="${b.id}"${checked ? " checked" : ""}${disabled ? " disabled" : ""}><span translate="no">${esc(tabLabel(b))}</span>${idle ? `<small>${esc(tr("未启用"))}</small>` : ""}</label>`;
+    }).join("");
+    box.innerHTML = `<span class="bk-live-label">实时收款</span>`
+      + (chips || `<span class="bk-live-empty">未设置实时收款银行</span>`)
+      + `<button type="button" class="bk-live-add" aria-haspopup="true" aria-expanded="${open ? "true" : "false"}">+ 选择</button>`
+      + `<div class="bk-live-pop"${open ? "" : " hidden"}><div class="bk-live-pop-head"><span>最多选 3 个</span><strong translate="no">${live.length} / ${LIVE_MAX}</strong></div>${options}</div>`;
+  }
+  function saveLiveReceiving(ids) {
+    if (liveSaving) return Promise.resolve();
+    liveSaving = true;
+    renderLivePicker();
+    return api("/api/banks/live-receiving", { method: "PUT", body: JSON.stringify({ bank_ids: ids }) })
+      .then(() => loadBanks())
+      .catch((e) => showToast(e.message || "保存失败", { tone: "error" }))
+      .finally(() => {
+        liveSaving = false;
+        renderLivePicker();
+        refreshDepositBankSelects();
+      });
+  }
+  function bindLivePicker() {
+    const box = document.getElementById("bk-live");
+    if (!box || box.dataset.bound === "1") return;
+    box.dataset.bound = "1";
+    const setOpen = (open) => {
+      box.querySelector(".bk-live-pop")?.toggleAttribute("hidden", !open);
+      box.querySelector(".bk-live-add")?.setAttribute("aria-expanded", open ? "true" : "false");
+    };
+    box.addEventListener("click", (e) => {
+      if (e.target.closest(".bk-live-add")) {
+        setOpen(Boolean(box.querySelector(".bk-live-pop[hidden]")));
+        return;
+      }
+      const remove = e.target.closest(".bk-live-remove");
+      if (remove) saveLiveReceiving(liveBanks().map((b) => b.id).filter((id) => id !== Number(remove.dataset.id)));
+    });
+    box.addEventListener("change", (e) => {
+      const chk = e.target.closest(".bk-live-check");
+      if (!chk) return;
+      const ids = liveBanks().map((b) => b.id).filter((id) => id !== Number(chk.value));
+      if (chk.checked) ids.push(Number(chk.value));
+      saveLiveReceiving(ids);
+    });
+    document.addEventListener("pointerdown", (e) => {
+      if (!box.contains(e.target)) setOpen(false);
+    });
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && !box.querySelector(".bk-live-pop[hidden]")) setOpen(false);
+    });
+  }
   // 待处理平台单：先画一批，「显示更多」往后追加，不重画已有的行（员工填了一半的不丢）。
   // 搜索与类型筛选规则见 pending-filter.js（有测试）。2026-11-06 员工演练：400+ 行一次全画、
   // 没有搜索和分页。
@@ -1539,7 +1630,7 @@
              <button type="button" class="btn btn-outline btn-xs pend-split-add">+ 添加协助方</button>
              <p class="pend-split-error" role="alert" aria-live="polite"></p>
            </div>`
-        : `<select class="pend-bank">${pendingBankOptionsHtml()}</select>`}</td>
+        : `<select class="pend-bank pend-bank-deposit">${depositBankOptionsHtml()}</select>`}</td>
       <td><input class="pend-remark" placeholder="REMARK"></td>
       <td>
         <button type="button" class="btn btn-success btn-xs pend-approve">审批</button>
@@ -1553,6 +1644,15 @@
     const markDirty = () => { tr.dataset.dirty = "1"; };
     tr.addEventListener("input", markDirty);
     tr.addEventListener("change", markDirty);
+    // 充值单选「其他渠道…」：这一行的下拉展开成完整列表（只这一行），让人重新选。
+    const depositBank = tr.querySelector("select.pend-bank-deposit");
+    depositBank?.addEventListener("change", () => {
+      if (depositBank.value !== OTHER_BANKS) return;
+      depositBank.innerHTML = pendingBankOptionsHtml();
+      depositBank.dataset.expanded = "1";
+      depositBank.focus();
+      try { depositBank.showPicker?.(); } catch (_) {}
+    });
     const mode = tr.querySelector(".pend-mode");
     const dateInput = tr.querySelector(".pend-date-input");
     const syncPendingDateLabel = () => {
@@ -2009,6 +2109,7 @@
       setIntakeCollapsed(!intakeZone()?.classList.contains("is-collapsed"), true);
     });
     document.getElementById("bk-intake-close")?.addEventListener("click", closeIntakeSheet);
+    bindLivePicker();
     document.addEventListener("keydown", (e) => {
       if (e.key === "Escape" && intakeZone()?.classList.contains("is-sheet-open")) closeIntakeSheet();
     });

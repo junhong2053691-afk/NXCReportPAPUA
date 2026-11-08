@@ -4996,6 +4996,61 @@ body.tr-drawer-open { overflow: hidden; }
 .bk-intake-toggle svg { width: 16px; height: 16px; transition: transform .18s var(--ease); }
 .bk-intake.is-collapsed .bk-intake-toggle svg { transform: rotate(-90deg); }
 #bk-intake .pending-tabs { margin: 0; }
+/* 实时收款银行选择器（bank-ledger.js 的 renderLivePicker） */
+.bk-live { position: relative; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; min-width: 0; }
+.bk-live[hidden] { display: none; }
+.bk-live-label { color: var(--text-soft); font-size: 11px; font-weight: var(--weight-black); letter-spacing: .04em; }
+.bk-live-empty { color: var(--orange); font-size: 11px; }
+.bk-live-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 220px;
+  padding: 2px 4px 2px 8px;
+  border: 1px solid color-mix(in srgb, var(--green, #10b981) 40%, var(--border));
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--green, #10b981) 12%, var(--surface-solid));
+  color: var(--text);
+  font-size: 11px;
+  font-weight: var(--weight-bold);
+}
+.bk-live-chip > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bk-live-remove, .bk-live-add {
+  border: 0;
+  background: transparent;
+  color: var(--text-soft);
+  font: inherit;
+  cursor: pointer;
+}
+.bk-live-remove { display: inline-grid; place-items: center; width: 20px; height: 20px; border-radius: 999px; font-size: 14px; line-height: 1; }
+.bk-live-remove:hover { background: var(--surface-2); color: var(--red); }
+.bk-live-add { padding: 3px 8px; border: 1px dashed var(--border-strong); border-radius: 999px; font-size: 11px; font-weight: var(--weight-bold); }
+.bk-live-add:hover { color: var(--primary-text); border-color: var(--primary); }
+.bk-live-pop {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: var(--z-sticky);
+  display: grid;
+  gap: 2px;
+  min-width: 260px;
+  max-height: 320px;
+  overflow-y: auto;
+  padding: 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--surface-solid);
+  box-shadow: var(--shadow-sm);
+}
+.bk-live-pop[hidden] { display: none; }
+.bk-live-pop-head { display: flex; justify-content: space-between; padding: 2px 4px 6px; color: var(--muted); font-size: 11px; }
+.bk-live-option { display: flex; align-items: center; gap: 8px; padding: 6px; border-radius: var(--radius-sm); font-size: 12px; cursor: pointer; }
+.bk-live-option:hover { background: var(--surface-2); }
+/* 要压过 #bk-intake input { width: 100% } 那条（ID 选择器）。 */
+#bk-intake .bk-live-option input { flex: 0 0 auto; width: 16px; height: 16px; min-height: 0; margin: 0; }
+.bk-live-option > span { white-space: nowrap; }
+.bk-live-option small { margin-left: auto; color: var(--muted); }
+.bk-live-option.is-disabled { color: var(--muted); cursor: not-allowed; }
 .bk-intake-empty { color: var(--text-soft); font-size: 12px; }
 .bk-intake-empty[hidden] { display: none; }
 .bk-intake-actions { display: flex; align-items: center; gap: 8px; margin-left: auto; }

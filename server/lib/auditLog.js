@@ -30,7 +30,7 @@ const LEDGER_FIELDS = [
 const BANK_ACCOUNT_FIELDS = [
   "id", "company_id", "bank_branch", "bank", "branch", "account_name", "bsb",
   "account_number", "payid", "active", "reset_daily_balance", "account_kind",
-  "lifecycle_status", "sort_order", "note", "alert_threshold", "created_at", "updated_at",
+  "lifecycle_status", "sort_order", "note", "alert_threshold", "live_receiving", "created_at", "updated_at",
 ];
 // 注意 alert_fired_at / alert_fired_date / alert_fired_balance 这三列刻意不在此列：
 // 它们是系统状态而非用户编辑项，加进来只会让 diffFields 产生噪声。

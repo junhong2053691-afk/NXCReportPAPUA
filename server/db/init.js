@@ -330,6 +330,8 @@ function migrate(database) {
         // 于是升级后正在超标且已报过的账户会立刻再报一条——那是对的（新规则下它本来
         // 就该报），而且只有一条。
         ["alert_fired_balance", "REAL NOT NULL DEFAULT 0"],
+        // 实时收款银行（lib/bankLiveReceiving.js）。只经专用端点整组替换，不在 PUT 白名单。
+        ["live_receiving", "INTEGER NOT NULL DEFAULT 0"],
       ]) {
         if (!baCols.includes(col)) database.exec(`ALTER TABLE bank_accounts ADD COLUMN ${col} ${def}`);
       }

@@ -26,6 +26,7 @@ function bankDatabase() {
       alert_fired_at TEXT NOT NULL DEFAULT '',
       alert_fired_date TEXT NOT NULL DEFAULT '',
       alert_fired_balance REAL NOT NULL DEFAULT 0,
+      live_receiving INTEGER NOT NULL DEFAULT 0,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     );

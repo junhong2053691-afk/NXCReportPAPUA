@@ -41,6 +41,7 @@ const {
   deleteStatusOption,
 } = require("../lib/bankStatusOptions");
 const { listCompaniesForUser } = require("../lib/userAccess");
+const { setLiveReceiving } = require("../lib/bankLiveReceiving");
 const { appealDeposits } = require("../lib/appealExport");
 const { requireAdmin } = require("../middleware");
 const {
@@ -70,6 +71,7 @@ function enrichBankRow(db, r, stats) {
     total_out: s.total_out,
     account_kind: r.account_kind || "nominee",
     lifecycle_status: r.lifecycle_status || "active",
+    live_receiving: r.live_receiving ? 1 : 0,
   };
 }
 
@@ -442,6 +444,40 @@ router.post("/", (req, res) => {
   res.json({ row: enrichBankRow(db, row) });
 });
 
+// 实时收款银行：整组替换（规则见 lib/bankLiveReceiving.js）。必须注册在 PUT /:id 之前，
+// 否则 "live-receiving" 会被当成 :id。operator 与 admin 都能改——这是当班员工的日常操作。
+router.put("/live-receiving", (req, res) => {
+  const cid = companyId(req);
+  const db = getDb();
+  const name = (id) => {
+    const r = db.prepare("SELECT * FROM bank_accounts WHERE id = ? AND company_id = ?").get(id, cid);
+    return r ? bankBranchOf(r) || r.account_name || `#${id}` : `#${id}`;
+  };
+  let result;
+  try {
+    result = runAtomic(db, () => {
+      const changed = setLiveReceiving(db, cid, req.body?.bank_ids);
+      if (changed.before.join(",") !== changed.after.join(",")) {
+        appendAuditEvent(db, {
+          companyId: cid,
+          action: "bank_account.live_receiving",
+          source: "user",
+          actor: actorFromRequest(req),
+          summary: `实时收款银行：${changed.after.map(name).join("、") || "（无）"}`,
+          before: { live_receiving: changed.before.map(name) },
+          after: { live_receiving: changed.after.map(name) },
+          metadata: { before_ids: changed.before, after_ids: changed.after },
+          refs: [...new Set([...changed.before, ...changed.after])].map((id) => ({ type: "bank_account", id })),
+        });
+      }
+      return changed;
+    });
+  } catch (e) {
+    return res.status(e.status || 500).json({ error: e.status ? e.message : "保存失败" });
+  }
+  res.json({ bank_ids: result.after });
+});
+
 router.put("/:id", (req, res) => {
   const cid = companyId(req);
   const id = Number(req.params.id);
@@ -523,6 +559,12 @@ router.put("/:id", (req, res) => {
       sets.push("active = ?");
       vals.push(lifecycleOp.active);
     }
+  }
+  // 封禁 / 归档 / 取消「使用中」的户不能再挂在实时收款里，同一条 UPDATE 清掉
+  // （lib/bankLiveReceiving.js）。解封不恢复——要再用得重新勾。
+  if ((lifecycleOp && lifecycleOp.status !== LIFECYCLE.ACTIVE)
+    || (req.body.active !== undefined && !Number(req.body.active))) {
+    sets.push("live_receiving = 0");
   }
 
   if (!sets.length) return res.status(400).json({ error: "No fields to update" });
