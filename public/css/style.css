@@ -4258,6 +4258,7 @@ body.tr-drawer-open { overflow: hidden; }
   }
   .mobile-tabbar > a:active,
   .mobile-tabbar > button:active { background: var(--surface-2); }
+  .mobile-tabbar > a[aria-current="page"] { color: var(--primary-text); }
   .mobile-tabbar svg { width: 22px; height: 22px; }
   .mobile-tabbar span { overflow: hidden; max-width: 100%; text-overflow: ellipsis; white-space: nowrap; }
   .mobile-tabbar-badge {

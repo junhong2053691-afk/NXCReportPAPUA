@@ -548,9 +548,16 @@ function updateMobileTabbarBadge(n) {
 
 // 底部标签栏：当日流水页注册了 window.bankMobileTab，就地执行；其他页面不拦，
 // <a href="/bank-ledger.html#动作"> 照常跳过去，由那边读 hash 执行。
+// 拆页后银行有两页，标签栏标出当前所在的那一页（.scratch/ui-responsive/decisions.md 增量 I）。
+const MOBILE_TAB_CURRENT = { "/bank-ledger.html": "ledger", "/bank-channels.html": "channels" };
 function setupMobileTabbar() {
   const bar = document.getElementById("mobile-tabbar");
   if (!bar) return;
+  const current = MOBILE_TAB_CURRENT[location.pathname];
+  if (current) {
+    const tab = bar.querySelector('[data-tab-action="' + current + '"]');
+    if (tab) tab.setAttribute("aria-current", "page");
+  }
   bar.addEventListener("click", function (e) {
     const el = e.target.closest("[data-tab-action]");
     if (!el) return;
