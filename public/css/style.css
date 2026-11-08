@@ -5086,6 +5086,34 @@ body.tr-drawer-open { overflow: hidden; }
 .bk-live-option > span { white-space: nowrap; }
 .bk-live-option small { margin-left: auto; color: var(--muted); }
 .bk-live-option.is-disabled { color: var(--muted); cursor: not-allowed; }
+.bk-live-add-mob { display: none; }
+/* 手机（decisions.md 增量 G）：选满 3 户时标签把浮层头部折成四行（约 170px），而头部不跟着滚。
+   头部只留一个「实时收款 N」按钮，标签和 × 都不摆，增删全在弹层里勾；弹层改挂在整个头部下面、
+   左右各留 12px，每行 44px。 */
+@media (max-width: 700px) {
+  .bk-intake-head { position: relative; }
+  .bk-live { position: static; }
+  .bk-live-label,
+  .bk-live-chip,
+  .bk-live-empty,
+  .bk-live-add-desk { display: none; }
+  .bk-live-add-mob { display: inline-flex; align-items: center; gap: 6px; }
+  .bk-live-add {
+    min-height: 40px;
+    padding: 6px 14px;
+    border-style: solid;
+    border-color: color-mix(in srgb, var(--green, #10b981) 40%, var(--border));
+    background: color-mix(in srgb, var(--green, #10b981) 12%, var(--surface-solid));
+    color: var(--text);
+    font-size: 12px;
+  }
+  .bk-live-add b { font-family: var(--font-mono); font-size: 13px; }
+  .bk-live-add.is-empty { border-color: color-mix(in srgb, var(--orange) 50%, var(--border)); background: transparent; color: var(--orange); }
+  .bk-live-pop { top: calc(100% - 4px); right: 12px; left: 12px; min-width: 0; max-height: 60vh; }
+  .bk-live-option { min-height: 44px; padding: 8px; font-size: 14px; }
+  .bk-live-option > span { overflow: hidden; text-overflow: ellipsis; }
+  #bk-intake .bk-live-option input { width: 20px; height: 20px; }
+}
 .bk-intake-empty { color: var(--text-soft); font-size: 12px; }
 .bk-intake-empty[hidden] { display: none; }
 .bk-intake-actions { display: flex; align-items: center; gap: 8px; margin-left: auto; }

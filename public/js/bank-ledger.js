@@ -1545,9 +1545,14 @@
       const disabled = liveSaving || idle || (full && !checked);
       return `<label class="bk-live-option${disabled ? " is-disabled" : ""}"><input type="checkbox" class="bk-live-check" value="${b.id}"${checked ? " checked" : ""}${disabled ? " disabled" : ""}><span translate="no">${esc(tabLabel(b))}</span>${idle ? `<small>${esc(tr("未启用"))}</small>` : ""}</label>`;
     }).join("");
+    // 按钮里两套文案，CSS 按宽度二选一：电脑「+ 选择」；手机（≤700）头部只剩这一个按钮
+    // 「实时收款 N」，标签都收进弹层里（.scratch/ui-responsive/decisions.md 增量 G）。
+    const mobileLabel = live.length
+      ? `<span>实时收款</span> <b translate="no">${live.length}</b>`
+      : `<span>未设置实时收款银行</span>`;
     box.innerHTML = `<span class="bk-live-label">实时收款</span>`
       + (chips || `<span class="bk-live-empty">未设置实时收款银行</span>`)
-      + `<button type="button" class="bk-live-add" aria-haspopup="true" aria-expanded="${open ? "true" : "false"}">+ 选择</button>`
+      + `<button type="button" class="bk-live-add${live.length ? "" : " is-empty"}" aria-haspopup="true" aria-expanded="${open ? "true" : "false"}"><span class="bk-live-add-desk">+ 选择</span><span class="bk-live-add-mob">${mobileLabel}</span></button>`
       + `<div class="bk-live-pop"${open ? "" : " hidden"}><div class="bk-live-pop-head"><span>最多选 3 个</span><strong translate="no">${live.length} / ${LIVE_MAX}</strong></div>${options}</div>`;
   }
   function saveLiveReceiving(ids) {
