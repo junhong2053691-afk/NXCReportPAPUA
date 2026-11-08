@@ -176,7 +176,7 @@ function trRenderDrawer() {
   trDrawer.page = Math.min(trDrawer.page, pages);
   const start = (trDrawer.page - 1) * TR_DRAWER_PAGE_SIZE;
   html +=
-    '<div class="table-wrap cd-tx-table"><table><thead><tr><th>客户</th><th>注册日</th><th>首充日</th><th>首充额</th>' +
+    '<div class="table-wrap cd-tx-table"><table data-m="title:1 metric:5,7"><thead><tr><th>客户</th><th>注册日</th><th>首充日</th><th>首充额</th>' +
     "<th>本期充值</th><th>本期提现</th><th>NET</th></tr></thead><tbody>" +
     list
       .slice(start, start + TR_DRAWER_PAGE_SIZE)

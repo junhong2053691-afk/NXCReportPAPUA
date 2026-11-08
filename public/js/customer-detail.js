@@ -96,7 +96,7 @@
       '<a class="btn btn-primary btn-sm" id="cd-tx-link" href="/transactions.html">查看全部交易</a>' +
       "</div>" +
       '<h3 class="cd-section-title">最近交易</h3>' +
-      '<div class="table-wrap cd-tx-table"><table><thead><tr><th>时间</th><th>类型</th><th>金额</th><th>状态</th></tr></thead><tbody>';
+      '<div class="table-wrap cd-tx-table"><table data-m="title:3 meta:2,1"><thead><tr><th>时间</th><th>类型</th><th>金额</th><th>状态</th></tr></thead><tbody>';
 
     const txs = data.transactions || [];
     if (!txs.length) {

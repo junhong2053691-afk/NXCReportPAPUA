@@ -156,7 +156,9 @@ $env:TUNNEL_EDGE_IP_VERSION="4"
 - **手机宽表 = 卡片 + 底部抽屉**（`public/js/mobile-table-drawer.js`，≤700）：报表页 13 张表的 `<table>` 上写
   `data-m="lead:1 title:2 metric:6,14 meta:3 native:tr[data-month]"`（列号按表头列算，从 1 起）。脚本只给 td 加
   `data-m` 等属性、跟着重渲染补，页面脚本不用改。新加的宽报表照这个挂；**行本身有点击动作的表必须写 `native`**，
-  否则手机上点行会弹通用抽屉而不是原动作。测试 `server/tests/mobile-table-drawer.test.js` 数着 `data-m` 的张数
+  否则手机上点行会弹通用抽屉而不是原动作。测试 `server/tests/mobile-table-drawer.test.js` 数着 `data-m` 的张数。
+  抽屉里现拼的表（顾客详情「最近交易」、TOP REFERRAL 推荐人抽屉的下线表）在 JS 字符串里写 `data-m` 也生效，
+  脚本靠 body 上的 observer 发现新插入的表；底部抽屉的层级在这两个抽屉之上
 
 ### 声音报警 (`public/js/alarm.js`)
 

@@ -4932,7 +4932,8 @@ body.tr-drawer-open { overflow: hidden; }
   .table-wrap > table[data-m] > * > tr[data-m-row="note"] > td:nth-child(n):nth-child(n) { position: static; display: block; max-width: none; border: 0; background: transparent; box-shadow: none; white-space: normal; }
 
   /* 底部抽屉 */
-  .m-sheet-layer { position: fixed; inset: 0; z-index: var(--z-modal); }
+  /* 要叠得过顾客详情（--z-modal + 20）与推荐人抽屉（+ 10）：那两个抽屉里的表也会弹它。 */
+  .m-sheet-layer { position: fixed; inset: 0; z-index: calc(var(--z-modal) + 30); }
   .m-sheet-backdrop { position: absolute; inset: 0; width: 100%; border: 0; background: var(--scrim); cursor: pointer; }
   .m-sheet {
     position: absolute;
@@ -4963,6 +4964,23 @@ body.tr-drawer-open { overflow: hidden; }
 
   /* 分类页签条换行，不再左右滑 */
   .segment-tabs { flex-wrap: wrap; overflow-x: visible; }
+
+  /* 总览「近 7 天」：7 张 88px 的竖卡横排要滑两屏。手机上改成一天一行：
+     日期 | 充 / 提（两行小字）| 净额，点一行照旧进那天的历史日报。DOM 不动（home.js renderWeekSummary）。 */
+  .week-strip { grid-template-columns: minmax(0, 1fr); gap: 6px; overflow: visible; padding-bottom: 0; }
+  .week-day {
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    grid-template-areas: "date flow net";
+    align-content: center;
+    align-items: center;
+    gap: 12px;
+    min-height: 52px;
+    padding: 8px 12px;
+  }
+  .week-day:hover { transform: none; }
+  .week-date { grid-area: date; color: var(--text); font-size: 13px; font-weight: var(--weight-bold); }
+  .week-flow { grid-area: flow; margin-top: 0; font-size: 11px; line-height: 1.35; text-align: right; }
+  .week-net { grid-area: net; min-width: 76px; margin-top: 0; font-size: 15px; text-align: right; }
 }
 @keyframes m-sheet-in { from { opacity: 0; transform: translateY(24px); } }
 /* ===== 遗留修补 ===== */

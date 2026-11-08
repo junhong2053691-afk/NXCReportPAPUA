@@ -160,20 +160,38 @@ function mtdDecorate(table) {
 }
 
 function mtdSetupTables() {
-  const tables = Array.from(document.querySelectorAll("table[data-m]"));
-  tables.forEach(function (table) {
+  // 表有两种来路：页面 HTML 里写死的（报表页），和抽屉里现拼的（顾客详情「最近交易」、
+  // TOP REFERRAL 推荐人抽屉的下线表，每次打开都 innerHTML 一张新的）。后者靠 body 上的
+  // observer 发现；只看新增节点里有没有 table[data-m]，属性变化与文字变化都不看。
+  const attached = new Set();
+  function attach(table) {
+    if (attached.has(table)) return;
+    attached.add(table);
     mtdDecorate(table);
     let queued = false;
     const observer = new MutationObserver(function () {
       if (queued) return;
       queued = true;
-      window.requestAnimationFrame(function () { queued = false; mtdDecorate(table); });
+      window.requestAnimationFrame(function () {
+        queued = false;
+        if (!table.isConnected) { observer.disconnect(); attached.delete(table); return; }
+        mtdDecorate(table);
+      });
     });
     observer.observe(table, { childList: true, subtree: true });
-  });
+  }
+  document.querySelectorAll("table[data-m]").forEach(attach);
+  new MutationObserver(function (records) {
+    records.forEach(function (rec) {
+      rec.addedNodes.forEach(function (node) {
+        if (node.nodeType !== 1) return;
+        if (node.matches("table[data-m]")) attach(node);
+        else if (node.firstElementChild) node.querySelectorAll("table[data-m]").forEach(attach);
+      });
+    });
+  }).observe(document.body, { childList: true, subtree: true });
   // 表头文字跟着语言变，metric 的标签要重算
-  window.addEventListener("language-changed", function () { tables.forEach(mtdDecorate); });
-  return tables;
+  window.addEventListener("language-changed", function () { attached.forEach(mtdDecorate); });
 }
 
 function mtdCreateSheet() {
@@ -192,14 +210,30 @@ function mtdCreateSheet() {
 }
 
 function startMobileTableDrawer() {
-  if (!document.querySelector("table[data-m]")) return;
+  // 每页都启动：顾客详情抽屉几乎每页都能打开，里面的表是后来才插进来的。抽屉 DOM 第一次点开时才建。
   const mq = typeof window.matchMedia === "function" ? window.matchMedia(MTD_QUERY) : null;
   mtdSetupTables();
-  const layer = mtdCreateSheet();
-  const titleEl = layer.querySelector(".m-sheet-title");
-  const bodyEl = layer.querySelector(".m-sheet-body");
+  let layer = null;
+  let titleEl = null;
+  let bodyEl = null;
   let forward = new WeakMap(); // 克隆里的可点元素 → 原表格里的那个
   let lastFocus = null;
+
+  function ensureLayer() {
+    if (layer) return;
+    layer = mtdCreateSheet();
+    titleEl = layer.querySelector(".m-sheet-title");
+    bodyEl = layer.querySelector(".m-sheet-body");
+    layer.addEventListener("click", function (e) {
+      if (e.target.closest(".m-sheet-backdrop, .m-sheet-close")) { close(); return; }
+      const el = e.target.closest(MTD_INTERACTIVE);
+      if (!el || !bodyEl.contains(el) && !titleEl.contains(el)) return;
+      const original = forward.get(el);
+      e.preventDefault();
+      close();
+      if (original && original.isConnected) original.click();
+    });
+  }
 
   function cloneInto(target, td) {
     Array.from(td.childNodes).forEach(function (n) { target.appendChild(n.cloneNode(true)); });
@@ -211,6 +245,7 @@ function startMobileTableDrawer() {
   }
 
   function open(table, tr) {
+    ensureLayer();
     forward = new WeakMap();
     titleEl.textContent = "";
     titleEl.removeAttribute("translate");
@@ -240,7 +275,7 @@ function startMobileTableDrawer() {
   }
 
   function close() {
-    if (layer.hidden) return;
+    if (!layer || layer.hidden) return;
     layer.hidden = true;
     document.body.classList.remove("m-sheet-open");
     bodyEl.textContent = "";
@@ -253,6 +288,7 @@ function startMobileTableDrawer() {
     if (!(e.target instanceof Element)) return;
     const tr = e.target.closest("table[data-m] > tbody > tr, table[data-m] > tfoot > tr");
     if (!tr || tr.getAttribute("data-m-row") === "note") return;
+    if (layer && layer.contains(tr)) return;
     if (e.target.closest(MTD_INTERACTIVE + ", input, select, textarea, label")) return; // 格子里自己的链接 / 按钮照旧
     const table = tr.closest("table");
     const spec = mtdParseSpec(table.getAttribute("data-m"));
@@ -260,18 +296,13 @@ function startMobileTableDrawer() {
     open(table, tr);
   });
 
-  layer.addEventListener("click", function (e) {
-    if (e.target.closest(".m-sheet-backdrop, .m-sheet-close")) { close(); return; }
-    const el = e.target.closest(MTD_INTERACTIVE);
-    if (!el || !bodyEl.contains(el) && !titleEl.contains(el)) return;
-    const original = forward.get(el);
+  // 捕获阶段先拿走 Esc：抽屉可能叠在顾客详情 / 推荐人抽屉上面，一次 Esc 只关最上面这一层。
+  window.addEventListener("keydown", function (e) {
+    if (e.key !== "Escape" || !layer || layer.hidden) return;
     e.preventDefault();
+    e.stopImmediatePropagation();
     close();
-    if (original && original.isConnected) original.click();
-  });
-  document.addEventListener("keydown", function (e) {
-    if (e.key === "Escape" && !layer.hidden) { e.preventDefault(); close(); }
-  });
+  }, true);
   window.addEventListener("language-changed", close);
   if (mq && typeof mq.addEventListener === "function") {
     mq.addEventListener("change", function () { if (!mq.matches) close(); });
