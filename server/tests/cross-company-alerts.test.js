@@ -174,6 +174,44 @@ test("点折叠条：只把目标那家折进去的记已看过，别家折叠�
   assert.ok(!seen.ezspin68.includes(1));
 });
 
+// 手机（≤700）上显示上限是 0：全部别家的单折进一条汇总条（.scratch/ui-responsive/decisions.md 增量 F）。
+// 只改显示，已看过 / ack / 收起的规则与折叠条完全一样。
+test("显示上限 0：没有单条卡片，全部折进汇总条，按笔数排公司，目标是笔数最多那家", () => {
+  const rows = [row(1, "ezspin68"), row(2, "rolex66"), row(3, "rolex66"), row(4, "aussiex6")];
+  const plan = planAlerts(snap(rows), {}, 0);
+  assert.deepEqual(cardIds(plan), []);
+  assert.equal(plan.folded.count, 3, "当前公司 aussiex6 的单照旧不算");
+  assert.deepEqual(plan.folded.companies, [{ id: "rolex66", name: "Rolex66", count: 2 }, { id: "ezspin68", name: "EzSpin68", count: 1 }]);
+  assert.equal(plan.folded.targetCompanyId, "rolex66");
+  assert.equal(plan.folded.all, true, "渲染层靠它把标题从「还有 N 笔」换成「别家待审批 N」");
+  assert.equal(planAlerts(snap(rows), {}).folded, null, "不传上限时仍是电脑上的 5 条");
+});
+
+test("显示上限由 deps.maxVisible 每轮现取：手机上关掉汇总条 = 全部记已看过、ack 涉及的每家", async () => {
+  const log = [];
+  let max = 0;
+  const storage = fakeStorage();
+  const c = createCrossCompanyAlerts({
+    storage,
+    fetchSnapshot: () => snap([row(1, "rolex66"), row(2, "ezspin68")]),
+    createAlarm: (cid) => fakeAlarm(cid, log),
+    render: () => {},
+    navigate: () => {},
+    maxVisible: () => max,
+  });
+  await c.poll();
+  assert.deepEqual(cardIds(c.plan()), []);
+  assert.equal(c.plan().folded.count, 2);
+  max = XCO_MAX_VISIBLE; // 转成横屏 / 拉宽窗口：重算就回到一笔一条
+  assert.deepEqual(cardIds(c.rerender()), [2, 1]);
+  max = 0;
+  c.rerender();
+  log.length = 0;
+  c.dismissFolded();
+  assert.equal(c.plan().folded, null);
+  assert.deepEqual(log.filter((e) => e[0] === "ack").map((e) => e[1]).sort(), ["ezspin68", "rolex66"]);
+});
+
 test("报警：每家别的公司一个；当前公司不建（它归 app.js 管）", async () => {
   const h = harness();
   h.set(snap([row(1, "rolex66")]));

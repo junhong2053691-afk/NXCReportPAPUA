@@ -4280,6 +4280,24 @@ body.tr-drawer-open { overflow: hidden; }
   /* 给标签栏让出底部，最后一行内容不被盖住。 */
   .main { padding-bottom: calc(76px + env(safe-area-inset-bottom)); }
 
+  /* toast 栈贴底栏上方（decisions.md 增量 F）：钉在顶部会压住钉顶筛选条和接单浮层的 ×，
+     通知的 × 正好叠在浮层的 × 上，一点错就 ack 了别家的报警。跨公司来单在手机上只剩一条
+     汇总条（cross-company-alerts.js 显示上限 0），普通 toast 也一并到底部。 */
+  .app-toast-stack {
+    top: auto;
+    right: max(12px, env(safe-area-inset-right));
+    bottom: calc(76px + env(safe-area-inset-bottom));
+    width: auto;
+    left: max(12px, env(safe-area-inset-left));
+  }
+  .app-toast { transform: translateY(8px) scale(.985); }
+  .app-toast.is-leaving { transform: translateY(6px) scale(.99); }
+  /* 接单浮层盖住了底栏：汇总条贴屏幕底，浮层列表底部让出同样的高度，最后一张卡的「审批」不被挡。 */
+  body.bk-intake-locked .app-toast-stack { bottom: max(12px, env(safe-area-inset-bottom)); }
+  body:has(.app-toast--order) .bk-intake.is-sheet-open:not(.is-empty) .bk-intake-body {
+    padding-bottom: calc(max(12px, env(safe-area-inset-bottom)) + 84px);
+  }
+
   /* 支付渠道页：待处理 → KPI → 渠道（折叠）→ 筛选 → 流水。.bkv2 本身是 flex column。 */
   .bkv2 > .bk-pending-summary { order: 1; }
   .bkv2 > .reconcile-alert { order: 2; }
@@ -4951,6 +4969,8 @@ body.tr-drawer-open { overflow: hidden; }
   }
   .back-to-top[hidden] { display: none; }
   .back-to-top svg { width: 20px; height: 20px; }
+  /* 跨公司来单汇总条常驻在底栏上方（约 66px 高），「回到顶部」让到它上面。 */
+  body:has(.app-toast--order) .back-to-top { bottom: calc(76px + env(safe-area-inset-bottom) + 86px); }
 }
 /* ===== 流水记录分组（侧边栏，server/index.js 的 pageLayout）=====
    标题是链接（进当日流水），右侧箭头只展开 / 收起。.nav-children 自带 display:grid，

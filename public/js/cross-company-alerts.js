@@ -4,6 +4,8 @@
 //   - 只对 operator、且授权了 ≥2 家公司时开（服务端 crossCompanyPending 判定，enabled=false 就停）。
 //   - 一笔一条，标题公司名、正文「充值 500.00 · user123」；当前公司的单不弹（它有接单区和报警）。
 //   - 最多 MAX_VISIBLE 条（最新的），其余折成「还有 N 笔」；点折叠条切去笔数最多的那家。
+//     手机（≤700）上限是 0：全部折进一条「别家待审批 N」，贴底栏上方（style.css）。
+//     规则与折叠条完全一样，只是显示上限不同（.scratch/ui-responsive/decisions.md 增量 F）。
 //   - 不自动消失。收起只有三种：点它 / 关掉它；那笔不再是 pending；关掉折叠条（全收）。
 //   - 「已看过」是**每家公司一组 id**（不是一个水位线：关掉 50 号不能吞掉还开着的 45 号），
 //     存 localStorage，多标签页共享。只在两种情况记：点或关掉通知；停在某家时它当前全部 pending。
@@ -15,6 +17,8 @@
 
 const XCO_SEEN_KEY = "cross-company-seen";
 const XCO_MAX_VISIBLE = 5;
+// 与 style.css 的手机断点一致。
+const XCO_MOBILE_QUERY = "(max-width: 700px)";
 const XCO_POLL_MS = 8000;
 // 必须与 app.js getPlatformPendingAlarm 的 keyPrefix / soundSrc 一致：共用时间线（Q14）。
 const XCO_ALARM_PREFIX = "bank-pending-alarm";
@@ -39,8 +43,9 @@ function xcoWriteSeen(storage, seen) {
 /**
  * 由服务端快照和已看过集合算出这一轮该显示什么。纯函数。
  * 返回的 seen 已经剪掉不再 pending 的 id，并把当前公司的全部 pending 记成已看过（Q18）。
+ * maxVisible 不传就是 XCO_MAX_VISIBLE；0 = 全部折叠（手机）。
  */
-function xcoPlanAlerts(snapshot, seen) {
+function xcoPlanAlerts(snapshot, seen, maxVisible) {
   const prev = seen && typeof seen === "object" ? seen : {};
   if (!snapshot || !snapshot.enabled) {
     return { enabled: false, seen: prev, cards: [], folded: null, pendingByCompany: {} };
@@ -84,8 +89,9 @@ function xcoPlanAlerts(snapshot, seen) {
       };
     });
 
-  const cards = unseen.slice(0, XCO_MAX_VISIBLE);
-  const rest = unseen.slice(XCO_MAX_VISIBLE);
+  const max = maxVisible == null ? XCO_MAX_VISIBLE : Math.max(0, Number(maxVisible) || 0);
+  const cards = unseen.slice(0, max);
+  const rest = unseen.slice(max);
   let folded = null;
   if (rest.length) {
     const counts = {};
@@ -98,6 +104,7 @@ function xcoPlanAlerts(snapshot, seen) {
       .map(function (cid) { return { id: cid, name: names[cid], count: counts[cid] }; })
       .sort(function (a, b) { return b.count - a.count; }); // 稳定排序：同数时保持「最新单所在」在前
     folded = {
+      all: cards.length === 0, // 一条单卡都没有：标题写「别家待审批 N」而不是「还有 N 笔」
       count: rest.length,
       items: rest.map(function (c) { return { id: c.id, companyId: c.companyId }; }),
       companies: companies,
@@ -125,6 +132,7 @@ function xcoMarkSeen(seen, items) {
  *   createAlarm    (companyId) => escalating alarm（update / acknowledge / dispose）
  *   render         (plan) => void
  *   navigate       (companyId) => void   点通知后切公司并去接单区
+ *   maxVisible     () => number          可选，每轮现取（手机 0，电脑 XCO_MAX_VISIBLE）
  */
 function createCrossCompanyAlerts(deps) {
   const storage = deps.storage;
@@ -156,7 +164,8 @@ function createCrossCompanyAlerts(deps) {
 
   function apply(snapshot) {
     lastSnapshot = snapshot;
-    const plan = xcoPlanAlerts(snapshot, xcoReadSeen(storage));
+    const max = typeof deps.maxVisible === "function" ? deps.maxVisible() : undefined;
+    const plan = xcoPlanAlerts(snapshot, xcoReadSeen(storage), max);
     if (plan.enabled) xcoWriteSeen(storage, plan.seen);
     syncAlarms(plan);
     lastPlan = plan;
@@ -289,12 +298,17 @@ function xcoFillCard(toast, card) {
 
 function xcoFillFolded(toast, folded) {
   const copy = toast.querySelector(".app-toast-open");
-  const sig = folded.count + "|" + folded.companies.map(function (c) { return c.id + ":" + c.count; }).join(",");
+  const sig = (folded.all ? "all|" : "") + folded.count + "|" + folded.companies.map(function (c) { return c.id + ":" + c.count; }).join(",");
   if (copy.dataset.sig === sig) return;
   copy.dataset.sig = sig;
   copy.textContent = "";
+  // 手机汇总条：「别家待审批」与笔数分成两个节点，前者走字典、后者是数字，不需要插值短语规则。
+  const title = folded.all
+    ? xcoEl("strong", "")
+    : xcoEl("strong", "", "还有 " + folded.count + " 笔");
+  if (folded.all) title.append(xcoEl("span", "", "别家待审批"), document.createTextNode(" "), xcoDataSpan(folded.count));
   copy.append(
-    xcoEl("strong", "", "还有 " + folded.count + " 笔"),
+    title,
     xcoDataSpan(folded.companies.map(function (c) { return c.name + " " + c.count; }).join(" · "))
   );
 }
@@ -376,6 +390,7 @@ function startCrossCompanyAlerts() {
 
   let controller = null;
   let timer = null;
+  const mobile = typeof window.matchMedia === "function" ? window.matchMedia(XCO_MOBILE_QUERY) : null;
   controller = createCrossCompanyAlerts({
     storage: storage,
     fetchSnapshot: function () { return api("/api/banks/pending-tx/all-companies", { bg: true }); },
@@ -388,7 +403,12 @@ function startCrossCompanyAlerts() {
     },
     render: createXcoRenderer(function () { return controller; }),
     navigate: xcoNavigate,
+    maxVisible: function () { return mobile && mobile.matches ? 0 : XCO_MAX_VISIBLE; },
   });
+  // 转屏 / 拉宽窗口跨过断点：用上一份快照重算，不等下一轮轮询。
+  if (mobile && typeof mobile.addEventListener === "function") {
+    mobile.addEventListener("change", function () { controller.rerender(); });
+  }
 
   const poll = function () {
     controller.poll().then(function (plan) {
