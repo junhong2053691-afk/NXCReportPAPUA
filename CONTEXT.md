@@ -90,3 +90,27 @@
 
 推荐人定义相同（`customers.referrer`），其余都不同：推荐人榜是任意日期区间（≤ 90 天）、首充按日期而非首笔
 那一单、净额走 `referrerNetTotals`。两页暂时并存，TOP REFERRAL 用顺手后再决定是否删推荐人榜。
+
+## 跨公司来单提醒
+
+operator 停在 A 公司时，B 公司进了**平台待审批单**（`bank_tx_pending.state = 'pending'`），右上角滑下一条通知。
+2026-11-09 需求访谈定下，实现在 `public/js/cross-company-alerts.js` + `server/lib/crossCompanyPending.js`，
+测试 `cross-company-alerts.test.js` / `cross-company-pending.test.js` 每条断言对应下面一行。
+
+| 术语 / 规则 | 定义 |
+|---|---|
+| **别家** | 该 operator 在 `user_companies` 里授权的公司，**不含当前公司**。每次轮询按库复核，撤权下一轮就消失 |
+| **谁会收到** | 只有授权 ≥ 2 家的 operator。**admin 不弹**（产品决定，不是遗漏）；只授权一家的 operator 没有别家 |
+| **一条通知** | 一笔单。标题 = 公司名，正文 = `充值 500.00 · user123`（类型、金额、会员 username）。**不放客户真名** |
+| **显示上限** | 最新的 5 条；其余折成「还有 N 笔（Rolex66 3 · EzSpin68 2）」。点折叠条切去笔数最多的那家 |
+| **点通知** | 切到那家公司，整页进 `/bank-ledger.html#pending`（接单区自动打开） |
+| **收起** | 不自动消失。只有：点它 / 关掉它；那笔不再是 pending（别人审批或跳过了）；关掉折叠条（折进去的全收） |
+| **已看过** | 每家公司**一组 tx 的 `bank_tx_pending.id`**（不是一个水位线：关掉 50 号不能吞掉还开着的 45 号），存 localStorage `cross-company-seen`，多标签页共享。只在两种情况记：点或关掉通知；**停在某家时，它当前全部 pending 自动记上**——所以切回别家后不会把刚处理剩下的再弹一遍 |
+| **刷新 / 刚登录** | 没关掉、仍是 pending 的照样弹（第一次没有记录 = 积着的全弹） |
+| **报警** | 每家别家一个 escalating alarm，规则同 `alarm.js`（静默 5 分钟 → 响一遍 → 每 10 分钟一遍）、同一个 `platform-pending.mp3`。与当前公司报警**共用 key** `bank-pending-alarm:<公司>`，所以切公司不重置静默期 |
+| **知道了（ack）** | 点开或关掉某家**任意一条**通知 = ack 那家（静默 20 分钟），别家照常计时 |
+
+### 与「平台待审批报警」（当前公司）的关系
+
+同一批单只有一条时间线：当前公司由 `app.js` 的 `platformPendingAlarm` 管，其余由本功能管，切公司时交接。
+后台报警交出去时只 `dispose`，**绝不 `update("")`**——那会 `clearState` 把共用的 key 清掉。

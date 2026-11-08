@@ -42,6 +42,7 @@ const {
 } = require("../lib/bankStatusOptions");
 const { listCompaniesForUser } = require("../lib/userAccess");
 const { setLiveReceiving } = require("../lib/bankLiveReceiving");
+const { crossCompanyPending } = require("../lib/crossCompanyPending");
 const { appealDeposits } = require("../lib/appealExport");
 const { requireAdmin } = require("../middleware");
 const {
@@ -310,6 +311,13 @@ router.get("/daily-report", (req, res) => {
 
 router.get("/pending-counts", (req, res) => {
   res.json(pendingCounts(getDb(), companyId(req)));
+});
+
+// 跨公司来单提醒（public/js/cross-company-alerts.js）。这是 /api/banks 里唯一跨公司读的端点：
+// 它不看 req.companyId 以外的任何 session 字段，公司范围由 crossCompanyPending 按库复核
+// （user_companies），admin / 只授权一家的 operator 拿到 enabled=false。
+router.get("/pending-tx/all-companies", (req, res) => {
+  res.json(crossCompanyPending(getDb(), req.session?.user, companyId(req)));
 });
 
 router.get("/pending-tx", (req, res) => {

@@ -173,6 +173,12 @@ $env:TUNNEL_EDGE_IP_VERSION="4"
   不该重置静默期，而 0→1 该重置。未对平则用 `reconcileSignature()`（含差额），差额一变就是新问题。
 - `onStageChange` 回调会重入调用方的渲染函数（`bank-ledger.js` 有 `reconcileRendering` 守门），
   加新用户时注意别写成无限递归。
+- **第三个用户：跨公司来单提醒**（`public/js/cross-company-alerts.js`，在 `app.js` 之后注入）。
+  operator 停在 A 时给每家别家建一个报警，**与 `app.js` 当前公司报警共用 key `bank-pending-alarm:<公司>`**，
+  切公司就是交接，静默期不重置。交出去的那家只 `dispose`，**绝不 `update("")`**（会 `clearState` 清掉共用 key）。
+  数据源 `GET /api/banks/pending-tx/all-companies`（`lib/crossCompanyPending.js`）是 `/api/banks` 里**唯一跨公司读**
+  的端点：公司范围每次按 `user_companies` 复核，admin / 只授权一家返回 `enabled=false`，不带客户真名。
+  产品规则（一笔一条、5 条上限、已看过按 id 记）见 `CONTEXT.md`「跨公司来单提醒」。
 - 测试 `server/tests/alarm.test.js`：注入假 `now` 与假播放器，**「静默期内一次都不播」和
   「重建实例不重响」两条断言是守着上面两段的**，别为了让新行为通过就删。
 
