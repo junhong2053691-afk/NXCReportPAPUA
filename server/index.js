@@ -142,12 +142,13 @@ app.use("/api/audit", require("./routes/audit"));
 // operator 切换公司、退出登录、切主题都靠它。
 // 用 <a href> 而不是 button：在别的页点了照常跳到 /bank-ledger.html#<动作>，由
 // bank-ledger.js 读 hash 执行；在当日流水页本页则由 app.js 拦下直接执行。「渠道」直接进支付渠道页。
+// 顺序 2026-11-09 用户定：菜单 / 流水 / 待处理 / 调钱 / 渠道（最常点的「待处理」放正中）。
 const MOBILE_TABBAR = `<nav class="mobile-tabbar" id="mobile-tabbar" aria-label="快捷操作">
-<a href="/bank-ledger.html#pending" data-tab-action="pending"><i data-lucide="clipboard-check"></i><span>待处理</span><b class="mobile-tabbar-badge" id="mobile-tabbar-badge" hidden></b></a>
+<button type="button" data-tab-action="menu" aria-controls="sidebar"><i data-lucide="menu"></i><span>菜单</span></button>
 <a href="/bank-ledger.html#ledger" data-tab-action="ledger"><i data-lucide="list"></i><span>流水</span></a>
+<a href="/bank-ledger.html#pending" data-tab-action="pending"><i data-lucide="clipboard-check"></i><span>待处理</span><b class="mobile-tabbar-badge" id="mobile-tabbar-badge" hidden></b></a>
 <a href="/bank-ledger.html#transfer" data-tab-action="transfer"><i data-lucide="arrow-left-right"></i><span>调钱</span></a>
 <a href="/bank-channels.html" data-tab-action="channels"><i data-lucide="landmark"></i><span>渠道</span></a>
-<button type="button" data-tab-action="menu" aria-controls="sidebar"><i data-lucide="menu"></i><span>菜单</span></button>
 </nav>
 <button type="button" class="back-to-top" id="back-to-top" aria-label="回到顶部" title="回到顶部" hidden><i data-lucide="arrow-up"></i></button>`;
 
