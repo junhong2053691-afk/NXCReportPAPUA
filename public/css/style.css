@@ -4825,6 +4825,146 @@ body.tr-drawer-open { overflow: hidden; }
   .table-wrap > table:has(> #tg-status-rows) { width: 100%; }
   #tg-status-rows td { white-space: normal; overflow-wrap: anywhere; }
 }
+/* ===== 宽表 · 手机卡片 + 底部抽屉 (≤700) =====
+   报表页 13 张表挂了 data-m（server/index.js），mobile-table-drawer.js 给 td 标上 data-m 角色。
+   手机上每行一张卡片，只露 lead / title / meta / metric；点卡片拉起 .m-sheet 看全部字段。
+   td 选择器写到 (0,4,4)、并且放在「报表首列钉住」后面，才压得过 .sticky-2 那组同分规则。 */
+.m-sheet-layer[hidden] { display: none; }
+@media (max-width: 700px) {
+  .table-wrap:has(> table[data-m]) { overflow: visible; padding: 0; border: 0; background: transparent; box-shadow: none; }
+  .table-wrap > table[data-m] { display: block; width: 100%; min-width: 0; }
+  .table-wrap > table[data-m] > thead { display: none; }
+  .table-wrap > table[data-m] > tbody,
+  .table-wrap > table[data-m] > tfoot { display: block; }
+  .table-wrap > table[data-m] > tbody > tr,
+  .table-wrap > table[data-m] > tfoot > tr {
+    position: relative;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 2px 6px;
+    margin: 0 0 8px;
+    padding: 10px 34px 10px 12px;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm);
+    background: var(--surface-solid);
+    cursor: pointer;
+  }
+  .table-wrap > table[data-m] > tbody > tr:active,
+  .table-wrap > table[data-m] > tfoot > tr:active { background: var(--surface-2); }
+  .table-wrap > table[data-m] > tbody > tr::after,
+  .table-wrap > table[data-m] > tfoot > tr::after {
+    content: "›";
+    position: absolute;
+    top: 50%;
+    right: 12px;
+    color: var(--muted);
+    font-size: 22px;
+    line-height: 1;
+    transform: translateY(-50%);
+  }
+  .table-wrap > table[data-m] > tfoot > tr { background: var(--surface-2); }
+  .table-wrap > table[data-m*="lead:"] > tbody > tr,
+  .table-wrap > table[data-m*="lead:"] > tfoot > tr { padding-left: 48px; }
+  .table-wrap > table[data-m] > tbody > tr > td:not([data-m]):nth-child(n),
+  .table-wrap > table[data-m] > tfoot > tr > td:not([data-m]):nth-child(n) { display: none; }
+  .table-wrap > table[data-m] > tbody > tr > td[data-m]:nth-child(n),
+  .table-wrap > table[data-m] > tfoot > tr > td[data-m]:nth-child(n) {
+    position: static;
+    display: block;
+    width: auto;
+    min-width: 0;
+    max-width: none;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+    color: var(--text);
+    text-align: left;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+  /* 下面角色规则重复一次 [data-m]，凑到 (0,5,3) 压过上面 (0,4,4) 的统一重置 */
+  .table-wrap > table[data-m] > * > tr > td[data-m="lead"][data-m]:nth-child(n) {
+    position: absolute;
+    top: 11px;
+    left: 10px;
+    width: 30px;
+    color: var(--muted);
+    font: 800 13px/1.4 var(--font-mono);
+    text-align: center;
+  }
+  .table-wrap > table[data-m] > * > tr > td[data-m="title"][data-m]:nth-child(n) { order: 10; flex: 1 0 100%; font-size: 15px; font-weight: var(--weight-bold); }
+  .table-wrap > table[data-m] > * > tr > td[data-m="meta"][data-m]:nth-child(n) { order: 20; flex: 0 1 auto; color: var(--muted); font-size: 12px; }
+  .table-wrap > table[data-m] > * > tr > td[data-m="meta"][data-m-o="1"]:nth-child(n) { order: 21; }
+  .table-wrap > table[data-m] > * > tr > td[data-m="meta"][data-m-o="2"]:nth-child(n) { order: 22; }
+  .table-wrap > table[data-m] > * > tr > td[data-m="meta"][data-m-o="3"]:nth-child(n) { order: 23; }
+  .table-wrap > table[data-m] > * > tr > td[data-m="meta"][data-m-sep]::before { content: "· "; }
+  /* 不能用 flex：格子里常有多段（「+50.00」+「WIN」徽章），会被 space-between 拆到两头。
+     标签左浮动、值整体右对齐。 */
+  .table-wrap > table[data-m] > * > tr > td[data-m="metric"][data-m]:nth-child(n) {
+    order: 30;
+    display: block;
+    flex: 1 0 100%;
+    font-family: var(--font-mono);
+    font-size: 14px;
+    font-weight: var(--weight-bold);
+    text-align: right;
+  }
+  .table-wrap > table[data-m] > * > tr > td[data-m="metric"][data-m-o="1"]:nth-child(n) { order: 31; }
+  .table-wrap > table[data-m] > * > tr > td[data-m="metric"][data-m-o="2"]:nth-child(n) { order: 32; }
+  .table-wrap > table[data-m] > * > tr > td[data-m="metric"][data-m-o="3"]:nth-child(n) { order: 33; }
+  .table-wrap > table[data-m] > * > tr > td[data-m="metric"][data-m-o="4"]:nth-child(n) { order: 34; }
+  .table-wrap > table[data-m] > * > tr > td[data-m="metric"][data-m-o="5"]:nth-child(n) { order: 35; }
+  .table-wrap > table[data-m] > * > tr > td[data-m="metric"]::before {
+    content: attr(data-m-label);
+    float: left;
+    margin-right: 12px;
+    color: var(--muted);
+    font-family: var(--font-sans, inherit);
+    font-size: 12px;
+    font-weight: var(--weight-bold);
+    text-align: left;
+  }
+  /* 空状态 / 加载中：整行一句话，不是卡片、不能点 */
+  .table-wrap > table[data-m] > * > tr[data-m-row="note"] { display: block; padding: 16px; cursor: default; text-align: center; }
+  .table-wrap > table[data-m] > * > tr[data-m-row="note"]::after { content: none; }
+  .table-wrap > table[data-m] > * > tr[data-m-row="note"] > td:nth-child(n):nth-child(n) { position: static; display: block; max-width: none; border: 0; background: transparent; box-shadow: none; white-space: normal; }
+
+  /* 底部抽屉 */
+  .m-sheet-layer { position: fixed; inset: 0; z-index: var(--z-modal); }
+  .m-sheet-backdrop { position: absolute; inset: 0; width: 100%; border: 0; background: var(--scrim); cursor: pointer; }
+  .m-sheet {
+    position: absolute;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    display: flex;
+    flex-direction: column;
+    max-height: 85vh;
+    max-height: 85dvh;
+    padding-bottom: env(safe-area-inset-bottom);
+    border-top: 1px solid var(--border-strong);
+    border-radius: var(--radius) var(--radius) 0 0;
+    background: var(--surface-solid);
+    box-shadow: var(--shadow-lg);
+    animation: m-sheet-in var(--motion-base) var(--ease-spring);
+  }
+  .m-sheet-head { position: relative; display: flex; align-items: center; gap: 8px; padding: 18px 6px 10px 16px; border-bottom: 1px solid var(--border); }
+  .m-sheet-grip { position: absolute; top: 7px; left: 50%; width: 36px; height: 4px; margin-left: -18px; border-radius: 999px; background: var(--border-strong); }
+  .m-sheet-title { flex: 1 1 auto; min-width: 0; margin: 0; color: var(--text); font-size: 16px; font-weight: var(--weight-black); overflow-wrap: anywhere; }
+  .m-sheet-close { flex: 0 0 auto; width: 44px; height: 44px; min-height: 44px; border-color: transparent; background: transparent; color: var(--muted); font-size: 22px; }
+  .m-sheet-body { margin: 0; padding: 0 16px 16px; overflow-y: auto; overscroll-behavior: contain; }
+  .m-sheet-row { display: grid; grid-template-columns: minmax(88px, 40%) minmax(0, 1fr); gap: 12px; align-items: baseline; padding: 11px 0; border-bottom: 1px solid var(--border); }
+  .m-sheet-row:last-child { border-bottom: 0; }
+  .m-sheet-row dt { color: var(--muted); font-size: 12px; font-weight: var(--weight-bold); }
+  .m-sheet-row dd { margin: 0; color: var(--text); font-size: 14px; text-align: right; overflow-wrap: anywhere; }
+  body.m-sheet-open { overflow: hidden; }
+
+  /* 分类页签条换行，不再左右滑 */
+  .segment-tabs { flex-wrap: wrap; overflow-x: visible; }
+}
+@keyframes m-sheet-in { from { opacity: 0; transform: translateY(24px); } }
 /* ===== 遗留修补 ===== */
 
 /* 1280 笔记本：≤1500 那组收窄后仍要 1208px（加上 table min-width 1180），1280 下容器只有约 1127px。

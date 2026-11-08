@@ -153,6 +153,10 @@ $env:TUNNEL_EDGE_IP_VERSION="4"
 - 页面 HTML 大量在 `server/index.js` 字符串拼接（Unicode `\uXXXX`），改 UI 时注意编码
 - 暗色模式：`data-theme="dark"` on `:root`
 - 声音报警一律走 `public/js/alarm.js`，不要自己 `new Audio()`（见下）
+- **手机宽表 = 卡片 + 底部抽屉**（`public/js/mobile-table-drawer.js`，≤700）：报表页 13 张表的 `<table>` 上写
+  `data-m="lead:1 title:2 metric:6,14 meta:3 native:tr[data-month]"`（列号按表头列算，从 1 起）。脚本只给 td 加
+  `data-m` 等属性、跟着重渲染补，页面脚本不用改。新加的宽报表照这个挂；**行本身有点击动作的表必须写 `native`**，
+  否则手机上点行会弹通用抽屉而不是原动作。测试 `server/tests/mobile-table-drawer.test.js` 数着 `data-m` 的张数
 
 ### 声音报警 (`public/js/alarm.js`)
 
