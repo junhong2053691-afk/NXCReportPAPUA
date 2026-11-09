@@ -775,7 +775,14 @@ input:focus, select:focus, textarea:focus { border-color: var(--focus); box-shad
 .seg-btn:hover { color: var(--text); background: var(--surface); transform: translateY(-1px); }
 .seg-btn:active { transform: scale(.985); }
 .seg-btn.active { border-color: var(--glass-border); background: var(--surface-strong); color: var(--primary-text); box-shadow: var(--shadow-xs), var(--inset-highlight); }
-.cards, .metric-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(190px, 100%), 1fr)); gap: 10px; margin-bottom: 14px; }
+/* KPI 卡网格（decisions.md Q4）：每行最多 4 张，最后一行拉宽填满，不留半截残行。
+   3 / 5 / 6 / 9 张时改每行 3 张（9 张原来是 6 + 3，现在 3 × 3）。手机见 ≤768 的覆写：每行 2 张。 */
+.cards, .metric-grid { --kpi-cols: 4; display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 14px; }
+.cards:has(> :nth-child(3):last-child),
+.cards:has(> :nth-child(5):last-child),
+.cards:has(> :nth-child(6):last-child),
+.cards:has(> :nth-child(9):last-child) { --kpi-cols: 3; }
+.cards > *, .metric-grid > * { flex: 1 1 calc((100% - (var(--kpi-cols) - 1) * 10px) / var(--kpi-cols)); min-width: 0; }
 .card, .metric-card {
   position: relative;
   min-width: 0;
@@ -826,6 +833,11 @@ input:focus, select:focus, textarea:focus { border-color: var(--focus); box-shad
 .archive-quick { display: flex; gap: 6px; margin: -2px 0 12px; overflow-x: auto; }
 .month-wl-cards { max-width: 360px; margin-bottom: 0; }
 .company-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(320px, 100%), 1fr)); gap: 12px; }
+/* 表单页内容区限宽 960、靠左（decisions.md Q4）：1920 下一个 chat id 输入框原来横跨 1745px */
+.page-shell > .settings-grid:not(.bank-settings-grid),
+.page-shell > .company-cards { width: 100%; max-width: 960px; }
+/* 支付设置是 STATUS + C STATUS 两张表并排，960 下每张只剩 ~550px、录入行会挤，放宽到 1200 */
+.page-shell > .bank-settings-grid { width: 100%; max-width: 1200px; }
 .company-card { padding: 16px; border: 1px solid var(--glass-border); border-radius: var(--radius); background: var(--glass); backdrop-filter: var(--blur); box-shadow: var(--inset-highlight), var(--shadow-sm); }
 .company-card h3 { margin: 0; }
 .company-id-note { margin: -4px 0 12px; color: var(--muted); font-size: var(--text-xs); }
@@ -1189,14 +1201,15 @@ body.customer-drawer-open { overflow: hidden; }
 
 /* Home command center */
 .page-eyebrow { margin: 0 0 4px; color: var(--primary-text); font-size: var(--text-2xs); font-weight: var(--weight-bold); text-transform: uppercase; }
-.hero-meta { display: grid; justify-items: end; gap: 4px; color: var(--muted); font-size: var(--text-2xs); text-align: right; }
+/* 报表日 · 数据体检 · 对账按钮排成一行（原来是三行右对齐，和左边标题、右边开关都对不齐） */
+.hero-meta { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 4px 10px; min-height: var(--control-h); color: var(--muted); font-size: var(--text-xs); }
 .hero-sync-detail[data-state="healthy"] { color: var(--green); }
 .hero-sync-detail[data-state="warning"] { color: var(--orange); }
 .hero-sync-detail[data-state="error"] { color: var(--red); }
 .panel-note { color: var(--muted); font-size: var(--text-2xs); }
 .data-health-badge {
-  min-height: 44px;
-  padding: 5px 9px;
+  min-height: var(--control-h-sm);
+  padding: 4px 10px;
   border: 1px solid var(--border);
   background: var(--surface-2);
   color: var(--text-soft);
@@ -3534,7 +3547,11 @@ tr:hover .bank-bal-btns { opacity: 1; }
   .seg-btn { min-height: 44px; font-size: var(--text-sm); }
   .btn, .btn-sm, .btn-xs, input, select, textarea { min-height: 44px; font-size: var(--text-lg); }
   .btn { padding-inline: 12px; }
-  .cards, .metric-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .cards, .metric-grid,
+  .cards:has(> :nth-child(3):last-child),
+  .cards:has(> :nth-child(5):last-child),
+  .cards:has(> :nth-child(6):last-child),
+  .cards:has(> :nth-child(9):last-child) { --kpi-cols: 2; }
   .card .value, .metric-card .value { font-size: var(--text-xl); }
   .table-wrap, .data-surface { max-height: none; -webkit-overflow-scrolling: touch; }
   th { position: static; font-size: var(--text-xs); }
@@ -3625,7 +3642,8 @@ tr:hover .bank-bal-btns { opacity: 1; }
 }
 
 @media (max-width: 460px) {
-  .cards, .metric-grid { grid-template-columns: 1fr 1fr; gap: 7px; }
+  .cards, .metric-grid { gap: 7px; }
+  .cards > *, .metric-grid > * { flex-basis: calc((100% - 7px) / 2); }
   .card, .metric-card { min-height: 104px; padding: 11px; }
   .hero-core-grid { grid-template-columns: 1fr; }
   .hero-core { min-height: 104px; }
@@ -5014,7 +5032,8 @@ body.tr-drawer-open { overflow: hidden; }
   /* 标题行里的说明 / 统计换到标题下面，不再和标题抢一行（顾客列表的标题被挤成两行） */
   .page-shell > .page-actions + .page-toolbar,
   .page-shell > .page-actions + .page-header { flex-wrap: wrap; align-items: baseline; gap: 4px 12px; }
-  .page-shell > .page-actions + .page-toolbar .hero-meta { justify-items: start; text-align: left; }
+  .page-shell > .page-actions + .page-toolbar .hero-meta { justify-content: flex-start; min-height: 0; }
+  .page-shell > .page-actions + .page-toolbar .archive-heading-meta { text-align: left; }
 
   /* —— 流水压缩卡片 ——
      一天 150+ 条，完整卡片约 225px 要滚 40 多屏。默认只留摘要：时间 · 金额 / 状态 · 账号 · 姓名，
@@ -5416,4 +5435,8 @@ body.tr-drawer-open { overflow: hidden; }
   td .btn, td .btn-sm, td .btn-xs { min-height: var(--control-h-sm); padding: 4px 10px; font-size: var(--control-fs-sm); }
   /* 勾选框统一 16px（原来 13 / 14 / 15 / 18 并存；没写尺寸的还会继承 input 的 min-height 被拉成 44 高） */
   input[type="checkbox"], input[type="radio"] { width: 16px; min-width: 16px; height: 16px; min-height: 0; padding: 0; }
+}
+/* 笔记本（769–1500）上报表表格的格子左右各收 4px：顾客列表 18 列、充值榜 18 列原来要横滑 57 / 12px */
+@media (min-width: 769px) and (max-width: 1500px) {
+  .table-wrap th, .table-wrap td { padding-left: 8px; padding-right: 8px; }
 }
