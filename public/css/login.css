@@ -1,9 +1,10 @@
 /* ============================================================
-   Login — sync dial
-   Centered composition: a round instrument dial carrying the NXC wordmark,
-   the form under it, two icon tools top-right, one footer line. The motion
-   (public/js/login-dial.js) is the system's own rhythm: a sweep that turns
-   once per ~6 s fast-lane sync, deposits flowing in, withdrawals flowing out.
+   Login — pulse
+   Centered composition: the NXC app icon with the product name under it,
+   the form below, two icon tools top-right, one footer line. The motion
+   (public/js/login-pulse.js) is money-flow streamlines radiating out of the
+   logo, with a pulse ring leaving it once per ~6 s fast-lane sync. The form
+   and the brand text are kept clear of the streams.
    Palette: NXC navy + logo cyan, glow kept low. Dark is the hero theme.
    ============================================================ */
 
@@ -25,12 +26,11 @@
   --lg-btn: #2bb8ee;
   --lg-btn-hover: #52c7f2;
   --lg-btn-ink: #04132e;
-  /* read by login-dial.js */
-  --lg-dial-ink: rgba(11, 42, 102, .34);
-  --lg-dial-hot: #0b93d4;
-  --lg-in: #0b93d4;
-  --lg-out: #0b2a66;
-  --lg-dust: rgba(11, 42, 102, .22);
+  /* read by login-pulse.js */
+  --lg-flow-a: #0b93d4;
+  --lg-flow-b: #5a7bb6;
+  --lg-flow-c: #2a64d8;
+  --lg-pulse: #0b93d4;
 }
 :root[data-theme="dark"] {
   --lg-bg: #050d1f;
@@ -50,11 +50,10 @@
   --lg-btn: #3cc8f5;
   --lg-btn-hover: #6ad6f8;
   --lg-btn-ink: #03112b;
-  --lg-dial-ink: rgba(170, 205, 255, .3);
-  --lg-dial-hot: #5fd3fa;
-  --lg-in: #4fd0fa;
-  --lg-out: #cfe0ff;
-  --lg-dust: rgba(190, 215, 255, .32);
+  --lg-flow-a: #4fd0fa;
+  --lg-flow-b: #a9c3ee;
+  --lg-flow-c: #3d7cf5;
+  --lg-pulse: #5fd3fa;
 }
 
 /* Beats style.css's `:root[data-theme="dark"] body` gradient. */
@@ -130,32 +129,53 @@
   padding: 72px 16px max(20px, env(safe-area-inset-bottom));
 }
 
-/* ---------- dial ---------- */
-.lg-dial {
-  position: relative;
-  flex: none;
-  width: clamp(240px, 40vh, 400px);
-  height: clamp(240px, 40vh, 400px);
-  transform-style: preserve-3d;
-  will-change: transform;
-  touch-action: none;
-}
-.lg-dial-canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
-.lg-dial-core {
-  position: absolute;
-  inset: 0;
+/* ---------- brand: the pulse source ---------- */
+.lg-brand {
   display: flex;
+  flex: none;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
-  gap: 12px;
+  gap: 10px;
+  text-align: center;
+}
+.lg-logo {
+  position: relative;
+  display: block;
+  width: clamp(96px, 15vh, 132px);
+  aspect-ratio: 1;
+  margin-bottom: 8px;
+  border-radius: 23%;
+}
+.lg-logo img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  box-shadow: 0 12px 32px rgba(4, 18, 52, .3);
+  -webkit-user-drag: none;
+  user-select: none;
+}
+/* one ring per sync, in step with the canvas pulse that leaves the logo */
+.lg-logo::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border: 1.5px solid var(--lg-pulse);
+  border-radius: inherit;
+  opacity: 0;
   pointer-events: none;
 }
-.lg-wordmark { display: block; width: 58%; height: auto; overflow: visible; color: var(--lg-ink); }
-.lg-wm-orbit { stroke: var(--lg-accent); stroke-opacity: .85; }
-.lg-wm-dot { fill: var(--lg-accent); }
-.lg-wm-dot-sm { fill: var(--lg-ink); fill-opacity: .7; }
-.lg-wm-report { fill: var(--lg-ink-2); font: italic 700 22px/1 var(--font-ui); letter-spacing: 6px; }
+.lg-logo.is-sync::after { animation: lg-sync 1.2s cubic-bezier(.2, .7, .3, 1); }
+@keyframes lg-sync {
+  from { opacity: .85; transform: scale(1); }
+  to { opacity: 0; transform: scale(1.4); }
+}
+.lg-name {
+  margin: 0;
+  color: var(--lg-ink);
+  font: 800 clamp(22px, 3vh, 26px)/1.1 var(--font-ui);
+  letter-spacing: .06em;
+}
 .lg-title {
   margin: 0;
   color: var(--lg-ink-2);
@@ -447,17 +467,17 @@
 
 @media (max-width: 600px) {
   .lg-tools { top: max(12px, env(safe-area-inset-top)); right: max(12px, env(safe-area-inset-right)); }
-  .lg-page { gap: 18px; padding-top: 60px; }
-  .lg-dial { width: 240px; height: 240px; }
-  .lg-wm-report { font-size: 24px; }
+  .lg-page { gap: 22px; padding-top: 60px; }
+  .lg-logo { width: 92px; }
   .lg-form input { height: 48px; }
   .lg-form .password-toggle { top: 2px; }
   .lg-submit { height: 50px; }
 }
 @media (max-height: 640px) and (min-width: 601px) {
-  .lg-dial { width: 240px; height: 240px; }
+  .lg-logo { width: 84px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .lg-tool, .lg-form input, .lg-submit { transition: none; }
+  .lg-logo.is-sync::after { animation: none; }
 }
