@@ -162,11 +162,12 @@ function createCrossCompanyAlerts(deps) {
     });
   }
 
-  function apply(snapshot) {
+  // persist=false：只重画，不把裁剪后的已看过写回 storage。
+  function apply(snapshot, persist) {
     lastSnapshot = snapshot;
     const max = typeof deps.maxVisible === "function" ? deps.maxVisible() : undefined;
     const plan = xcoPlanAlerts(snapshot, xcoReadSeen(storage), max);
-    if (plan.enabled) xcoWriteSeen(storage, plan.seen);
+    if (plan.enabled && persist !== false) xcoWriteSeen(storage, plan.seen);
     syncAlarms(plan);
     lastPlan = plan;
     deps.render(plan);
@@ -174,8 +175,11 @@ function createCrossCompanyAlerts(deps) {
   }
 
   // 别的标签页关掉了通知（storage 事件），或刚刚本页关掉：用上一份快照重算，不等下一轮轮询。
+  // **绝不写回**：上一份快照最多旧 8 秒，别的标签页刚关掉的新单不在里面，按它裁剪再写回
+  // 会把那笔从已看过里删掉，那页随即又弹出来。写回只在拿到新快照的 poll 里做；
+  // 本页关通知时 dismissItems 已先写过。
   function rerender() {
-    return lastSnapshot ? apply(lastSnapshot) : null;
+    return lastSnapshot ? apply(lastSnapshot, false) : null;
   }
 
   function acknowledge(companyIds) {
@@ -221,7 +225,7 @@ function createCrossCompanyAlerts(deps) {
   function poll() {
     return Promise.resolve()
       .then(deps.fetchSnapshot)
-      .then(apply);
+      .then(function (snapshot) { return apply(snapshot, true); });
   }
 
   return {

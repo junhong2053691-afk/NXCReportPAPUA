@@ -4,7 +4,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const { bankDatabase, addCompany } = require("./bank-fixture");
-const { crossCompanyPending } = require("../lib/crossCompanyPending");
+const { crossCompanyPending, MAX_ROWS_PER_COMPANY } = require("../lib/crossCompanyPending");
 
 const OPERATOR = { id: 7, role: "operator" };
 const ADMIN = { id: 1, role: "admin" };
@@ -71,6 +71,20 @@ test("只列 state = 'pending'：审批 / 跳过掉的不再出现（前端据�
   pending(db, "rolex66", { state: "approved" });
   pending(db, "rolex66", { state: "skipped" });
   assert.deepEqual(crossCompanyPending(db, OPERATOR, "aussiex6").rows.map((x) => x.id), [live]);
+});
+
+test("上限按公司算：一家积压超过上限，别家较早的单仍在结果里（否则前端会清掉那家的共用报警）", () => {
+  const db = setup();
+  grant(db, OPERATOR.id, "aussiex6", "rolex66");
+  const old = pending(db, "rolex66");
+  const insert = db.transaction(() => {
+    for (let i = 0; i < MAX_ROWS_PER_COMPANY + 5; i++) pending(db, "aussiex6");
+  });
+  insert();
+  const rows = crossCompanyPending(db, OPERATOR, "rolex66").rows;
+  assert.ok(rows.some((x) => x.id === old), "Rolex66 的单没被 AussieX6 的积压挤掉");
+  assert.equal(rows.filter((x) => x.company_id === "aussiex6").length, MAX_ROWS_PER_COMPANY);
+  assert.equal(rows[0].company_id, "aussiex6", "仍按 id 倒序");
 });
 
 test("撤权按库复核：下一次请求就看不到那家", () => {

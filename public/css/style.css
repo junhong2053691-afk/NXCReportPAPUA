@@ -4298,6 +4298,9 @@ body.tr-drawer-open { overflow: hidden; }
   body:has(.app-toast--order) .bk-intake.is-sheet-open:not(.is-empty) .bk-intake-body {
     padding-bottom: calc(max(12px, env(safe-area-inset-bottom)) + 84px);
   }
+  /* 弹窗（跳过 / 恢复原因等）打开时藏起来单通知：toast 层级高过弹窗，贴屏底的汇总条会盖住
+     弹窗吸底的确认栏，按「确认」误点成切去别家。节点还在、报警照常计时，关弹窗就回来。 */
+  body.modal-open .app-toast--order { display: none; }
 
   /* 支付渠道页：待处理 → KPI → 渠道（折叠）→ 筛选 → 流水。.bkv2 本身是 flex column。 */
   .bkv2 > .bk-pending-summary { order: 1; }

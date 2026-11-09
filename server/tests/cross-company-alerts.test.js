@@ -125,6 +125,21 @@ test("刷新不重弹：已看过存在 storage，重建控制器后照样不弹
   assert.ok(JSON.parse(storage.map[XCO_SEEN_KEY]).rolex66.includes(8));
 });
 
+test("多标签页：别的页刚关掉的新单，本页用旧快照 rerender 时不能把它从已看过里裁掉写回", async () => {
+  const storage = fakeStorage();
+  const a = harness(storage);
+  const b = harness(storage);
+  a.set(snap([row(7, "rolex66")]));
+  await a.c.poll(); // A 的快照里还没有 60
+  b.set(snap([row(7, "rolex66"), row(60, "rolex66")]));
+  await b.c.poll();
+  b.c.dismiss(60); // B 关掉新单 → 写 storage → A 收到 storage 事件
+  a.c.rerender();
+  assert.ok(JSON.parse(storage.map[XCO_SEEN_KEY]).rolex66.includes(60), "60 仍是已看过");
+  b.c.rerender(); // B 收到 A 的（假如有的）写入后重算
+  assert.deepEqual(cardIds(b.renders.at(-1)), [7], "60 不回来");
+});
+
 test("关掉一条 = ack 那家报警，不碰别家（Q15）", async () => {
   const h = harness();
   h.set(snap([row(1, "rolex66"), row(2, "ezspin68")]));

@@ -13,7 +13,10 @@ const { isOperator, authorizedCompanyIds } = require("./userAccess");
 const { listCompanies } = require("./companies");
 
 // 待审批正常是个位数到几十笔；这只是挡住异常积压把 8 秒一次的轮询撑大。
-const MAX_ROWS = 1000;
+// **每家各取**最新 N 笔，不能是全局 LIMIT：一家积压上千笔时会把别家挤成 0 笔，
+// 前端据此对那家 `update("")`，清掉与 app.js 共用的 `bank-pending-alarm:<公司>`（静默期被重置）、
+// 已看过也被裁空。每家只要有 pending 就至少出现一行。
+const MAX_ROWS_PER_COMPANY = 300;
 
 function crossCompanyPending(db, user, currentCompanyId) {
   const current = String(currentCompanyId || "");
@@ -31,16 +34,19 @@ function crossCompanyPending(db, user, currentCompanyId) {
   const rows = companies.length
     ? db
         .prepare(
-          `SELECT id, company_id, tx_type, amount, username
-             FROM bank_tx_pending
-            WHERE state = 'pending' AND company_id IN (${marks})
-            ORDER BY id DESC
-            LIMIT ?`
+          `SELECT id, company_id, tx_type, amount, username FROM (
+             SELECT id, company_id, tx_type, amount, username,
+                    ROW_NUMBER() OVER (PARTITION BY company_id ORDER BY id DESC) AS rn
+               FROM bank_tx_pending
+              WHERE state = 'pending' AND company_id IN (${marks})
+           )
+            WHERE rn <= ?
+            ORDER BY id DESC`
         )
-        .all(...companies.map((c) => c.id), MAX_ROWS)
+        .all(...companies.map((c) => c.id), MAX_ROWS_PER_COMPANY)
     : [];
 
   return { enabled: true, current, companies, rows };
 }
 
-module.exports = { crossCompanyPending, MAX_ROWS };
+module.exports = { crossCompanyPending, MAX_ROWS_PER_COMPANY };
