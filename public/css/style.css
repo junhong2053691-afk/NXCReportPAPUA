@@ -426,15 +426,6 @@ table { border-spacing: 0; }
   padding: 16px 16px 28px;
   transition: width var(--motion-base) var(--ease-spring), margin-left var(--motion-base) var(--ease-spring);
 }
-.topbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  min-height: 62px;
-  max-width: 1780px;
-  margin: 0 auto 14px;
-  padding: 10px 12px 10px 16px;
-}
 .glass-panel, .glass-control {
   border: 1px solid var(--glass-border);
   border-radius: var(--radius);
@@ -444,14 +435,22 @@ table { border-spacing: 0; }
   box-shadow: var(--material-shadow);
   transform: translateZ(0);
 }
-.topbar-kicker { color: var(--muted); font-size: 10px; font-weight: var(--weight-semibold); text-transform: uppercase; }
-.topbar-title { margin-top: 1px; font-size: 18px; font-weight: var(--weight-bold); }
-.topbar-actions { display: flex; align-items: center; gap: 8px; }
+/* 页头（2026-11-09 取消顶栏）：同步状态 / 中 EN / 主题由 pageLayout 放进 .page-shell 的第一个子元素，
+   这里用网格把它排到每页标题行（紧随其后的那个元素）的右侧——各页 HTML 不用逐个加。
+   其余子元素一律横跨两列，和原来的块级流一样。 */
+.page-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
+.page-shell > .page-actions { grid-column: 2; grid-row: 1; align-self: start; margin-bottom: 14px; }
+.page-shell > .page-actions + * { grid-column: 1; grid-row: 1; align-self: start; min-width: 0; margin-top: 0; }
+/* 标题和右侧开关顶对齐：标题行高 = 控件高，右边的日期 / 说明再多几行也不会把标题压到行底 */
+.page-shell > .page-actions + .page-toolbar,
+.page-shell > .page-actions + .page-header { align-items: flex-start; }
+.page-shell > .page-actions + .page-toolbar h1,
+.page-shell > .page-actions + .page-header h1 { line-height: var(--control-h); }
 .lang-toggle {
   display: inline-flex;
   align-items: center;
   gap: 2px;
-  min-height: 42px;
+  min-height: var(--control-h);
   padding: 3px;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
@@ -465,10 +464,10 @@ table { border-spacing: 0; }
   display: inline-grid;
   place-items: center;
   min-width: 34px;
-  height: 32px;
+  height: calc(var(--control-h) - 8px);
   padding: 0 8px;
   border-radius: calc(var(--radius-sm) - 4px);
-  font-size: 11px;
+  font-size: var(--text-2xs);
   font-weight: var(--weight-black);
   letter-spacing: 0;
 }
@@ -477,7 +476,6 @@ table { border-spacing: 0; }
   color: var(--text);
   box-shadow: 0 1px 3px rgba(15, 23, 42, .10);
 }
-.topbar,
 .glass-panel,
 .glass-control {
   transform: none;
@@ -486,7 +484,7 @@ table { border-spacing: 0; }
   display: flex;
   align-items: center;
   gap: 9px;
-  min-height: 42px;
+  min-height: var(--control-h);
   max-width: min(330px, 42vw);
   padding: 6px 10px;
   border: 1px solid var(--border);
@@ -496,14 +494,16 @@ table { border-spacing: 0; }
 .sync-indicator { width: 8px; height: 8px; flex: 0 0 auto; border-radius: 50%; background: var(--muted); box-shadow: 0 0 0 3px color-mix(in srgb, var(--muted) 15%, transparent); }
 .sync-copy { display: grid; min-width: 0; line-height: 1.25; }
 .sync-copy strong, .sync-copy small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.sync-copy strong { color: var(--text); font-size: 11.5px; font-weight: var(--weight-semibold); }
-.sync-copy small { min-height: 13px; color: var(--muted); font-size: 10px; }
+.sync-copy strong { color: var(--text); font-size: var(--text-xs); font-weight: var(--weight-semibold); }
+.sync-copy small { color: var(--muted); font-size: var(--text-2xs); }
+.sync-copy small:empty { display: none; }
 .sync-state[data-state="healthy"] .sync-indicator { background: var(--green); box-shadow: 0 0 0 3px var(--green-soft); }
 .sync-state[data-state="warning"] .sync-indicator { background: var(--orange); box-shadow: 0 0 0 3px var(--orange-soft); }
 .sync-state[data-state="error"] .sync-indicator,
 .sync-state[data-state="denied"] .sync-indicator { background: var(--red); box-shadow: 0 0 0 3px var(--red-soft); }
 .sync-state[data-state="loading"] .sync-indicator { animation: sync-pulse 1.4s ease-in-out infinite; }
-.page-shell { width: 100%; max-width: 1780px; min-width: 0; margin: 0 auto; }
+.page-shell { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 16px; align-items: start; width: 100%; max-width: 1780px; min-width: 0; margin: 0 auto; }
+.page-shell > * { grid-column: 1 / -1; min-width: 0; }
 .sidebar-backdrop { display: none; }
 .icon-fallback { display: inline; font-size: 10px; font-weight: var(--weight-bold); }
 .lucide-ready .icon-fallback { display: none; }
@@ -1267,6 +1267,7 @@ body.customer-drawer-open { overflow: hidden; }
 .secondary-kpi span { display: block; color: var(--muted); font-size: 11px; }
 .secondary-kpi strong { display: block; margin-top: 4px; font-size: 15px; overflow-wrap: anywhere; }
 .command-grid { display: grid; grid-template-columns: minmax(0, .82fr) minmax(0, 1.18fr); gap: 12px; margin-bottom: 12px; }
+.command-grid.command-grid-single { grid-template-columns: minmax(0, 1fr); }
 .insight-panel, .week-panel { min-width: 0; padding: 14px; overflow: hidden; }
 .panel-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 11px; }
 .panel-heading h2 { margin: 0; font-size: 15px; }
@@ -3506,11 +3507,9 @@ tr:hover .bank-bal-btns { opacity: 1; }
   }
   .mobile-menu-btn.is-open { opacity: 0; pointer-events: none; }
   .main { width: 100%; margin-left: 0; padding: max(12px, env(safe-area-inset-top)) 10px max(20px, env(safe-area-inset-bottom)); }
-  .topbar { min-height: 68px; margin-bottom: 12px; padding-left: 60px; }
-  .topbar-kicker { display: none; }
-  .topbar-title { font-size: 17px; }
+  /* 701–768 还有悬浮汉堡（左上角 fixed），标题行左边给它让位；≤700 汉堡删了，下面再归零。 */
+  .page-shell > .page-actions + * { padding-left: 56px; }
   .sync-state { max-width: 45vw; padding: 6px 8px; }
-  .sync-copy strong { font-size: 10px; }
   .sync-copy small { display: none; }
   .theme-toggle { display: none; }
   .page-header, .page-toolbar { align-items: flex-start; }
@@ -3615,8 +3614,6 @@ tr:hover .bank-bal-btns { opacity: 1; }
 }
 
 @media (max-width: 460px) {
-  .topbar { padding-right: 8px; }
-  .sync-state { max-width: 48vw; }
   .cards, .metric-grid { grid-template-columns: 1fr 1fr; gap: 7px; }
   .card, .metric-card { min-height: 104px; padding: 11px; }
   .hero-core-grid { grid-template-columns: 1fr; }
@@ -4989,9 +4986,23 @@ body.tr-drawer-open { overflow: hidden; }
   .sidebar-theme-btn { display: inline-grid; width: 38px; min-width: 38px; height: 38px; border-color: transparent; background: transparent; }
 }
 @media (max-width: 700px) {
-  /* 底部标签栏有「菜单」了，汉堡删掉，顶栏左边也不用再给它留 60px。701–768 平板没有标签栏，汉堡保留。 */
+  /* 底部标签栏有「菜单」了，汉堡删掉，标题行左边也不用再给它留位。701–768 平板没有标签栏，汉堡保留。 */
   .mobile-menu-btn { display: none; }
-  .topbar { padding-left: 14px; }
+  .page-shell > .page-actions + * { padding-left: 0; }
+
+  /* 页头：标题在左，右侧只放同步色点 + 中 EN（主题切换在「菜单」侧栏底部）。
+     同步状态收成 44px 的色点，点一下（app.js setupSyncStateToggle）展开文字。 */
+  .page-shell { column-gap: 8px; }
+  .page-actions { gap: 6px; }
+  .sync-state { justify-content: center; min-width: var(--control-h); max-width: none; padding: 0 12px; cursor: pointer; }
+  .sync-state .sync-copy { display: none; }
+  .sync-state.is-expanded .sync-copy { display: grid; }
+  .sync-state.is-expanded { justify-content: flex-start; max-width: 60vw; }
+  .sync-copy strong { font-size: var(--text-xs); }
+  /* 标题行里的说明 / 统计换到标题下面，不再和标题抢一行（顾客列表的标题被挤成两行） */
+  .page-shell > .page-actions + .page-toolbar,
+  .page-shell > .page-actions + .page-header { flex-wrap: wrap; align-items: baseline; gap: 4px 12px; }
+  .page-shell > .page-actions + .page-toolbar .hero-meta { justify-items: start; text-align: left; }
 
   /* —— 流水压缩卡片 ——
      一天 150+ 条，完整卡片约 225px 要滚 40 多屏。默认只留摘要：时间 · 金额 / 状态 · 账号 · 姓名，

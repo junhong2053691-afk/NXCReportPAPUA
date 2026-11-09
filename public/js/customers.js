@@ -128,7 +128,7 @@ async function loadCustomers(options) {
       (data.inactiveDays || 2) +
       " \u5929\u5185 | \u6c89\u7720: 3\u2013" +
       (data.dormantMaxDays || 7) +
-      " / 7+ \u5929 | \u5145\u503c\u7edf\u8ba1\u6765\u81ea API getAllUsers";
+      " / 7+ \u5929";
   }
 
   const tbody = document.getElementById("rows");

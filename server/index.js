@@ -155,8 +155,8 @@ const MOBILE_TABBAR = `<nav class="mobile-tabbar" id="mobile-tabbar" aria-label=
 function pageLayout(title, active, body, script) {
   const primaryNav = [
     ["home", "/", "\u603b\u89c8", "layout-dashboard"],
-    ["transactions", "/transactions.html", "\u4ea4\u6613", "arrow-left-right"],
-    ["customers", "/customers.html", "\u5ba2\u6237", "users"],
+    ["transactions", "/transactions.html", "\u5b9e\u65f6\u4ea4\u6613", "arrow-left-right"],
+    ["customers", "/customers.html", "\u987e\u5ba2\u5217\u8868", "users"],
   ];
   // 流水记录分组（总览正下方）：标题本身链到当日流水，右侧箭头只负责展开 / 收起，
   // 不能用 <details><summary>——summary 里放链接点下去会同时切换展开。operator 只能进
@@ -171,23 +171,21 @@ function pageLayout(title, active, body, script) {
     ["deposit-leaderboard", "/deposit-leaderboard.html", "\u5145\u503c\u699c", "trending-up"],
     ["referrers", "/referrer-leaderboard.html", "\u63a8\u8350\u4eba\u699c", "network"],
     ["promos", "/promo-claims.html", "\u6d3b\u52a8\u9886\u53d6", "ticket-percent"],
-    ["customer-return", "/customer-return.html", "\u56de\u6d41\u62a5", "rotate-ccw"],
+    ["customer-return", "/customer-return.html", "\u56de\u6d41\u62a5\u8868", "rotate-ccw"],
   ];
   // MONTHLY REPORT 菜单组，仅 admin（HTML 默认 hidden，app.js 的 loadUser 按角色放出；
   // 三个页面都在 ADMIN_ONLY_PAGES 里）。
   const monthlyNav = [
-    ["monthly-report", "/monthly-report.html", "REPORT", "calendar-range"],
+    ["monthly-report", "/monthly-report.html", "月报", "calendar-range"],
     ["company-expenses", "/company-expenses.html", "COMPANY EXPENSES", "receipt"],
     ["top-referral", "/top-referral.html", "TOP REFERRAL", "award"],
   ];
   const settingsNav = [
     ["audit-history", "/audit-history.html", "\u64cd\u4f5c\u5386\u53f2", "history"],
     ["admin", "/admin-users.html", "\u8d26\u53f7\u7ba1\u7406", "shield-check"],
-    ["telegram-settings", "/telegram-settings.html", "Telegram", "send"],
-    ["company-settings", "/company-settings.html", "\u516c\u53f8 / API", "settings"],
+    ["telegram-settings", "/telegram-settings.html", "Telegram \u8bbe\u7f6e", "send"],
+    ["company-settings", "/company-settings.html", "\u516c\u53f8 / API \u8bbe\u7f6e", "settings"],
   ];
-  const nav = [...primaryNav, ...bankNav, ...insightNav, ...monthlyNav, ...settingsNav];
-  const activeItem = nav.find(([key]) => key === active) || nav[0];
   const navLink = ([key, href, label, icon], id) => {
     const cls = key === active ? ' class="active"' : "";
     const idAttr = id ? ` id="${id}" hidden` : "";
@@ -213,7 +211,7 @@ function pageLayout(title, active, body, script) {
     .filter(Boolean)
     .map((src) => `<script src="${src}"></script>`)
     .join("");
-  return `<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="color-scheme" content="light dark"><title>${title} - NXC Report</title><link rel="icon" href="/favicon.ico" sizes="any"><link rel="icon" type="image/png" href="/brand/favicon-32.png"><link rel="apple-touch-icon" href="/brand/apple-touch-icon.png"><link rel="stylesheet" href="/css/style.css?v=20260812transferfix1"></head><body><a class="skip-link" href="#main-content">\u8df3\u5230\u4e3b\u5185\u5bb9</a><div class="ambient-field" aria-hidden="true"><span></span><span></span></div><div class="sidebar-backdrop" id="sidebar-backdrop"></div><button type="button" class="mobile-menu-btn icon-btn" id="mobile-menu-btn" aria-label="\u6253\u5f00\u5bfc\u822a" aria-controls="sidebar" aria-expanded="false"><i data-lucide="menu"></i><span class="icon-fallback" aria-hidden="true">Menu</span></button><div class="layout"><aside class="sidebar" id="sidebar" aria-label="\u4e3b\u5bfc\u822a"><div class="brand-mark"><img class="brand-symbol" src="/brand/nxc-icon.png" alt="" width="38" height="38"><div><h2>NXC</h2><p>Report</p></div></div><div class="company-bar glass-control" id="company-bar"><label for="company-select">\u5f53\u524d\u516c\u53f8</label><select id="company-select" aria-describedby="company-sync"></select><span id="company-sync" class="company-sync-hint" aria-live="polite">\u6b63\u5728\u8bfb\u53d6...</span></div><nav class="nav-stack" aria-label="\u5de5\u4f5c\u533a"><div class="nav-section nav-primary">${homeLink}</div>${bankGroup}<div class="nav-section nav-primary">${primaryLinks}</div><details class="nav-group"${insightOpen}><summary><span class="nav-summary-label"><i data-lucide="sparkles"></i><span>\u6d1e\u5bdf</span></span><i data-lucide="chevron-down" class="nav-chevron"></i></summary><div class="nav-children">${insightLinks}</div></details><details class="nav-group" id="nav-monthly-group"${monthlyOpen} hidden><summary><span class="nav-summary-label"><i data-lucide="calendar-range"></i><span>MONTHLY REPORT</span></span><i data-lucide="chevron-down" class="nav-chevron"></i></summary><div class="nav-children">${monthlyLinks}</div></details><details class="nav-group" id="nav-settings-group"${settingsOpen} hidden><summary><span class="nav-summary-label"><i data-lucide="sliders-horizontal"></i><span>\u8bbe\u7f6e</span></span><i data-lucide="chevron-down" class="nav-chevron"></i></summary><div class="nav-children">${settingsLinks}</div></details></nav><div class="sidebar-footer"><div class="user-info"><div class="user-avatar" aria-hidden="true">OP</div><div class="user-copy"><span class="user-label">Operator</span><strong id="current-user" translate="no">-</strong></div><button type="button" class="sidebar-theme-btn icon-btn" aria-label="切换主题" title="切换主题"><i data-lucide="moon"></i></button><button type="button" class="logout-btn icon-btn" id="logout-btn" aria-label="\u9000\u51fa\u767b\u5f55" title="\u9000\u51fa\u767b\u5f55"><i data-lucide="log-out"></i></button></div></div></aside><main class="main" id="main-content" tabindex="-1"><header class="topbar glass-panel"><div class="topbar-heading"><div class="topbar-kicker">NXC Report</div><div class="topbar-title">${activeItem[2]}</div></div><div class="topbar-actions"><div class="sync-state" id="global-sync-state" data-state="loading" role="status" aria-live="polite"><span class="sync-indicator" aria-hidden="true"></span><span class="sync-copy"><strong id="global-sync-text">\u6b63\u5728\u8bfb\u53d6\u540c\u6b65\u72b6\u6001</strong><small id="global-sync-time"></small></span></div><button type="button" class="lang-toggle" id="lang-toggle" translate="no" aria-label="\u5207\u6362\u8bed\u8a00" title="\u5207\u6362\u8bed\u8a00"><span data-lang-choice="zh">中</span><span data-lang-choice="en">EN</span></button><button type="button" class="theme-toggle icon-btn" id="theme-toggle" aria-label="\u5207\u6362\u4e3b\u9898" title="\u5207\u6362\u4e3b\u9898"><i data-lucide="moon"></i></button></div></header><section class="page-shell">${body}</section></main></div>${MOBILE_TABBAR}<script src="/vendor/lucide-1.65.0.min.js"></script><script src="/vendor/gsap-3.12.5.min.js"></script><script src="/js/alarm.js?v=20260930alarm1"></script><script src="/js/modal-guard.js?v=20261106drill1"></script><script src="/js/app.js?v=20260802platformsound3"></script><script src="/js/cross-company-alerts.js?v=20261109mob1"></script><script src="/js/mobile-table-drawer.js?v=20261109mtd2"></script><script src="/js/customer-detail.js?v=20260731bankfix4"></script>${extra}</body></html>`;
+  return `<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="color-scheme" content="light dark"><title>${title} - NXC Report</title><link rel="icon" href="/favicon.ico" sizes="any"><link rel="icon" type="image/png" href="/brand/favicon-32.png"><link rel="apple-touch-icon" href="/brand/apple-touch-icon.png"><link rel="stylesheet" href="/css/style.css?v=20260812transferfix1"></head><body><a class="skip-link" href="#main-content">\u8df3\u5230\u4e3b\u5185\u5bb9</a><div class="ambient-field" aria-hidden="true"><span></span><span></span></div><div class="sidebar-backdrop" id="sidebar-backdrop"></div><button type="button" class="mobile-menu-btn icon-btn" id="mobile-menu-btn" aria-label="\u6253\u5f00\u5bfc\u822a" aria-controls="sidebar" aria-expanded="false"><i data-lucide="menu"></i><span class="icon-fallback" aria-hidden="true">Menu</span></button><div class="layout"><aside class="sidebar" id="sidebar" aria-label="\u4e3b\u5bfc\u822a"><div class="brand-mark"><img class="brand-symbol" src="/brand/nxc-icon.png" alt="" width="38" height="38"><div><h2>NXC</h2><p>Report</p></div></div><div class="company-bar glass-control" id="company-bar"><label for="company-select">\u5f53\u524d\u516c\u53f8</label><select id="company-select" aria-describedby="company-sync"></select><span id="company-sync" class="company-sync-hint" aria-live="polite">\u6b63\u5728\u8bfb\u53d6...</span></div><nav class="nav-stack" aria-label="\u5de5\u4f5c\u533a"><div class="nav-section nav-primary">${homeLink}</div>${bankGroup}<div class="nav-section nav-primary">${primaryLinks}</div><details class="nav-group"${insightOpen}><summary><span class="nav-summary-label"><i data-lucide="sparkles"></i><span>\u6d1e\u5bdf</span></span><i data-lucide="chevron-down" class="nav-chevron"></i></summary><div class="nav-children">${insightLinks}</div></details><details class="nav-group" id="nav-monthly-group"${monthlyOpen} hidden><summary><span class="nav-summary-label"><i data-lucide="calendar-range"></i><span>MONTHLY REPORT</span></span><i data-lucide="chevron-down" class="nav-chevron"></i></summary><div class="nav-children">${monthlyLinks}</div></details><details class="nav-group" id="nav-settings-group"${settingsOpen} hidden><summary><span class="nav-summary-label"><i data-lucide="sliders-horizontal"></i><span>\u8bbe\u7f6e</span></span><i data-lucide="chevron-down" class="nav-chevron"></i></summary><div class="nav-children">${settingsLinks}</div></details></nav><div class="sidebar-footer"><div class="user-info"><div class="user-avatar" aria-hidden="true">OP</div><div class="user-copy"><span class="user-label">Operator</span><strong id="current-user" translate="no">-</strong></div><button type="button" class="sidebar-theme-btn icon-btn" aria-label="切换主题" title="切换主题"><i data-lucide="moon"></i></button><button type="button" class="logout-btn icon-btn" id="logout-btn" aria-label="\u9000\u51fa\u767b\u5f55" title="\u9000\u51fa\u767b\u5f55"><i data-lucide="log-out"></i></button></div></div></aside><main class="main" id="main-content" tabindex="-1"><section class="page-shell"><div class="page-actions"><div class="sync-state" id="global-sync-state" data-state="loading" role="status" aria-live="polite" tabindex="0"><span class="sync-indicator" aria-hidden="true"></span><span class="sync-copy"><strong id="global-sync-text">\u6b63\u5728\u8bfb\u53d6\u540c\u6b65\u72b6\u6001</strong><small id="global-sync-time"></small></span></div><button type="button" class="lang-toggle" id="lang-toggle" translate="no" aria-label="\u5207\u6362\u8bed\u8a00" title="\u5207\u6362\u8bed\u8a00"><span data-lang-choice="zh">中</span><span data-lang-choice="en">EN</span></button><button type="button" class="theme-toggle icon-btn" id="theme-toggle" aria-label="\u5207\u6362\u4e3b\u9898" title="\u5207\u6362\u4e3b\u9898"><i data-lucide="moon"></i></button></div>${body}</section></main></div>${MOBILE_TABBAR}<script src="/vendor/lucide-1.65.0.min.js"></script><script src="/vendor/gsap-3.12.5.min.js"></script><script src="/js/alarm.js?v=20260930alarm1"></script><script src="/js/modal-guard.js?v=20261106drill1"></script><script src="/js/app.js?v=20260802platformsound3"></script><script src="/js/cross-company-alerts.js?v=20261109mob1"></script><script src="/js/mobile-table-drawer.js?v=20261109mtd2"></script><script src="/js/customer-detail.js?v=20260731bankfix4"></script>${extra}</body></html>`;
 }
 
 const pageRoutes = {
@@ -221,10 +219,7 @@ const pageRoutes = {
     "\u603b\u89c8",
     "home",
     `<div class="page-toolbar command-toolbar">
-  <div>
-    <p class="page-eyebrow">Operations overview</p>
-    <h1>\u4eca\u65e5 Command Center</h1>
-  </div>
+  <h1>\u603b\u89c8</h1>
   <div class="hero-meta">
     <div id="report-date">\u6b63\u5728\u8bfb\u53d6\u62a5\u8868...</div>
     <div id="sync-status" class="hero-sync-detail" aria-live="polite"></div>
@@ -264,17 +259,7 @@ const pageRoutes = {
   <div class="secondary-kpi"><span>Commission</span><strong><span id="commission-total">-</span> <small id="commission-count"></small></strong></div>
 </section>
 
-<div class="command-grid">
-  <section class="insight-panel glass-panel" aria-labelledby="insight-title">
-    <div class="panel-heading"><h2 id="insight-title">\u6d1e\u5bdf\u5de5\u4f5c\u533a</h2><span class="panel-note">\u62a5\u8868\u4e0e\u699c\u5355</span></div>
-    <div class="insight-grid">
-      <a class="insight-link" href="/daily-archive.html"><span class="insight-icon"><i data-lucide="calendar-days"></i></span><span class="insight-copy"><strong>\u5386\u53f2\u65e5\u62a5</strong><small>\u6309\u65e5\u8ffd\u6eaf\u5145\u63d0\u4e0e\u8f93\u8d62</small></span><i data-lucide="chevron-right"></i></a>
-      <a class="insight-link" href="/deposit-leaderboard.html"><span class="insight-icon"><i data-lucide="trending-up"></i></span><span class="insight-copy"><strong>\u5145\u503c\u699c</strong><small>\u5927\u989d\u4e0e\u9ad8\u9891\u5ba2\u6237</small></span><i data-lucide="chevron-right"></i></a>
-      <a class="insight-link" href="/referrer-leaderboard.html"><span class="insight-icon"><i data-lucide="network"></i></span><span class="insight-copy"><strong>\u63a8\u8350\u4eba\u699c</strong><small>\u6e20\u9053\u8d21\u732e\u4e0e\u8f6c\u5316</small></span><i data-lucide="chevron-right"></i></a>
-      <a class="insight-link" href="/promo-claims.html"><span class="insight-icon"><i data-lucide="ticket-percent"></i></span><span class="insight-copy"><strong>\u6d3b\u52a8\u9886\u53d6</strong><small>Bonus \u4eba\u6570\u4e0e\u91d1\u989d</small></span><i data-lucide="chevron-right"></i></a>
-      <a class="insight-link" href="/customer-return.html"><span class="insight-icon"><i data-lucide="rotate-ccw"></i></span><span class="insight-copy"><strong>\u56de\u6d41\u62a5\u8868</strong><small>\u6c89\u9ed8\u5ba2\u6237\u4e0e\u633d\u56de\u673a\u4f1a</small></span><i data-lucide="chevron-right"></i></a>
-    </div>
-  </section>
+<div class="command-grid command-grid-single">
   <section class="week-panel glass-panel" aria-labelledby="week-title">
     <div class="panel-heading">
       <div><h2 id="week-title">\u8fd1 7 \u65e5\u6458\u8981</h2><span id="week-summary" class="panel-note">\u6b63\u5728\u52a0\u8f7d</span></div>
@@ -305,7 +290,7 @@ const pageRoutes = {
   <div id="today-lb-empty" class="empty-state" hidden>\u4eca\u65e5\u6682\u65e0\u5145\u503c\u5ba2\u6237</div>
   <div id="today-lb-pager" class="pager"></div>
 </section>`,
-    "/js/home.js?v=20260731bankfix3"
+    "/js/home.js?v=20261109uihead1"
   ),
   "/daily-archive.html": pageLayout(
     "\u5386\u53f2\u65e5\u62a5",
@@ -353,12 +338,12 @@ const pageRoutes = {
     "\u987e\u5ba2\u5217\u8868",
     "customers",
     '<div class="page-toolbar"><h1>\u987e\u5ba2\u5217\u8868</h1><div id="cust-summary" class="panel-note"></div></div><div class="segment-tabs" id="segment-tabs"><button type="button" class="seg-btn active" data-segment="all">\u6240\u6709\u987e\u5ba2</button><button type="button" class="seg-btn" data-segment="dep_today">\u4eca\u65e5\u6709\u5145\u503c</button><button type="button" class="seg-btn" data-segment="never_deposited">\u6ca1\u5145\u503c\u8fc7</button><button type="button" class="seg-btn" data-segment="active_depositor">\u8fdb\u8fc7\u94b1\u00b72\u5929\u5185\u5728\u7ebf</button><button type="button" class="seg-btn" data-segment="offline_3_7">\u8fdb\u8fc7\u94b1\u00b73\u20137\u5929\u672a\u4e0a\u7ebf</button><button type="button" class="seg-btn" data-segment="offline_7plus">\u8fdb\u8fc7\u94b1\u00b7\u8d857\u5929\u672a\u4e0a\u7ebf</button></div><div class="filters control-strip"><input id="q" placeholder="\u624b\u673a/\u59d3\u540d/\u63a8\u8350\u4eba"><button class="btn btn-primary btn-sm" id="search-btn">\u641c\u7d22</button><button class="btn btn-outline btn-sm" id="export-btn">\u5bfc\u51fa\u7535\u8bdd</button></div><div class="modal-overlay" id="export-modal"><div class="modal export-modal"><h2>\u5bfc\u51fa\u7535\u8bdd\u53f7\u7801</h2><p class="modal-note">\u9ed8\u8ba4\u5bfc\u51fa\u6240\u6709\u987e\u5ba2\uff0c\u53ef\u52fe\u9009\u4ee5\u4e0b\u5206\u7ec4\u5408\u5e76\u53bb\u91cd</p><div class="form-group"><label>\u6587\u4ef6\u683c\u5f0f</label><select id="export-format"><option value="csv">CSV</option><option value="txt">TXT\uff08\u6bcf\u884c\u4e00\u4e2a\u53f7\u7801\uff09</option><option value="googlesheet">Google Sheets\uff08CSV \u5bfc\u5165\uff09</option></select></div><div class="form-group"><label>\u987e\u5ba2\u5206\u7ec4</label><div class="export-segments"><label class="export-check"><input type="checkbox" id="exp-all" checked> \u6240\u6709\u987e\u5ba2</label><label class="export-check"><input type="checkbox" data-segment="never_deposited"> \u6ca1\u5145\u503c\u8fc7</label><label class="export-check"><input type="checkbox" data-segment="active_depositor"> \u8fdb\u8fc7\u94b1\u00b72\u5929\u5185\u5728\u7ebf</label><label class="export-check"><input type="checkbox" data-segment="offline_3_7"> \u8fdb\u8fc7\u94b1\u00b73\u20137\u5929\u672a\u4e0a\u7ebf</label><label class="export-check"><input type="checkbox" data-segment="offline_7plus"> \u8fdb\u8fc7\u94b1\u00b7\u8d857\u5929\u672a\u4e0a\u7ebf</label></div></div><div id="export-hint" class="modal-hint"></div><div class="actions"><button class="btn btn-outline btn-sm" id="export-cancel">\u53d6\u6d88</button><button class="btn btn-primary btn-sm" id="export-confirm">\u4e0b\u8f7d</button></div></div></div><div class="table-wrap data-surface"><table class="extra-table cust-table" data-m="title:1 meta:2 metric:6,14"><thead><tr><th rowspan="2">\u59d3\u540d</th><th rowspan="2">\u624b\u673a</th><th rowspan="2">\u6700\u540e\u5145\u503c</th><th rowspan="2">\u6700\u540e\u4e0a\u7ebf</th><th rowspan="2">\u5145\u503c\u6b21\u6570</th><th rowspan="2">\u5145\u503c\u603b\u989d</th><th rowspan="2">\u63d0\u6b3e\u603b\u989d</th><th colspan="2" class="th-group th-bonus">Bonus</th><th colspan="2" class="th-group th-manual">Manual</th><th colspan="2" class="th-group th-commission">Commission</th><th rowspan="2">\u516c\u53f8\u8f93\u8d62</th><th rowspan="2">\u63a8\u8350\u4eba</th></tr><tr><th class="th-sub">\u7b14\u6570</th><th class="th-sub">\u603b\u989d</th><th class="th-sub">\u7b14\u6570</th><th class="th-sub">\u603b\u989d</th><th class="th-sub">\u7b14\u6570</th><th class="th-sub">\u603b\u989d</th></tr></thead><tbody id="rows"></tbody></table></div><div class="pager" id="pager"></div>',
-    "/js/customers.js?v=20260817modalux2"
+    "/js/customers.js?v=20261109uihead1"
   ),
   "/company-settings.html": pageLayout(
     "\u516c\u53f8/API \u8bbe\u7f6e",
     "company-settings",
-    '<div class="page-toolbar"><h1>\u516c\u53f8 / API \u8bbe\u7f6e</h1><button class="btn btn-success btn-sm" id="create-btn">+ \u65b0\u5efa\u516c\u53f8</button></div><p class="page-description">\u914d\u7f6e\u5404\u516c\u53f8\u540e\u53f0 API\uff0c\u542f\u7528\u540e\u5b9a\u65f6\u540c\u6b65\u4f1a\u81ea\u52a8\u62c9\u53d6\u6570\u636e\uff1b\u65b0\u5bf9\u63a5\u76d8\u53ef\u76f4\u63a5\u5728\u6b64\u6dfb\u52a0\uff0c\u65e0\u9700\u6539\u4ee3\u7801</p><div id="company-cards" class="company-cards"></div><div class="modal-overlay" id="create-modal"><div class="modal"><h2>\u65b0\u5efa\u5bf9\u63a5\u76d8</h2><div class="form-group"><label>\u516c\u53f8 ID</label><input id="new-id" placeholder="\u4f8b\u5982 mybrand01"></div><div class="form-group"><label>\u663e\u793a\u540d\u79f0</label><input id="new-name" placeholder="\u4f8b\u5982 MyBrand"></div><div class="form-group"><label>API URL</label><input id="new-api-url" autocomplete="off" data-lpignore="true" data-1p-ignore placeholder="https://.../api/v1/index.php"></div><div class="form-group"><label>Access ID</label><input id="new-access-id" autocomplete="off" data-lpignore="true" data-1p-ignore></div><div class="form-group"><label>Access Token</label><input id="new-access-token" type="password" autocomplete="new-password" data-lpignore="true" data-1p-ignore></div><p id="create-hint" class="form-message" role="status" aria-live="polite"></p><div class="actions"><button class="btn btn-outline btn-sm" id="cancel-btn">\u53d6\u6d88</button><button class="btn btn-outline btn-sm" id="create-test-btn">\u6d4b\u8bd5\u8fde\u63a5</button><button class="btn btn-primary btn-sm" id="create-submit">\u521b\u5efa</button></div></div></div><div class="modal-overlay" id="delete-modal"><div class="modal"><h2>\u5220\u9664\u516c\u53f8</h2><p class="modal-note">\u5c06\u6c38\u4e45\u5220\u9664 <strong id="delete-name"></strong> \u7684\u6240\u6709\u540c\u6b65\u6570\u636e\uff08\u5ba2\u6237\u3001\u4ea4\u6613\u3001\u7edf\u8ba1\uff09\uff0c\u4e14\u4e0d\u53ef\u6062\u590d\u3002</p><div class="form-group"><label>\u8bf7\u8f93\u5165\u516c\u53f8 ID \u4ee5\u786e\u8ba4</label><input id="delete-confirm-id" placeholder="\u8f93\u5165\u8981\u5220\u9664\u7684\u516c\u53f8 ID"></div><div class="actions"><button class="btn btn-outline btn-sm" id="delete-cancel-btn">\u53d6\u6d88</button><button class="btn btn-danger btn-sm" id="delete-submit-btn">\u786e\u8ba4\u5220\u9664</button></div></div></div>',
+    '<div class="page-toolbar"><h1>\u516c\u53f8 / API \u8bbe\u7f6e</h1><button class="btn btn-success btn-sm" id="create-btn">+ \u65b0\u5efa\u516c\u53f8</button></div><div id="company-cards" class="company-cards"></div><div class="modal-overlay" id="create-modal"><div class="modal"><h2>\u65b0\u5efa\u5bf9\u63a5\u76d8</h2><div class="form-group"><label>\u516c\u53f8 ID</label><input id="new-id" placeholder="\u4f8b\u5982 mybrand01"></div><div class="form-group"><label>\u663e\u793a\u540d\u79f0</label><input id="new-name" placeholder="\u4f8b\u5982 MyBrand"></div><div class="form-group"><label>API URL</label><input id="new-api-url" autocomplete="off" data-lpignore="true" data-1p-ignore placeholder="https://.../api/v1/index.php"></div><div class="form-group"><label>Access ID</label><input id="new-access-id" autocomplete="off" data-lpignore="true" data-1p-ignore></div><div class="form-group"><label>Access Token</label><input id="new-access-token" type="password" autocomplete="new-password" data-lpignore="true" data-1p-ignore></div><p id="create-hint" class="form-message" role="status" aria-live="polite"></p><div class="actions"><button class="btn btn-outline btn-sm" id="cancel-btn">\u53d6\u6d88</button><button class="btn btn-outline btn-sm" id="create-test-btn">\u6d4b\u8bd5\u8fde\u63a5</button><button class="btn btn-primary btn-sm" id="create-submit">\u521b\u5efa</button></div></div></div><div class="modal-overlay" id="delete-modal"><div class="modal"><h2>\u5220\u9664\u516c\u53f8</h2><p class="modal-note">\u5c06\u6c38\u4e45\u5220\u9664 <strong id="delete-name"></strong> \u7684\u6240\u6709\u540c\u6b65\u6570\u636e\uff08\u5ba2\u6237\u3001\u4ea4\u6613\u3001\u7edf\u8ba1\uff09\uff0c\u4e14\u4e0d\u53ef\u6062\u590d\u3002</p><div class="form-group"><label>\u8bf7\u8f93\u5165\u516c\u53f8 ID \u4ee5\u786e\u8ba4</label><input id="delete-confirm-id" placeholder="\u8f93\u5165\u8981\u5220\u9664\u7684\u516c\u53f8 ID"></div><div class="actions"><button class="btn btn-outline btn-sm" id="delete-cancel-btn">\u53d6\u6d88</button><button class="btn btn-danger btn-sm" id="delete-submit-btn">\u786e\u8ba4\u5220\u9664</button></div></div></div>',
     "/js/company-settings.js?v=20260924tgalert1"
   ),
   "/bank-settings.html": pageLayout(
@@ -428,7 +413,8 @@ const pageRoutes = {
   "/bank-ledger.html": pageLayout(
     "\u5f53\u65e5\u6d41\u6c34",
     "bank-ledger",
-    `<div class="sheet-app bkv2">
+    `<div class="page-toolbar"><h1>当日流水</h1></div>
+<div class="sheet-app bkv2">
 <div class="bk-toolbar">
 <div class="bk-tools">
 <input type="date" id="sheet-date" class="sheet-date">
@@ -545,9 +531,10 @@ const pageRoutes = {
   "/bank-channels.html": pageLayout(
     "\u652f\u4ed8\u6e20\u9053",
     "bank-channels",
-    `<div class="channels-app" id="bank-channels-page">
+    `<div class="page-toolbar"><h1>支付渠道</h1></div>
+<div class="channels-app" id="bank-channels-page">
 <section class="ch-summary" aria-label="全部渠道">
-<div class="ch-summary-copy"><span class="bk-summary-kicker">ALL CHANNELS</span><strong>全部渠道</strong><span>点击渠道行可筛选流水</span></div>
+<div class="ch-summary-copy"><strong>全部渠道</strong></div>
 <div class="ch-summary-stat"><small>总余额</small><strong id="ch-total-balance" translate="no">0.00</strong></div>
 <div class="ch-summary-stat"><small>人头</small><strong id="ch-count-nominee" translate="no">0</strong></div>
 <div class="ch-summary-stat"><small>幽灵</small><strong id="ch-count-ghost" translate="no">0</strong></div>
@@ -603,7 +590,7 @@ const pageRoutes = {
     "\u64cd\u4f5c\u5386\u53f2",
     "audit-history",
     `<div class="audit-page">
-<div class="page-toolbar audit-heading"><div><h1>操作历史</h1><p class="page-description">追踪资金操作人、字段变化，以及每笔平台交易与账单流水的完整关联。</p></div><div class="audit-immutability"><i data-lucide="shield-check"></i><span>只追加 · 不可修改</span></div></div>
+<div class="page-toolbar audit-heading"><div><h1>操作历史</h1></div><div class="audit-immutability"><i data-lucide="shield-check"></i><span>只追加 · 不可修改</span></div></div>
 <section class="data-panel audit-trace-panel" aria-labelledby="trace-title">
 <div class="audit-panel-heading"><div><h2 id="trace-title">单笔交易追踪</h2><p>输入完整交易号或流水 ID，查看平台原单、关联流水和时间线。</p></div></div>
 <form id="trace-form" class="audit-trace-form"><label class="sr-only" for="trace-query">交易号或流水 ID</label><input id="trace-query" autocomplete="off" placeholder="交易号 / 流水 ID"><select id="trace-type" aria-label="查询类型"><option value="transaction">交易号</option><option value="ledger">流水 ID</option></select><button class="btn btn-primary btn-sm" type="submit"><i data-lucide="search"></i>追踪</button></form>
@@ -636,7 +623,7 @@ const pageRoutes = {
   "/admin-users.html": pageLayout(
     "\u8d26\u53f7\u7ba1\u7406",
     "admin",
-    '<div class="page-toolbar"><h1>\u8d26\u53f7\u7ba1\u7406</h1><button class="btn btn-success btn-sm" id="create-btn">+ \u65b0\u5efa\u8d26\u53f7</button></div><p class="page-description">\u81ea\u5b9a\u4e49\u8d26\u53f7 ID\u3001\u5bc6\u7801\u548c\u89d2\u8272\uff08Admin / Operator\uff09\uff0c\u521b\u5efa\u540e\u590d\u5236\u53d1\u7ed9\u5bf9\u65b9</p><div class="table-wrap data-surface"><table class="m-cards m-users"><thead><tr><th>\u8d26\u53f7 ID</th><th>\u540d\u79f0</th><th>\u89d2\u8272</th><th>\u72b6\u6001</th><th>\u64cd\u4f5c</th></tr></thead><tbody id="rows"></tbody></table></div><div class="modal-overlay" id="create-modal"><div class="modal"><h2>\u65b0\u5efa\u8d26\u53f7</h2><div class="form-group"><label>\u8d26\u53f7 ID</label><input id="new-username"></div><div class="form-group"><label>\u663e\u793a\u540d\u79f0</label><input id="new-name"></div><div class="form-group"><label>\u5bc6\u7801</label><input id="new-password" type="password"></div><div class="actions"><button class="btn btn-outline btn-sm" id="cancel-btn">\u53d6\u6d88</button><button class="btn btn-success btn-sm" id="save-btn">\u521b\u5efa</button></div></div></div><div class="modal-overlay" id="share-modal"><div class="modal"><h2>\u53d1\u9001\u8d26\u53f7\u4fe1\u606f</h2><div class="copy-box" id="share-text"></div><div class="actions"><button class="btn btn-primary btn-sm" id="copy-btn">\u590d\u5236</button><button class="btn btn-outline btn-sm" id="close-share">\u5173\u95ed</button></div></div></div>',
+    '<div class="page-toolbar"><h1>\u8d26\u53f7\u7ba1\u7406</h1><button class="btn btn-success btn-sm" id="create-btn">+ \u65b0\u5efa\u8d26\u53f7</button></div><div class="table-wrap data-surface"><table class="m-cards m-users"><thead><tr><th>\u8d26\u53f7 ID</th><th>\u540d\u79f0</th><th>\u89d2\u8272</th><th>\u72b6\u6001</th><th>\u64cd\u4f5c</th></tr></thead><tbody id="rows"></tbody></table></div><div class="modal-overlay" id="create-modal"><div class="modal"><h2>\u65b0\u5efa\u8d26\u53f7</h2><div class="form-group"><label>\u8d26\u53f7 ID</label><input id="new-username"></div><div class="form-group"><label>\u663e\u793a\u540d\u79f0</label><input id="new-name"></div><div class="form-group"><label>\u5bc6\u7801</label><input id="new-password" type="password"></div><div class="actions"><button class="btn btn-outline btn-sm" id="cancel-btn">\u53d6\u6d88</button><button class="btn btn-success btn-sm" id="save-btn">\u521b\u5efa</button></div></div></div><div class="modal-overlay" id="share-modal"><div class="modal"><h2>\u53d1\u9001\u8d26\u53f7\u4fe1\u606f</h2><div class="copy-box" id="share-text"></div><div class="actions"><button class="btn btn-primary btn-sm" id="copy-btn">\u590d\u5236</button><button class="btn btn-outline btn-sm" id="close-share">\u5173\u95ed</button></div></div></div>',
     "/js/admin-users.js?v=20261105cols1"
   ),
   "/monthly-report.html": pageLayout(
@@ -676,7 +663,7 @@ const pageRoutes = {
   "/top-referral.html": pageLayout(
     "TOP REFERRAL",
     "top-referral",
-    `<div class="page-toolbar"><div><h1>TOP REFERRAL</h1><p class="page-description">平台同步数据 · 按推荐人汇总下线 · 点一行看详情</p></div><div id="tr-period" class="panel-note" translate="no"></div></div>
+    `<div class="page-toolbar"><div><h1>TOP REFERRAL</h1></div><div id="tr-period" class="panel-note" translate="no"></div></div>
 <div class="filters control-strip mr-controls">
 <div class="segment-tabs mr-view-tabs" id="tr-view-tabs" role="group" aria-label="视图"><button type="button" class="seg-btn active" data-view="month">月</button><button type="button" class="seg-btn" data-view="year">年</button></div>
 <button type="button" class="btn btn-outline btn-sm" id="tr-prev"></button>
@@ -720,10 +707,10 @@ for (const route of Object.keys(pageRoutes)) {
     .replace('<link rel="stylesheet" href="/css/style.css?v=20260812transferfix1">', i18nHeadHtml + '<link rel="stylesheet" href="/css/style.css?v=20260812transferfix1">')
     .replace('<div class="company-bar glass-control" id="company-bar">', '<div class="company-bar glass-control" id="company-bar">' + companyCompactEntryHtml)
     .replace('<script src="/vendor/lucide-1.65.0.min.js"></script>', globalFeedbackHtml + i18nBootHtml + '<script src="/vendor/lucide-1.65.0.min.js"></script>')
-    .replace('/css/style.css?v=20260812transferfix1', '/css/style.css?v=20261109uitok1')
+    .replace('/css/style.css?v=20260812transferfix1', '/css/style.css?v=20261109uihead1')
     .replace('/js/customer-detail.js?v=20260731bankfix4', '/js/customer-detail.js?v=20261109mtd1')
     .replace('/css/style.css?v=20260802topbarflow1', '/css/style.css?v=20261001archive1')
-    .replace('/js/app.js?v=20260802platformsound3', '/js/app.js?v=20261109mob1');
+    .replace('/js/app.js?v=20260802platformsound3', '/js/app.js?v=20261109uihead1');
 }
 
 function requireAdminPage(req, res, next) {

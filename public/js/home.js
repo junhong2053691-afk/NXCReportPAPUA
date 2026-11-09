@@ -7,8 +7,7 @@ function renderCards(d) {
     dateEl.textContent =
       (d.companyName ? d.companyName + " \u00b7 " : "") +
       "\u62a5\u8868\u65e5: " +
-      d.date +
-      " \u00b7 \u6570\u636e\u6765\u6e90: API \u540c\u6b65";
+      d.date;
   }
   animateValue(document.getElementById("dep-count"), d.deposits.count, { suffix: " \u7b14" });
   animateValue(document.getElementById("dep-total"), d.deposits.total, { prefix: "\u5408\u8ba1 $", decimals: 2 });

@@ -795,6 +795,18 @@ function setupTheme() {
   });
 }
 
+// 手机（≤700）上同步状态只露一个色点，点一下展开文字、再点收起（CSS 的 .is-expanded）。
+// 电脑上文字常驻，这个开关不起作用。
+function setupSyncStateToggle() {
+  var el = document.getElementById("global-sync-state");
+  if (!el) return;
+  function toggle() { el.classList.toggle("is-expanded"); }
+  el.addEventListener("click", toggle);
+  el.addEventListener("keydown", function (e) {
+    if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggle(); }
+  });
+}
+
 // 手机上长列表（一天 150+ 条流水）滚远之后的回程。超过 1.5 屏才出现；CSS 只在 ≤700 显示。
 function setupBackToTop() {
   var btn = document.getElementById("back-to-top");
@@ -859,7 +871,7 @@ function setupGlassMotion() {
         clearProps: "transform,opacity,visibility",
       });
     }
-    window.gsap.fromTo([".topbar", ".page-shell"], { autoAlpha: 0, y: 8 }, {
+    window.gsap.fromTo(".page-shell", { autoAlpha: 0, y: 8 }, {
       autoAlpha: 1,
       y: 0,
       duration: 0.34,
@@ -867,7 +879,7 @@ function setupGlassMotion() {
       ease: "expo.out",
       clearProps: "transform,opacity,visibility",
     });
-    window.gsap.fromTo(".card, .metric-card, .hero-core, .insight-link, .week-day", {
+    window.gsap.fromTo(".card, .metric-card, .hero-core, .week-day", {
       autoAlpha: 0,
       y: 10,
       scale: 0.992
@@ -1564,6 +1576,7 @@ document.addEventListener("DOMContentLoaded", () => {
     setupModalAccessibility();
     setupLanguage();
     setupTheme();
+    setupSyncStateToggle();
     renderIcons();
     setupGlassMotion();
   }
