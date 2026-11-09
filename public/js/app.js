@@ -796,15 +796,35 @@ function setupTheme() {
 }
 
 // 手机（≤700）上同步状态只露一个色点，点一下展开文字、再点收起（CSS 的 .is-expanded）。
-// 电脑上文字常驻，这个开关不起作用。
+// 只在手机宽度下把它变成按钮（role / tabindex / aria-expanded）：电脑上文字常驻，
+// 不该多一个按了没反应的 Tab 停留点。播报交给里面的 .sync-copy（role="status"）。
 function setupSyncStateToggle() {
   var el = document.getElementById("global-sync-state");
-  if (!el) return;
-  function toggle() { el.classList.toggle("is-expanded"); }
+  if (!el || !window.matchMedia) return;
+  var mq = window.matchMedia("(max-width: 700px)");
+  function sync() {
+    if (mq.matches) {
+      el.setAttribute("role", "button");
+      el.setAttribute("tabindex", "0");
+      el.setAttribute("aria-expanded", String(el.classList.contains("is-expanded")));
+    } else {
+      el.classList.remove("is-expanded");
+      el.removeAttribute("role");
+      el.removeAttribute("tabindex");
+      el.removeAttribute("aria-expanded");
+    }
+  }
+  function toggle() {
+    if (!mq.matches) return;
+    el.classList.toggle("is-expanded");
+    el.setAttribute("aria-expanded", String(el.classList.contains("is-expanded")));
+  }
   el.addEventListener("click", toggle);
   el.addEventListener("keydown", function (e) {
     if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggle(); }
   });
+  if (mq.addEventListener) mq.addEventListener("change", sync); else if (mq.addListener) mq.addListener(sync);
+  sync();
 }
 
 // 手机上长列表（一天 150+ 条流水）滚远之后的回程。超过 1.5 屏才出现；CSS 只在 ≤700 显示。

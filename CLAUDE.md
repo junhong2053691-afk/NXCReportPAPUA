@@ -151,9 +151,10 @@ $env:TUNNEL_EDGE_IP_VERSION="4"
 - **改了 `public/js/*.js` / `style.css` 必须同时换 `server/index.js` 里那个文件的 `?v=` 版本号**。线上在 Cloudflare 后面，
   地址不变就会继续拿到旧文件——2026-11-09「只勾 1 户就预选」第一次上线就是漏了这一步，员工那边完全没变化
 - **尺寸只用 token**（`DESIGN.md`，2026-11-09 UI 精修）：字号 `--text-*` 8 档（11/12/13/14/16/20/24/32），控件高度
-  `--control-h`（36，标准）/ `--control-h-sm`（32，表格行内），≤700 两档自动变 44。新写死的 px 就是新的「大小不一」
+  `--control-h`（36，标准）/ `--control-h-sm`（32，表格行内），≤768 两档自动变 44；≤700 时 `--text-2xs` 变 12。新写死的 px 就是新的「大小不一」
 - **没有顶栏**：同步状态 / 中 EN / 主题由 `pageLayout` 放进 `.page-shell` 的第一个子元素 `.page-actions`，CSS 网格把它排到
-  **紧随其后那个元素**的右侧。所以新页面 body 的第一个元素必须是页头（`.page-toolbar` 带 `<h1>`），H1 与侧栏页名一字不差；
+  **紧随其后的页头**（`.page-toolbar` / `.page-header`）右侧。新页面 body 的第一个元素应当是页头、H1 与侧栏页名一字不差——
+  不是页头时开关会单独占一行（操作历史曾因外层包了一层 div，整页被挤进左列）；
   标题下只留讲「数字怎么算」的口径说明
 - 全局 `api(url, opts)` 在 `public/js/app.js`，**只接受 2 个参数** `(url, opts)`；后台轮询用 `{ bg: true }`
 - Modal 显示用 `classList.add("show")`，不是 `open`

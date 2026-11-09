@@ -39,7 +39,7 @@ function renderCards(d) {
   if (hintEl) {
     hintEl.classList.remove("negative");
     hintEl.textContent = d.isHistorical
-      ? "\u5386\u53f2\u5feb\u7167 \u00b7 \u5145\u63d0/Bonus/\u8f93\u8d62\u6765\u81ea\u5df2\u540c\u6b65\u4ea4\u6613"
+      ? "\u5386\u53f2\u5feb\u7167"
       : "\u5b9e\u65f6\u6570\u636e";
     if (d.customersTotalSource === "unavailable") {
       hintEl.textContent += " \u00b7 \u603b\u987e\u5ba2\u65e0\u5f53\u65e5\u5feb\u7167";
