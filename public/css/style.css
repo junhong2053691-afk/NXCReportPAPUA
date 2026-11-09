@@ -123,25 +123,40 @@
   --space-2xl: 24px;
   --space-3xl: 32px;
 
-  /* ── 字号刻度（11 档，保号迁移）───────────────────────────
-     ⚠ 不能一次收敛到 5 档：2582-2593 的 12 个 .col-* 固定宽度、
-     1901、1915-1917 的 76px 三连全按 11/12px 算死，table-layout:fixed
-     下字号上调会当场撑爆 14 列网格。所以密集档 10/11/12/13 必须保留。
-     现有 22 个取值的归档：
-       8,9,10,10.5 → 3xs   11,11.5 → 2xs   12,12.5 → xs   13 → sm
-       14 → base（= body 的 14px/1.5，见 :142）   15 → md   16,17 → lg
-       18,20 → xl   22,24,25,26,27 → 2xl   33 → 3xl   38 → 4xl */
-  --text-3xs: 10px;
+  /* ── 字号刻度（8 档，2026-11-09 UI 精修定稿）──────────────
+     11 / 12 / 13 / 14 / 16 / 20 / 24 / 32，见 .scratch/ui-polish/decisions.md。
+       2xs 11  表头、徽章、小标签（全站最小字号；手机小标签用 xs）
+       xs  12  表格正文、次要说明、紧凑按钮
+       sm  13  标准按钮、表单标签
+       base 14 正文（= body 的 14px/1.5）
+       lg  16  区块标题、手机输入框（防 iOS 缩放）
+       xl  20  弹窗标题、次级数字
+       2xl 24  页面大标题、KPI 数字
+       3xl 32  首页主数字
+     ⚠ 豁免：.sheet-table（当日流水 14 列）在 table-layout:fixed 下按
+     10/11px 算死了 .col-* 列宽，字号上调会撑爆网格，保留原值不进刻度。
+     3xs / md / 4xl 是旧档名，只作别名保留，新代码不要再用。 */
   --text-2xs: 11px;
   --text-xs: 12px;
   --text-sm: 13px;
   --text-base: 14px;
-  --text-md: 15px;
-  --text-lg: 17px;
+  --text-lg: 16px;
   --text-xl: 20px;
-  --text-2xl: 25px;
-  --text-3xl: 33px;
-  --text-4xl: 38px;
+  --text-2xl: 24px;
+  --text-3xl: 32px;
+  --text-3xs: var(--text-2xs);
+  --text-md: var(--text-lg);
+  --text-4xl: var(--text-3xl);
+
+  /* ── 控件高度（2 档 + 手机触控）─────────────────────────────
+     电脑：标准 36（按钮 / 输入框 / 下拉 / 页签，配 13px 字），
+           紧凑 32（表格行内按钮、流水工具栏、密集操作区，配 12px 字）。
+     ≤700 两档都放大到 44 触控尺寸（见文件末尾的 @media 覆写）。
+     同一行里的按钮与输入框必须用同一档，底边才能对齐。 */
+  --control-h: 36px;
+  --control-h-sm: 32px;
+  --control-fs: var(--text-sm);
+  --control-fs-sm: var(--text-xs);
 
   /* ── 字重（5 档）──────────────────────────────────────────
      现状 14 个取值。570/620/650/720/740/750/760/850 在当前的系统
@@ -172,6 +187,15 @@
 :root[data-sidebar="collapsed"] {
   --sidebar-width: var(--sidebar-width-collapsed);
   --sidebar-content-gap: 16px;
+}
+/* 手机：两档控件都放大到触控尺寸，字号跟着抬（16px 输入框防 iOS 聚焦缩放） */
+@media (max-width: 700px) {
+  :root {
+    --control-h: 44px;
+    --control-h-sm: 44px;
+    --control-fs: var(--text-lg);
+    --control-fs-sm: var(--text-sm);
+  }
 }
 
 :root[data-theme="dark"] {
