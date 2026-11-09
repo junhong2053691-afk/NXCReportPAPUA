@@ -237,7 +237,7 @@ $env:TUNNEL_EDGE_IP_VERSION="4"
 > 2026-11 拆页：原 `/bank-accounts.html`（`bank-accounts.js`）拆成侧边栏「流水记录」分组下的当日流水与支付渠道，旧地址 302 到当日流水（`#channels` 再转去支付渠道）。两页共用的格式化、STATUS 词表与余额口径在 `bank-common.js`。operator 只能进这两页（`server/index.js` 的 `OPERATOR_PAGES` 与 `app.js` 的 `loadUser` 是同一份名单）。接单区常驻当日流水页：后台刷新只做增量，员工动过的行（`data-dirty`）绝不重画，被别人处理掉的只标灰；刷新时切页签必须带 `{ silent: true }`，否则会把平台待审批报警顺手 ack 掉。
 
 > **实时收款银行**（`bank_accounts.live_receiving`，`lib/bankLiveReceiving.js`）：接单区顶上勾最多 3 个「现在正在收款的户」，
-> 充值单的 BANK 下拉只列它们、**不预选**，末尾「其他渠道…」展开完整列表；一个没勾就是完整列表；提现不受影响。
+> 充值单的 BANK 下拉只列它们，**恰好勾 1 户时预选它、勾 2～3 户不预选**（2026-11-09 用户要求），末尾「其他渠道…」展开完整列表；一个没勾就是完整列表（不预选）；提现不受影响。
 > 只能经 `PUT /api/banks/live-receiving` 整组替换（注册在 `PUT /:id` 之前），**不进 PUT 白名单**——逐户开关时两人同时勾
 > 会各自通过「≤ 3」变成 4 个。封禁 / 归档 / 取消使用中在同一条 UPDATE 里清零，解封不恢复。改动写审计
 > `bank_account.live_receiving`。它只决定下拉列谁，**绝不自动审批**。测试 `server/tests/live-receiving.test.js`。

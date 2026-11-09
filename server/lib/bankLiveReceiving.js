@@ -7,8 +7,9 @@
 //     PUT /api/banks/:id 的白名单里——逐户开关时两个人同时勾，会各自通过「≤ 3」的检查、
 //     合起来变成 4 个；整组替换在一条 UPDATE 里完成，better-sqlite3 同步执行，不会超。
 //   - 封禁 / 归档 / 取消「使用中」时由 routes/banks.js 在同一条 UPDATE 里清掉。
-//   - 它只决定下拉里列哪些户，**不预选、不自动审批**：钱要有人点「审批」才入账，这条
-//     铁律不变（同步本身不碰余额）。
+//   - 它只决定下拉里列哪些户，**不自动审批**：钱要有人点「审批」才入账，这条
+//     铁律不变（同步本身不碰余额）。预选只在恰好勾 1 户时做（2026-11-09 用户要求），
+//     勾 2～3 户不预选；规则在前端 bank-ledger.js 的 depositBankOptionsHtml。
 const { isOperating } = require("./bankLifecycle");
 
 const MAX_LIVE_RECEIVING = 3;

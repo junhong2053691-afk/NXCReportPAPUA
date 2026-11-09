@@ -68,13 +68,41 @@ test("路由接线：专用端点在 PUT /:id 之前、只认 req.companyId、�
   assert.match(routes, /live_receiving: r\.live_receiving \? 1 : 0/);
 });
 
-test("前端：充值单只列实时收款银行、不预选，留「其他渠道…」退路；提现不受影响", () => {
+// 把 bank-ledger.js 里的 depositBankOptionsHtml 抠出来，配上桩跑真实行为。
+function loadDepositBankOptionsHtml(live) {
   const src = fs.readFileSync(path.join(__dirname, "../../public/js/bank-ledger.js"), "utf8");
-  const fn = src.slice(src.indexOf("function depositBankOptionsHtml("), src.indexOf("\n  }\n", src.indexOf("function depositBankOptionsHtml(")));
-  assert.match(fn, /liveBanks\(\)/);
-  // bankSelectOptionsHtml 首项固定是空的「—」；不传第三个参数 = 不预选（ledger-bank-pick.js）
-  assert.match(fn, /window\.bankSelectOptionsHtml\(live, tabLabel\)/, "不预选");
-  assert.match(fn, /OTHER_BANKS/, "要有「其他渠道…」");
+  const start = src.indexOf("function depositBankOptionsHtml(");
+  const fn = src.slice(start, src.indexOf("\n  }\n", start) + 4);
+  const { bankSelectOptionsHtml } = require("../../public/js/ledger-bank-pick.js");
+  return new Function("window", "liveBanks", "pendingBankOptionsHtml", "tabLabel", "OTHER_BANKS",
+    `${fn}; return depositBankOptionsHtml;`)(
+    { bankSelectOptionsHtml },
+    () => live,
+    () => "FULL_LIST",
+    (b) => b.label,
+    "__other__"
+  );
+}
+
+test("前端：充值单只列实时收款银行，留「其他渠道…」退路；提现不受影响", () => {
+  const banks = [{ id: 11, label: "Alpha" }, { id: 12, label: "Beta" }];
+  const html = loadDepositBankOptionsHtml(banks)();
+  assert.match(html, /value="11"/);
+  assert.match(html, /value="12"/);
+  assert.match(html, /<option value="__other__">其他渠道…<\/option>$/, "要有「其他渠道…」");
+  assert.equal(loadDepositBankOptionsHtml([])(), "FULL_LIST", "一个没勾就是完整列表");
   // 提现行的本户 BANK 仍走完整列表
+  const src = fs.readFileSync(path.join(__dirname, "../../public/js/bank-ledger.js"), "utf8");
   assert.match(src, /isWd\s*\?\s*`<select class="pend-bank">\$\{pendingBankOptionsHtml\(\)\}<\/select>/);
+});
+
+test("前端：恰好勾 1 户时预选它；勾 2～3 户不预选", () => {
+  const one = loadDepositBankOptionsHtml([{ id: 11, label: "Alpha" }])();
+  assert.match(one, /value="11" translate="no" selected/);
+  assert.equal((one.match(/selected/g) || []).length, 1);
+
+  const two = loadDepositBankOptionsHtml([{ id: 11, label: "Alpha" }, { id: 12, label: "Beta" }])();
+  assert.doesNotMatch(two, /selected/, "2 户不预选");
+  const three = loadDepositBankOptionsHtml([{ id: 11, label: "A" }, { id: 12, label: "B" }, { id: 13, label: "C" }])();
+  assert.doesNotMatch(three, /selected/, "3 户不预选");
 });

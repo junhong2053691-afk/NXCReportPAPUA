@@ -1506,9 +1506,11 @@
   }
 
   // ---- 实时收款银行（server/lib/bankLiveReceiving.js）---------------------------
-  // 接单区顶上勾最多 3 个「现在正在收款的户」。充值单的 BANK 下拉只列它们、不预选，末尾留
+  // 接单区顶上勾最多 3 个「现在正在收款的户」。充值单的 BANK 下拉只列它们，末尾留
   // 「其他渠道…」：客户转进了非实时的户（比如还在用旧户）时，选它就展开完整列表——不留退路
   // 会在真实对账时把人卡死。一个都没勾就是原来的完整列表。提现单不受影响。
+  // 预选：**恰好勾 1 户时预选它**（2026-11-09 用户要求：只有一个可选还得每笔点一下太麻烦）；
+  // 勾 2～3 户照旧不预选，免得员工不看到账就点审批、记错户。
   const OTHER_BANKS = "__other__";
   const LIVE_MAX = 3;
   let liveSaving = false;
@@ -1518,7 +1520,8 @@
   function depositBankOptionsHtml() {
     const live = liveBanks();
     if (!live.length) return pendingBankOptionsHtml();
-    return window.bankSelectOptionsHtml(live, tabLabel)
+    const preset = live.length === 1 ? live[0].id : undefined;
+    return window.bankSelectOptionsHtml(live, tabLabel, preset)
       + `<option value="${OTHER_BANKS}">其他渠道…</option>`;
   }
   // 实时名单变了：没动过的充值行就地换下拉；员工动过的行（data-dirty）与已展开完整列表的
