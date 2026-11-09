@@ -148,6 +148,8 @@ $env:TUNNEL_EDGE_IP_VERSION="4"
 
 ### 前端约定
 
+- **改了 `public/js/*.js` / `style.css` 必须同时换 `server/index.js` 里那个文件的 `?v=` 版本号**。线上在 Cloudflare 后面，
+  地址不变就会继续拿到旧文件——2026-11-09「只勾 1 户就预选」第一次上线就是漏了这一步，员工那边完全没变化
 - 全局 `api(url, opts)` 在 `public/js/app.js`，**只接受 2 个参数** `(url, opts)`；后台轮询用 `{ bg: true }`
 - Modal 显示用 `classList.add("show")`，不是 `open`
 - 页面 HTML 大量在 `server/index.js` 字符串拼接（Unicode `\uXXXX`），改 UI 时注意编码
