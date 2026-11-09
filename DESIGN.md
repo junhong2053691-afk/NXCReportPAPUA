@@ -29,13 +29,13 @@ typography:
     lineHeight: 1.2
   kpi-value:
     fontFamily: "-apple-system, BlinkMacSystemFont, SF Pro Text, PingFang SC, Segoe UI, Microsoft YaHei, sans-serif"
-    fontSize: "25px"
+    fontSize: "24px"
     fontWeight: 700
     lineHeight: 1.1
     fontFeature: "tnum, lnum"
   panel-title:
     fontFamily: "-apple-system, BlinkMacSystemFont, SF Pro Text, PingFang SC, Segoe UI, Microsoft YaHei, sans-serif"
-    fontSize: "15px"
+    fontSize: "16px"
     fontWeight: 700
   body:
     fontFamily: "-apple-system, BlinkMacSystemFont, SF Pro Text, PingFang SC, Segoe UI, Microsoft YaHei, sans-serif"
@@ -44,7 +44,7 @@ typography:
     lineHeight: 1.5
   table-cell:
     fontFamily: "-apple-system, BlinkMacSystemFont, SF Pro Text, PingFang SC, Segoe UI, Microsoft YaHei, sans-serif"
-    fontSize: "12.5px"
+    fontSize: "12px"
     fontWeight: 400
     lineHeight: 1.4
   label:
@@ -78,26 +78,26 @@ components:
     backgroundColor: "{colors.sheet-white}"
     textColor: "{colors.ink}"
     rounded: "{rounded.sm}"
-    padding: "9px 15px"
-    height: "44px"
+    padding: "6px 14px"
+    height: "36px"
   button-primary:
     backgroundColor: "{colors.ledger-blue}"
     textColor: "{colors.sheet-white}"
     rounded: "{rounded.sm}"
-    padding: "9px 15px"
-    height: "44px"
+    padding: "6px 14px"
+    height: "36px"
   button-primary-hover:
     backgroundColor: "{colors.ledger-blue-hover}"
-  button-small:
+  button-compact:
     rounded: "{rounded.sm}"
-    padding: "8px 12px"
-    height: "40px"
+    padding: "4px 10px"
+    height: "32px"
   input:
     backgroundColor: "{colors.sheet-white}"
     textColor: "{colors.ink}"
     rounded: "{rounded.sm}"
-    padding: "9px 11px"
-    height: "44px"
+    padding: "6px 11px"
+    height: "36px"
   card:
     rounded: "{rounded.md}"
     padding: "14px"
@@ -117,9 +117,9 @@ components:
 
 # Design System: NXC Report
 
-> 本文件由 `/impeccable document` 于 2026-11-09 从 `public/css/style.css` 的**现状**反推而来。
-> 它描述的是今天上线的样子，包括已知的漂移（见「Do's and Don'ts」末尾的「已知漂移」）。
-> 精修决定落地后（`.scratch/ui-polish/decisions.md`）需要重新跑一遍 document 刷新。
+> 本文件由 `/impeccable document` 于 2026-11-09 从 `public/css/style.css` 反推，并在同日 UI 精修
+> （`.scratch/ui-polish/decisions.md`，提交 d74fd31 → 611efe6）落地后刷新。字号与控件高度已收进刻度；
+> 间距、圆角仍有漂移，见「Do's and Don'ts」末尾的「剩余漂移」。
 
 ## Overview
 
@@ -171,14 +171,14 @@ NXC Report 是一本摊开在屏幕上的账簿。数字是主角：充值、提
 **Character:** 不引入品牌字体，靠系统字体在中英混排下的稳定与清晰；层级完全靠字号与字重建立，数字统一表格数字。
 
 ### Hierarchy
-- **Page title** (700, 24px, 1.2)：每页左上角 H1，一页一个。
-- **KPI value** (700, 25px, 1.1, tabular)：卡片里的大数字；渠道卡片降到 18px。
-- **Panel title** (700, 15px)：面板 / 图表区块标题；弹窗标题 18px。
-- **Body** (400, 14px, 1.5)：`body` 默认，按钮与说明多用 13px。
-- **Table cell** (400, 12.5px, 1.4)：报表表格；银行流水表 `.sheet-table` 更密（11–12px）。
-- **Label** (700, 11px, uppercase 可选)：表头、表单标签、侧栏分组名；徽章 10px。
+字号只有 8 档 token：`--text-2xs` 11 / `xs` 12 / `sm` 13 / `base` 14 / `lg` 16 / `xl` 20 / `2xl` 24 / `3xl` 32（`style.css` 里 98% 的 `font-size` 走 token）。
 
-`:root` 已定义 11 档字号 token（`--text-3xs` 10px … `--text-4xl` 38px）、5 档字重、4 档行高、9 档间距，但**目前只有字重 token 真正被使用**（98%）；字号 token 使用率 1%，间距 token 1%。
+- **Page title** (700, 24px)：每页标题行左侧的 H1，一页一个，和侧栏页名一字不差；标题行右侧是同步状态 / 中 EN / 主题。
+- **KPI value** (700, 24px, 1.1, tabular)：卡片里的大数字；首页主数字 32px；渠道卡片 20px。
+- **Panel title** (700, 16px)：面板 / 图表区块标题；弹窗标题 20px。
+- **Body** (400, 14px, 1.5)：`body` 默认；按钮 13px。
+- **Table cell** (400, 12px, 1.4)：报表表格；当日流水 `.sheet-table` 豁免（10–12px）。
+- **Label** (700, 11px, uppercase 可选)：表头、表单标签、徽章；手机上的小标签最小 12px。
 
 ### Named Rules
 **The Tabular Rule.** 任何会和别的数字上下比较的数字都用 `tabular-nums lining-nums`；单号、账号、余额用等宽字体。
@@ -186,8 +186,10 @@ NXC Report 是一本摊开在屏幕上的账簿。数字是主角：充值、提
 
 ## Layout
 
-- **外壳**：左侧悬浮侧栏 248px（1366 以下可收成 72px 图标栏），距视口 16px；主区左边距 = 侧栏宽 + 32px 间隙，内边距 16px，顶栏最大宽 1780px。
-- **网格**：KPI / 卡片 `repeat(auto-fit, minmax(190px, 1fr))`、间距 10px；公司卡片 `minmax(320px, 1fr)`。
+- **外壳**：左侧悬浮侧栏 248px（1366 以下可收成 72px 图标栏），距视口 16px；主区左边距 = 侧栏宽 + 32px 间隙，内边距 16px，内容最大宽 1780px。**没有顶栏**：`.page-shell` 是两列网格，`pageLayout` 放进去的 `.page-actions`（同步状态 / 中 EN / 主题）排在第一行右侧，紧随其后的页头元素在左侧，其余子元素横跨两列。
+- **网格**：KPI 卡 flex 换行，每行最多 4 张、最后一行拉宽；3 / 5 / 6 / 9 张时每行 3 张；手机每行 2 张。公司卡片 `minmax(320px, 1fr)`。
+- **限宽**：表单页（Telegram 设置、公司 / API 设置）内容区最大 960px 靠左；支付设置两张表并排，最大 1200px；报表与表格页铺满。
+- **表格密度**：769–1500 宽度下报表格子左右内边距 8px（大屏 12px），18 列的顾客列表在 1366 下一屏放下。
 - **间距节奏**（现状）：控件间 6–8px，面板内边距 14px，区块之间 12–14px，页头下 14px。设计意图是三段落差——密集网格 2–8px、结构层 10–16px、页级 24–32px——但实际声明是 128 种 padding 取值、29 种 gap 取值，没有落在刻度上。
 - **断点**：决定只用三档 ≤700 / ≤1100 / 桌面（`.scratch/ui-responsive/decisions.md`），实际 CSS 里有 17 种 `@media` 宽度（700 ×16、768 ×6、900 ×3、720、460、980、960、1180、1300、1500 等）。
 - **手机 ≤700**：侧栏变抽屉、底部五键标签栏、宽表变「卡片 + 底部抽屉」（`mobile-table-drawer.js`）、弹窗全屏、触控目标 44px。
@@ -215,14 +217,14 @@ NXC Report 是一本摊开在屏幕上的账簿。数字是主角：充值、提
 ### Buttons
 可靠、略带触感：悬停上浮 1px，按下缩 0.98。
 - **Shape:** 微圆角 (6px)
-- **Default:** 实底白 + 顶部高光，墨色字 13px / 600，内边距 9px 15px，最小高 44px。
+- **两档高度**（`--control-h` / `--control-h-sm`）：标准 36px 配 13px 字（`.btn`、`.btn-sm`、输入框、下拉、页签），紧凑 32px 配 12px 字（`.btn-xs`、电脑端表格行内按钮）。≤700 两档都是 44px。同一行的控件必须同档。
+- **Default:** 实底白 + 顶部高光，墨色字 600，内边距 6px 14px；按钮里的 lucide 图标 16px。
 - **Primary / Success / Danger:** 自上而下的同色系浅渐变（账本蓝 / 结清绿 / 警示红），白字；主按钮带一层 24% 主色的投影。
 - **Outline:** 浅底 + 细边框 + 淡墨字，悬停加深边框。
-- **Small (`btn-sm` / `btn-xs`):** 12px 字、8px 12px 内边距、最小高 40px；流水工具栏与银行操作区再压到 32px。
 
 ### Chips / Segment tabs
-- **Segment tabs:** 浅底托盘（4px 内边距、8px 圆角）里的一排透明按钮，40px 高、12px / 600；选中项变实底白 + 账本蓝字 + xs 阴影。
-- **Badges:** 全圆胶囊、10px / 700、soft 底 + 同色字（绿 / 红 / 琥珀 / 紫 / 青）。计数角标是实心红底白字 20px 圆。
+- **Segment tabs:** 浅底托盘（4px 内边距、8px 圆角）里的一排透明按钮，标准档 36px、13px / 600、最小宽 36px；选中项变实底白 + 账本蓝字 + xs 阴影。
+- **Badges:** 全圆胶囊、11px / 700、soft 底 + 同色字（绿 / 红 / 琥珀 / 紫 / 青）。计数角标是实心红底白字 20px 圆。
 
 ### Cards / Containers
 - **Corner Style:** 8px（设计意图 12px，见 Shapes）
@@ -232,14 +234,14 @@ NXC Report 是一本摊开在屏幕上的账簿。数字是主角：充值、提
 - **Internal Padding:** 14px；KPI 卡最小高 112px
 
 ### Inputs / Fields
-- **Style:** 实底白 + 顶部高光、28% 墨色边框、6px 圆角、9px 11px 内边距、最小高 44px。
+- **Style:** 实底白 + 顶部高光、28% 墨色边框、6px 圆角、6px 11px 内边距、标准档 36px（日期 / 时间框写死 `height`，否则多 1px）。
 - **Focus:** 边框变焦点蓝 + 3px 16% 焦点蓝光环。
 - **Disabled:** 48% 透明度 + `not-allowed`。
-- **Checkbox:** 现状 14 / 16 / 18 / 20px 四种尺寸并存。
+- **Checkbox:** 电脑端统一 16px；手机沿用各自的触控尺寸。
 
 ### Tables
-- **表头:** 吸顶、11px / 700 淡墨、10px 12px，半透明渐变底 + blur。
-- **单元格:** 12.5px / 1.4、10px 12px、最大宽 260px 允许断词；悬停整行染淡蓝。
+- **表头:** 吸顶、11px / 700 淡墨、10px 12px（笔记本 8px），半透明渐变底 + blur。
+- **单元格:** 12px / 1.4、10px 12px（笔记本 8px）、最大宽 260px 允许断词；悬停整行染淡蓝。行内按钮用紧凑档。
 - **合计行:** 吸底、600 字重、加粗上边框。
 - **银行流水表 `.sheet-table`:** 独立的密集网格（14 列、`table-layout: fixed`、11–12px）。
 
@@ -248,7 +250,7 @@ NXC Report 是一本摊开在屏幕上的账簿。数字是主角：充值、提
 - **手机:** 侧栏改左滑抽屉；底部标签栏「菜单 / 流水 / 待处理 / 调钱 / 渠道」，当前页 `aria-current="page"` 高亮。
 
 ### KPI Card（签名组件）
-雾面玻璃卡片、左上光晕；12px / 600 标签 → 25px / 700 表格数字 → 11px 说明。颜色类（`.green` / `.red` / `.orange` / `.purple` / `.blue`）只染数字。
+雾面玻璃卡片、左上光晕；12px / 600 标签 → 24px / 700 表格数字 → 11px 说明。颜色类（`.green` / `.red` / `.orange` / `.purple` / `.blue`）只染数字。大数字前不挂「合计」之类的字样——标签已经说明了它是什么。
 
 ## Do's and Don'ts
 
@@ -258,6 +260,8 @@ NXC Report 是一本摊开在屏幕上的账簿。数字是主角：充值、提
 - **Do** 手机 ≤700 下保证触控目标 ≥ 44px。
 - **Do** 租户数据（客户名、银行名、公司名、备注）加 `translate="no"`。
 - **Do** 改了 `style.css` 同时换 `server/index.js` 里的 `?v=`。
+- **Do** 字号只用 `--text-*` 8 档、控件高度只用 `--control-h` / `--control-h-sm`；新写死的 px 值就是新的漂移。
+- **Do** 页名只在页头 H1 出现一次，并且和侧栏一字不差；标题下只留讲「数字怎么算」的口径说明。
 
 ### Don't:
 - **Don't** 把绿 / 红用于钱的方向以外的任何含义（The Money Has Direction Rule）。
@@ -266,17 +270,17 @@ NXC Report 是一本摊开在屏幕上的账簿。数字是主角：充值、提
 - **Don't** 在后台加科技蓝霓虹发光、粒子、星空（PRODUCT.md 品牌承诺）。
 - **Don't** 新增断点；只用 ≤700 / ≤1100 / 桌面。
 
-### 已知漂移（2026-11-09 实测，`style.css` 5209 行）
-| 维度 | 声明数 | 用 token | 唯一取值 |
-|---|---|---|---|
-| font-size | 366 | 1% | 24（12px ×100、11px ×75、10px ×49 …含 12.5 / 10.5 / 11.5 / 9 / 8） |
-| padding | 286 | 1% | 128 |
-| gap | 209 | 1% | 29 |
-| min-height | 140 | 0% | 47 |
-| height | 109 | 0% | 35 |
-| border-radius | 159 | 65% | 21 |
-| line-height | 41 | 0% | 14 |
-| font-weight | 184 | 98% | 7 |
-| @media 宽度 | — | — | 17 种 |
+- **Don't** 加顶栏、眉题或重复页名的副标题（2026-11-09 刚拿掉）。
 
-字号、间距、圆角 token 早已写好（`style.css:108-169` 的注释里连归档规则都有），迁移从未执行。这是「有的太大、有的太小」的结构性原因。
+### 剩余漂移（UI 精修前 → 后，`style.css`）
+| 维度 | 精修前用 token | 精修后用 token | 精修后唯一取值 |
+|---|---|---|---|
+| font-size | 1%（24 种） | **98%** | 17（剩下的是豁免的密集表 + token 本身） |
+| font-weight | 98% | 98% | 7 |
+| 控件高度 | 0%（38 / 39 / 40 / 41 / 42 / 44 混用） | 按钮 / 输入框 / 页签全部走 token | — |
+| padding | 1% | 1% | 127 |
+| gap | 1% | 1% | 30 |
+| border-radius | 65% | 65% | 21 |
+| @media 宽度 | 17 种 | 17 种 | — |
+
+间距、圆角、断点这次刻意没动（范围只到尺寸与骨架），是下一轮精修的候选。

@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-11-09T00:00:00+11:00",
+  "generatedAt": "2026-11-09T23:00:00+11:00",
   "title": "Design System: NXC Report",
   "extensions": {
     "colorMeta": {
@@ -48,43 +48,43 @@
       "name": "Default Button", "kind": "button", "refersTo": "button-default",
       "description": "通用按钮：实底白 + 顶部高光。",
       "html": "<button class=\"ds-btn\">刷新</button>",
-      "css": ".ds-btn { display:inline-flex; align-items:center; justify-content:center; min-height:44px; padding:9px 15px; border:1px solid transparent; border-radius:6px; background:linear-gradient(180deg, rgba(255,255,255,.52), rgba(255,255,255,0) 42%), rgba(246,249,252,.92); color:#17202c; font-size:13px; font-weight:600; box-shadow: inset 0 1px 0 rgba(255,255,255,.8); transition: transform 160ms cubic-bezier(.16,1,.3,1), box-shadow 160ms; cursor:pointer; } .ds-btn:hover { transform:translateY(-1px); box-shadow: inset 0 1px 0 rgba(255,255,255,.8), 0 1px 2px rgba(26,37,51,.06); } .ds-btn:focus-visible { outline:3px solid rgba(23,104,229,.72); outline-offset:2px; } .ds-btn:active { transform:scale(.98); }"
+      "css": ".ds-btn { display:inline-flex; align-items:center; justify-content:center; min-height:36px; padding:6px 14px; border:1px solid transparent; border-radius:6px; background:linear-gradient(180deg, rgba(255,255,255,.52), rgba(255,255,255,0) 42%), rgba(246,249,252,.92); color:#17202c; font-size:13px; font-weight:600; box-shadow: inset 0 1px 0 rgba(255,255,255,.8); transition: transform 160ms cubic-bezier(.16,1,.3,1), box-shadow 160ms; cursor:pointer; } .ds-btn:hover { transform:translateY(-1px); box-shadow: inset 0 1px 0 rgba(255,255,255,.8), 0 1px 2px rgba(26,37,51,.06); } .ds-btn:focus-visible { outline:3px solid rgba(23,104,229,.72); outline-offset:2px; } .ds-btn:active { transform:scale(.98); }"
     },
     {
       "name": "Primary Button", "kind": "button", "refersTo": "button-primary",
       "description": "主动作：审批、保存。",
       "html": "<button class=\"ds-btn-primary\">审批</button>",
-      "css": ".ds-btn-primary { display:inline-flex; align-items:center; justify-content:center; min-height:44px; padding:9px 15px; border:0; border-radius:6px; background:linear-gradient(180deg, #3a7fe9, #1768e5); color:#fff; font-size:13px; font-weight:600; box-shadow: inset 0 1px 0 rgba(255,255,255,.28), 0 9px 22px rgba(23,104,229,.24); cursor:pointer; transition: transform 160ms cubic-bezier(.16,1,.3,1); } .ds-btn-primary:hover { background:#0f56c4; transform:translateY(-1px); } .ds-btn-primary:focus-visible { outline:3px solid rgba(23,104,229,.72); outline-offset:2px; }"
+      "css": ".ds-btn-primary { display:inline-flex; align-items:center; justify-content:center; min-height:36px; padding:6px 14px; border:0; border-radius:6px; background:linear-gradient(180deg, #3a7fe9, #1768e5); color:#fff; font-size:13px; font-weight:600; box-shadow: inset 0 1px 0 rgba(255,255,255,.28), 0 9px 22px rgba(23,104,229,.24); cursor:pointer; transition: transform 160ms cubic-bezier(.16,1,.3,1); } .ds-btn-primary:hover { background:#0f56c4; transform:translateY(-1px); } .ds-btn-primary:focus-visible { outline:3px solid rgba(23,104,229,.72); outline-offset:2px; }"
     },
     {
       "name": "Outline Button", "kind": "button", "refersTo": "button-default",
       "description": "次要动作：取消、筛选。",
       "html": "<button class=\"ds-btn-outline\">取消</button>",
-      "css": ".ds-btn-outline { min-height:40px; padding:8px 12px; border:1px solid rgba(75,91,111,.18); border-radius:6px; background:rgba(246,249,252,.92); color:#4e5d70; font-size:12px; font-weight:600; cursor:pointer; } .ds-btn-outline:hover { border-color:rgba(55,72,94,.28); background:#fff; color:#17202c; } .ds-btn-outline:focus-visible { outline:3px solid rgba(23,104,229,.72); outline-offset:2px; }"
+      "css": ".ds-btn-outline { min-height:36px; padding:6px 12px; border:1px solid rgba(75,91,111,.18); border-radius:6px; background:rgba(246,249,252,.92); color:#4e5d70; font-size:13px; font-weight:600; cursor:pointer; } .ds-btn-outline:hover { border-color:rgba(55,72,94,.28); background:#fff; color:#17202c; } .ds-btn-outline:focus-visible { outline:3px solid rgba(23,104,229,.72); outline-offset:2px; }"
     },
     {
       "name": "Text Input", "kind": "input", "refersTo": "input",
       "description": "实底输入框，焦点蓝光环。",
       "html": "<input class=\"ds-input\" placeholder=\"搜索客户 / 单号\">",
-      "css": ".ds-input { min-height:44px; padding:9px 11px; border:1px solid rgba(55,72,94,.28); border-radius:6px; background:#fff; color:#17202c; font-size:14px; outline:none; transition:border-color 160ms, box-shadow 160ms; } .ds-input::placeholder { color:#6c7a8c; } .ds-input:focus { border-color:#1768e5; box-shadow:0 0 0 3px rgba(23,104,229,.16); }"
+      "css": ".ds-input { min-height:36px; padding:6px 11px; border:1px solid rgba(55,72,94,.28); border-radius:6px; background:#fff; color:#17202c; font-size:14px; outline:none; transition:border-color 160ms, box-shadow 160ms; } .ds-input::placeholder { color:#6c7a8c; } .ds-input:focus { border-color:#1768e5; box-shadow:0 0 0 3px rgba(23,104,229,.16); }"
     },
     {
       "name": "Segment Tabs", "kind": "chip", "refersTo": "button-small",
       "description": "页签托盘：分群、类型、排序。",
       "html": "<div class=\"ds-seg\"><button class=\"ds-seg-btn is-on\">全部</button><button class=\"ds-seg-btn\">新客</button><button class=\"ds-seg-btn\">流失</button></div>",
-      "css": ".ds-seg { display:inline-flex; gap:4px; padding:4px; border:1px solid rgba(75,91,111,.18); border-radius:8px; background:rgba(246,249,252,.92); } .ds-seg-btn { min-height:40px; padding:8px 12px; border:1px solid transparent; border-radius:6px; background:transparent; color:#4e5d70; font-size:12px; font-weight:600; cursor:pointer; } .ds-seg-btn:hover { color:#17202c; } .ds-seg-btn.is-on { border-color:rgba(255,255,255,.82); background:rgba(255,255,255,.94); color:#0d4ba6; box-shadow:0 1px 2px rgba(26,37,51,.06); }"
+      "css": ".ds-seg { display:inline-flex; gap:4px; padding:4px; border:1px solid rgba(75,91,111,.18); border-radius:8px; background:rgba(246,249,252,.92); } .ds-seg-btn { min-height:36px; min-width:36px; padding:6px 12px; border:1px solid transparent; border-radius:6px; background:transparent; color:#4e5d70; font-size:13px; font-weight:600; cursor:pointer; } .ds-seg-btn:hover { color:#17202c; } .ds-seg-btn.is-on { border-color:rgba(255,255,255,.82); background:rgba(255,255,255,.94); color:#0d4ba6; box-shadow:0 1px 2px rgba(26,37,51,.06); }"
     },
     {
       "name": "Badge", "kind": "chip", "refersTo": "badge",
       "description": "交易类型 / 状态胶囊。",
       "html": "<span class=\"ds-badge ds-badge-in\">DEPOSIT</span> <span class=\"ds-badge ds-badge-out\">WITHDRAW</span>",
-      "css": ".ds-badge { display:inline-flex; align-items:center; min-height:24px; padding:3px 7px; border-radius:999px; font-size:10px; font-weight:700; } .ds-badge-in { background:rgba(11,122,85,.12); color:#0b7a55; } .ds-badge-out { background:rgba(196,61,77,.11); color:#c43d4d; }"
+      "css": ".ds-badge { display:inline-flex; align-items:center; min-height:24px; padding:3px 7px; border-radius:999px; font-size:11px; font-weight:700; } .ds-badge-in { background:rgba(11,122,85,.12); color:#0b7a55; } .ds-badge-out { background:rgba(196,61,77,.11); color:#c43d4d; }"
     },
     {
       "name": "KPI Card", "kind": "card", "refersTo": "card",
       "description": "签名组件：玻璃卡片 + 表格数字。",
       "html": "<div class=\"ds-kpi\"><div class=\"ds-kpi-label\">今日充值</div><div class=\"ds-kpi-value\">$12,480.00</div><div class=\"ds-kpi-sub\">38 笔</div></div>",
-      "css": ".ds-kpi { position:relative; min-height:112px; padding:14px; border:1px solid rgba(255,255,255,.82); border-radius:8px; background:radial-gradient(circle at 16% 0%, rgba(23,104,229,.13), transparent 46%), linear-gradient(180deg, rgba(255,255,255,.52), rgba(255,255,255,0) 42%), rgba(255,255,255,.54); box-shadow:0 1px 1px rgba(255,255,255,.64) inset, 0 18px 44px rgba(24,38,56,.10), 0 2px 8px rgba(24,38,56,.06); } .ds-kpi-label { color:#4e5d70; font-size:12px; font-weight:600; } .ds-kpi-value { margin-top:8px; color:#0b7a55; font-size:25px; line-height:1.1; font-weight:700; font-variant-numeric:tabular-nums lining-nums; } .ds-kpi-sub { margin-top:6px; color:#6c7a8c; font-size:11px; }"
+      "css": ".ds-kpi { position:relative; min-height:112px; padding:14px; border:1px solid rgba(255,255,255,.82); border-radius:8px; background:radial-gradient(circle at 16% 0%, rgba(23,104,229,.13), transparent 46%), linear-gradient(180deg, rgba(255,255,255,.52), rgba(255,255,255,0) 42%), rgba(255,255,255,.54); box-shadow:0 1px 1px rgba(255,255,255,.64) inset, 0 18px 44px rgba(24,38,56,.10), 0 2px 8px rgba(24,38,56,.06); } .ds-kpi-label { color:#4e5d70; font-size:12px; font-weight:600; } .ds-kpi-value { margin-top:8px; color:#0b7a55; font-size:24px; line-height:1.1; font-weight:700; font-variant-numeric:tabular-nums lining-nums; } .ds-kpi-sub { margin-top:6px; color:#6c7a8c; font-size:11px; }"
     },
     {
       "name": "Sidebar Nav Item", "kind": "nav", "refersTo": "button-default",
