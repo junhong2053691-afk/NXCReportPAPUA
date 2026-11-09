@@ -1,11 +1,10 @@
 // Login page motion: money-flow streamlines radiating out of the NXC logo.
 // Decorative only: the page is unauthenticated, nothing here is real data.
 //
-// What it shows is the system's own rhythm:
+// What it shows:
 //   - streamlines leave the logo and curl outward: the companies' flows
-//     fanning out of one back office
-//   - every SYNC_MS (the fast lane's ~6 s cycle) a pulse ring leaves the logo
-//     and kicks the streams it crosses, so they flare and speed up
+//     fanning out of one back office (no timed bursts: the user asked for a
+//     steady flow, so a pulse ring only ever comes from a click or a tap)
 //   - a few streams carry a ledger tag (DEPOSIT / WITHDRAW / BANK TRF ...,
 //     amount masked): deposits spiral in and are absorbed at the logo,
 //     withdrawals spiral out
@@ -34,7 +33,6 @@
   var ctx = canvas.getContext("2d");
   if (!ctx) return;
 
-  var SYNC_MS = 6000;
   var TAU = Math.PI * 2;
   var reduceQuery = window.matchMedia ? window.matchMedia("(prefers-reduced-motion: reduce)") : null;
   function reduced() { return !!(reduceQuery && reduceQuery.matches); }
@@ -82,7 +80,7 @@
   // ---- state
   var particles = [], pulses = [];
   var pointer = { x: 0, y: 0, strength: 0, target: 0 };
-  var clock = 0, lastSync = -1;
+  var clock = 0;
 
   // Outward drift with a slow curl, so the lines read as streams fanning out
   // of the logo rather than straight spokes or noise.
@@ -319,8 +317,8 @@
   // ---- input
   function offLimits(el) { return el && el.closest && el.closest(".lg-form, .lg-tools, .lg-captcha-overlay, a, button, input, label"); }
   function aim(x, y, s) { pointer.x = x; pointer.y = y; pointer.target = s; }
-  function shock(x, y, strong) {
-    pulses.push({ x: x, y: y, r: strong ? 0 : C.r * 1.1, v: strong ? 0.42 : 0.5, life: 1, sync: !strong });
+  function shock(x, y) {
+    pulses.push({ x: x, y: y, r: 0, v: 0.42, life: 1 });
     if (pulses.length > 6) pulses.shift();
   }
 
@@ -330,7 +328,7 @@
   }, { passive: true });
   document.addEventListener("pointerdown", function (e) {
     if (e.pointerType === "touch" || reduced() || offLimits(e.target)) return;
-    shock(e.clientX, e.clientY, true);
+    shock(e.clientX, e.clientY);
   }, { passive: true });
   root.addEventListener("pointerleave", function () { pointer.target = 0; });
   window.addEventListener("blur", function () { pointer.target = 0; });
@@ -339,7 +337,7 @@
     var t = e.touches[0];
     if (!t || offLimits(e.target)) return;
     aim(t.clientX, t.clientY, 1.15);
-    if (!reduced()) shock(t.clientX, t.clientY, true);
+    if (!reduced()) shock(t.clientX, t.clientY);
   }, { passive: true });
   document.addEventListener("touchmove", function (e) {
     var t = e.touches[0];
@@ -350,20 +348,7 @@
   document.addEventListener("touchcancel", release, { passive: true });
 
   // ---- simulation (dt in 60 fps frames; real-time based so a throttled tab never stalls)
-  function sync(now) {
-    var turn = Math.floor(now / SYNC_MS);
-    if (turn === lastSync) return;
-    var first = lastSync < 0;
-    lastSync = turn;
-    if (first) return;
-    shock(C.x, C.y, false);
-    logo.classList.remove("is-sync");
-    void logo.offsetWidth; // restart the CSS ring
-    logo.classList.add("is-sync");
-  }
-
-  function step(dt, now) {
-    sync(now);
+  function step(dt) {
     pointer.strength += (pointer.target - pointer.strength) * Math.min(1, 0.08 * dt);
     var R = W < 720 ? 110 : 150, R2 = R * R;
     var mx = pointer.x, my = pointer.y, ms = pointer.strength;
@@ -371,7 +356,7 @@
     for (var k = pulses.length - 1; k >= 0; k--) {
       var pl = pulses[k];
       pl.r += pl.v * 16.667 * dt;
-      pl.life -= (pl.sync ? 0.0075 : 0.014) * dt;
+      pl.life -= 0.014 * dt;
       if (pl.life <= 0) pulses.splice(k, 1);
     }
 
@@ -401,7 +386,7 @@
         var qx = p.x - q.x, qy = p.y - q.y, qd = Math.sqrt(qx * qx + qy * qy) || 1;
         var band = Math.abs(qd - q.r);
         if (band < 34) {
-          var kick = (1 - band / 34) * q.life * (q.sync ? 1.6 : 3);
+          var kick = (1 - band / 34) * q.life * 3;
           p.vx += (qx / qd) * kick * dt;
           p.vy += (qy / qd) * kick * dt;
           p.hot = Math.max(p.hot, q.life);
@@ -464,7 +449,7 @@
     ctx.lineWidth = 1.5;
     for (var k = 0; k < pulses.length; k++) {
       var q = pulses[k];
-      ctx.globalAlpha = q.life * (q.sync ? 0.3 : 0.38) * (col.dark ? 1 : 0.8);
+      ctx.globalAlpha = q.life * 0.38 * (col.dark ? 1 : 0.8);
       ctx.beginPath();
       ctx.arc(q.x, q.y, Math.max(0, q.r), 0, TAU);
       ctx.stroke();
@@ -524,7 +509,7 @@
     // every frame: an error line, the language switch or the keyboard moves
     // the form, and the streams must never cross it, not even for a second
     measure();
-    step(ms / 16.667, now);
+    step(ms / 16.667);
     draw();
     schedule();
   }

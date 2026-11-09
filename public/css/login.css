@@ -2,9 +2,10 @@
    Login — pulse
    Centered composition: the NXC app icon with the product name under it,
    the form below, two icon tools top-right, one footer line. The motion
-   (public/js/login-pulse.js) is money-flow streamlines radiating out of the
-   logo, with a pulse ring leaving it once per ~6 s fast-lane sync. The form
-   and the brand text are kept clear of the streams.
+   (public/js/login-pulse.js) is a steady money flow spiralling out of the
+   logo, a few streams carrying masked ledger tags; no timed bursts, a pulse
+   ring only answers a click or tap. The form, brand text, tools and footer
+   are kept clear of the streams.
    Palette: NXC navy + logo cyan, glow kept low. Dark is the hero theme.
    ============================================================ */
 
@@ -156,21 +157,6 @@
   box-shadow: 0 12px 32px rgba(4, 18, 52, .3);
   -webkit-user-drag: none;
   user-select: none;
-}
-/* one ring per sync, in step with the canvas pulse that leaves the logo */
-.lg-logo::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border: 1.5px solid var(--lg-pulse);
-  border-radius: inherit;
-  opacity: 0;
-  pointer-events: none;
-}
-.lg-logo.is-sync::after { animation: lg-sync 1.2s cubic-bezier(.2, .7, .3, 1); }
-@keyframes lg-sync {
-  from { opacity: .85; transform: scale(1); }
-  to { opacity: 0; transform: scale(1.4); }
 }
 .lg-name {
   margin: 0;
@@ -481,5 +467,4 @@
 
 @media (prefers-reduced-motion: reduce) {
   .lg-tool, .lg-form input, .lg-submit { transition: none; }
-  .lg-logo.is-sync::after { animation: none; }
 }
