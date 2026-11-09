@@ -1473,24 +1473,8 @@
   // 每行的「实时收款」勾就是实时收款名单的唯一入口（取代了原来的「使用中」与接单区顶上的勾选器）。
   // 编辑 / 封禁 / 归档 / 排序仍在支付渠道页。
   //
-  // 整个列表**可以折叠**（2026-11-09 用户：全部渠道该折叠还是要折叠）：头部常驻，收起时头部直接
-  // 列出实时收款的户名，员工不展开也知道钱进哪户。状态存 localStorage，没存过时电脑展开、手机收起
-  // （与原来手机上渠道目录默认收起一致）。接单区与渠道页每行详情仍然不折叠。
-  const BANKLIST_COLLAPSED_KEY = "bk-banklist-collapsed";
-  let bankListCollapsed = null; // null = 还没读过
-  function isBankListCollapsed() {
-    if (bankListCollapsed == null) {
-      let saved = null;
-      try { saved = localStorage.getItem(BANKLIST_COLLAPSED_KEY); } catch (_) {}
-      bankListCollapsed = saved === "1" ? true : saved === "0" ? false : Boolean(MOBILE_MQ.matches);
-    }
-    return bankListCollapsed;
-  }
-  function setBankListCollapsed(collapsed) {
-    bankListCollapsed = Boolean(collapsed);
-    try { localStorage.setItem(BANKLIST_COLLAPSED_KEY, bankListCollapsed ? "1" : "0"); } catch (_) {}
-    renderBankList();
-  }
+  // 列表**一直展开、不能折叠**（2026-11-09 当天先加了整块收起，用户又要去掉）。接单区、今日报表
+  // 同样不折叠；能折叠的只有支付渠道页每行详情（默认收起、点 ▸ 展开）。
   function bankListRowHtml(b, index) {
     const stats = (dailyReport?.bankRows || []).find((r) => r.id === b.id);
     const isPG = String(b.account_kind || "nominee") === "payment_gateway";
@@ -1520,22 +1504,15 @@
     const list = usableBanks();
     const all = activeBankId === ALL_BANKS || !activeBankId;
     const live = liveBanks();
-    const collapsed = isBankListCollapsed();
-    box.classList.toggle("is-collapsed", collapsed);
-    // 收起时把实时收款的户名摆在头部（户名是租户数据，translate="no"）。
-    const liveNames = collapsed && live.length
-      ? `<span class="bk-banklist-livenames">${live.map((b) => `<span class="bk-flag bk-flag-live" translate="no">${esc(tabLabel(b))}</span>`).join("")}</span>`
-      : "";
-    const head = `<div class="bk-banklist-head"><button type="button" class="bk-banklist-toggle" aria-expanded="${collapsed ? "false" : "true"}" aria-controls="bk-banklist-body"><i data-lucide="chevron-down"></i><strong>运营中</strong><b translate="no">${list.length}</b><span>个渠道</span></button>`
+    const head = `<div class="bk-banklist-head"><span class="bk-banklist-title"><strong>运营中</strong><b translate="no">${list.length}</b><span>个渠道</span></span>`
       + `<span class="bk-banklist-live"><span>实时收款</span> <b translate="no">${live.length} / ${LIVE_MAX}</b></span>`
-      + liveNames
       + `<button type="button" class="btn btn-outline btn-xs bk-banklist-all${all ? " active" : ""}" data-bank-select="all" aria-pressed="${all ? "true" : "false"}">全部渠道</button></div>`;
     const body = list.length
       ? `<div class="bk-channel-list" role="list"><div class="bk-channel-list-head" aria-hidden="true"><span>NO</span><span>BANK BRANCH / NAME</span><span>BSB / ACCOUNT / PAYID</span><span>BALANCE / COUNT / OUTFLOW</span><span>实时收款</span></div>`
         + list.map(bankListRowHtml).join("")
         + "</div>"
       : '<div class="bk-banklist-empty">暂无运营渠道</div>';
-    box.innerHTML = head + `<div class="bk-banklist-body" id="bk-banklist-body"${collapsed ? " hidden" : ""}>${body}</div>`;
+    box.innerHTML = head + `<div class="bk-banklist-body" id="bk-banklist-body">${body}</div>`;
     renderIcons(box);
   }
   function bindBankList() {
@@ -1551,10 +1528,6 @@
       saveLiveReceiving(ids);
     });
     box.addEventListener("click", (e) => {
-      if (e.target.closest(".bk-banklist-toggle")) {
-        setBankListCollapsed(!isBankListCollapsed());
-        return;
-      }
       if (e.target.closest('[data-bank-select="all"]')) {
         selectBankFilter(ALL_BANKS);
         return;
@@ -2078,10 +2051,11 @@
     if (dateEl) dateEl.value = sheetDate;
     activeBankId = bankFromUrl();
 
-    // 接单区与今日报表以前能折叠、状态存在 localStorage；现在永远展开（2026-11-09 用户要求），清掉旧值。
+    // 接单区、今日报表与银行列表以前能折叠、状态存在 localStorage；现在永远展开（2026-11-09 用户要求），清掉旧值。
     try {
       localStorage.removeItem("bk-intake-collapsed");
       localStorage.removeItem("sheet-upper-collapsed");
+      localStorage.removeItem("bk-banklist-collapsed");
     } catch (_) {}
     document.getElementById("bk-intake-close")?.addEventListener("click", closeIntakeSheet);
     bindBankList();

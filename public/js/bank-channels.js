@@ -20,14 +20,16 @@
   let editingBankId = null;
   let bankReorderBusy = false;
   let draggedBankId = null;
-  // 三个页签的视图状态。每个页签各自记页码（切回来还在原处），搜索词跨页签共享。
-  // BKD_PAGE_SIZE 把封禁 / 归档同时渲染的行数钉死；运营中不分页（要能整列拖拽排序）。
+  // 三个页签的视图状态。每个页签各自记页码（切回来还在原处），搜索词与展开集合跨页签
+  // 共享。BKD_PAGE_SIZE 把封禁 / 归档同时渲染的行数钉死；运营中不分页（要能整列拖拽排序）。
   let bkdTab = "operating";
   const bkdPage = { operating: 1, banned: 1, archived: 1 };
   let bkdQuery = "";
+  const bkdExpanded = new Set();
   const BKD_PAGE_SIZE = 20;
-  // 每行详情 2026-11-09 起常驻展开（用户要求不折叠）。后台每 5 秒可能整块重画，详情 HTML 按
-  // 渠道缓存、签名不变就直接复用，否则每次重画都要对每行再打 2 个请求。换公司时 detailGen++，
+  // 每行详情默认收起，点行尾 ▸ 才展开、才拉（2026-11-09 一度常驻展开，当天用户又要回折叠）。
+  // 展开集合是渲染的真源：后台每 5 秒可能整块重画，靠它恢复展开状态。详情 HTML 按渠道缓存、
+  // 签名不变就直接复用，否则每次重画都要对每个展开的行再打 2 个请求。换公司时 detailGen++，
   // 迟到的旧响应一律丢掉。
   const bkdDetailCache = new Map(); // id -> { sig, html }
   let detailGen = 0;
@@ -134,7 +136,7 @@
 <div class="bk-col-channel"><span class="bk-field-group-label bk-channel-label">BANK BRANCH</span><div class="bk-channel-name"><strong translate="no">${esc(bankLabel)}</strong>${bankDirectoryStatusHtml(b, stats)}</div>${nameHtml}<div class="bk-channel-meta"><span class="kind-tag kind-${esc(b.account_kind || "nominee")}">${esc(KIND_LABEL[b.account_kind] || b.account_kind || "人头")}</span></div></div>
 <div class="bk-col-info"><span class="bk-field-group-label">银行资料</span>${BC.bankInfoHtml(b)}</div>
 <div class="bk-col-balance"><div class="bk-metric-grid"><div class="bk-metric bk-metric-balance"><span>BALANCE</span><strong class="bk-row-balance${stats.excluded ? " bk-balance-excluded" : ""}">${fmt(stats.displayBalance)}</strong></div><div class="bk-metric"><span>COUNT</span><strong>${fmtMetric(stats.txCount)}</strong></div><div class="bk-metric bk-metric-outflow"><span>TOTAL OUTFLOW</span><strong>${fmt(stats.outflow)}</strong></div></div>${stats.excluded ? '<span class="bk-row-flow bk-excluded-note">不计入总余额</span>' : ""}</div>
-<div class="bk-col-actions"><button type="button" class="bk-copy-btn" data-copy-bank-id="${b.id}" title="Copy complete bank information"><i data-lucide="copy"></i><span>Copy info</span></button><div class="bk-row-acts"><button type="button" class="btn btn-outline btn-xs bkd-edit-btn" data-id="${b.id}">${esc(tr("编辑"))}</button><button type="button" class="btn btn-outline btn-xs bkd-ban-btn" data-id="${b.id}">${esc(tr("封禁"))}</button></div></div>
+<div class="bk-col-actions"><button type="button" class="bk-copy-btn" data-copy-bank-id="${b.id}" title="Copy complete bank information"><i data-lucide="copy"></i><span>Copy info</span></button><div class="bk-row-acts"><button type="button" class="btn btn-outline btn-xs bkd-edit-btn" data-id="${b.id}">${esc(tr("编辑"))}</button><button type="button" class="btn btn-outline btn-xs bkd-ban-btn" data-id="${b.id}">${esc(tr("封禁"))}</button>${bkdToggleHtml(b)}</div></div>
 </article>
 <div class="bkd-item-body bk-row-body" id="bkd-body-${b.id}" ${bkdBodyAttrs(b)}</div>`;
   }
@@ -310,14 +312,21 @@
   function detailSig(b) {
     return [b.updated_at, b.tx_count, b.total_in, b.total_out, b.balance, bankDisplayBalance(b), b.lifecycle_status, b.live_receiving].join("|");
   }
-  // 详情容器的属性 + 内容：缓存命中就直接给 HTML（data-loaded="1"），否则占位等队列去拉。
+  // 详情容器的属性 + 内容：没展开就 hidden；缓存命中就直接给 HTML（data-loaded="1"），
+  // 否则占位等队列去拉。
   function bkdBodyAttrs(b) {
+    const hidden = bkdExpanded.has(b.id) ? "" : "hidden ";
     const hit = bkdDetailCache.get(b.id);
-    if (hit && hit.sig === detailSig(b)) return `data-loaded="1">${hit.html}`;
-    return `data-loaded="0"><div class="bkd-loading">${esc(tr("加载中..."))}</div>`;
+    if (hit && hit.sig === detailSig(b)) return `${hidden}data-loaded="1">${hit.html}`;
+    return `${hidden}data-loaded="0"><div class="bkd-loading">${esc(tr("加载中..."))}</div>`;
   }
+  function bkdToggleHtml(b) {
+    const expanded = bkdExpanded.has(b.id);
+    return `<button type="button" class="btn btn-outline btn-xs bkd-toggle-btn" data-id="${b.id}" aria-expanded="${expanded ? "true" : "false"}" aria-controls="bkd-body-${b.id}" aria-label="${esc(tr("详情"))}">${expanded ? "▾" : "▸"}</button>`;
+  }
+  // 只排展开着的行：收起的行一个请求都不打。
   function queueBkdDetails(rows) {
-    detailQueue = rows.map((b) => b.id);
+    detailQueue = rows.filter((b) => bkdExpanded.has(b.id)).map((b) => b.id);
     pumpBkdDetails();
   }
   function pumpBkdDetails() {
@@ -495,6 +504,7 @@
     <span class="bkd-item-bal" translate="no">${fmt(bankDisplayBalance(b))}</span>
     <div class="bkd-item-acts">
       ${acts}
+      ${bkdToggleHtml(b)}
     </div>
   </div>
   <div class="bkd-item-body" id="bkd-body-${b.id}" ${bkdBodyAttrs(b)}</div>
@@ -580,7 +590,7 @@
     });
     renderIcons(panel);
 
-    // 详情常驻：没缓存（或数据变了）的行排队拉，最多 DETAIL_CONCURRENCY 个并发。
+    // 展开着的行里，没缓存（或数据变了）的排队拉，最多 DETAIL_CONCURRENCY 个并发。
     queueBkdDetails(slice);
   }
 
@@ -844,6 +854,7 @@
     reloadAll();
     if (typeof bindCompanySwitch === "function") {
       bindCompanySwitch(() => {
+        bkdExpanded.clear();
         bkdDetailCache.clear();
         detailGen += 1;
         detailQueue = [];
@@ -915,11 +926,29 @@
     document.getElementById("bank-cancel-btn")?.addEventListener("click", closeBankModal);
     document.getElementById("bank-save-btn")?.addEventListener("click", saveBankModal);
 
-    // 页签、下载申诉记录、编辑、封禁 / 解封 / 归档，整页一个委托（行会被后台刷新整块重画）。
+    // 页签、展开详情、下载申诉记录、编辑、封禁 / 解封 / 归档，整页一个委托（行会被后台刷新整块重画）。
     document.getElementById("bank-channels-page")?.addEventListener("click", async (e) => {
       const tabBtn = e.target.closest(".bkd-tab");
       if (tabBtn) {
         switchBkdTab(tabBtn.dataset.tab);
+        return;
+      }
+      const toggle = e.target.closest(".bkd-toggle-btn");
+      if (toggle) {
+        const id = Number(toggle.dataset.id);
+        const bodyEl = document.getElementById(`bkd-body-${id}`);
+        if (!bodyEl) return;
+        const open = !bodyEl.hidden;
+        bodyEl.hidden = open;
+        if (open) bkdExpanded.delete(id);
+        else bkdExpanded.add(id);
+        toggle.setAttribute("aria-expanded", open ? "false" : "true");
+        toggle.textContent = open ? "▸" : "▾";
+        // 走同一个队列：并发上限与「正在拉的不重复拉」都复用。
+        if (!open && bodyEl.dataset.loaded === "0") {
+          detailQueue.push(id);
+          pumpBkdDetails();
+        }
         return;
       }
       const download = e.target.closest(".bkd-download-btn[data-id]");

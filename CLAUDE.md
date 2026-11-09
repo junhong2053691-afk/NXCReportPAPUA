@@ -239,8 +239,8 @@ $env:TUNNEL_EDGE_IP_VERSION="4"
 > 2026-11 拆页：原 `/bank-accounts.html`（`bank-accounts.js`）拆成侧边栏「流水记录」分组下的当日流水与支付渠道，旧地址 302 到当日流水（`#channels` 再转去支付渠道）。两页共用的格式化、STATUS 词表与余额口径在 `bank-common.js`。operator 只能进这两页（`server/index.js` 的 `OPERATOR_PAGES` 与 `app.js` 的 `loadUser` 是同一份名单）。接单区常驻当日流水页：后台刷新只做增量，员工动过的行（`data-dirty`）绝不重画，被别人处理掉的只标灰；刷新时切页签必须带 `{ silent: true }`，否则会把平台待审批报警顺手 ack 掉。
 
 > 2026-11-09 当日流水重排：顶上是**运营中银行列表**（`renderBankList`，点行与工具栏 `#sheet-bank-filter` 是同一个筛选
-> `selectBankFilter`），下面才是 4 个 KPI；「当前公司 / 流水日期 / 同步状态」那一行删了。银行列表**可以折叠**（头部常驻，
-> 收起时列出实时收款户名，`localStorage["bk-banklist-collapsed"]`，没存过时电脑展开、手机收起）。**接单区、今日报表与支付渠道每行详情都不再折叠**。支付渠道页详情常驻后靠 `bkdDetailCache` 按签名复用，别改回每次重画都重拉。
+> `selectBankFilter`），下面才是 4 个 KPI；「当前公司 / 流水日期 / 同步状态」那一行删了。**银行列表、接单区与今日报表都不折叠**
+> （银行列表当天加过整块收起又去掉了，启动时清掉旧的 `localStorage["bk-banklist-collapsed"]`）；支付渠道页每行详情**默认收起**，点行尾 ▸ 才展开、才拉（`bkdExpanded`，换公司清空），展开过的靠 `bkdDetailCache` 按签名复用，别改回每次重画都重拉。
 
 > **实时收款银行**（`bank_accounts.live_receiving`，`lib/bankLiveReceiving.js`）：在当日流水**银行列表的每一行**勾，最多 3 个「现在正在收款的户」
 > （2026-11-09 起取代「使用中」：不用的户直接封禁，只要求运营中），

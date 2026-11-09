@@ -102,22 +102,30 @@ test("当日流水页顺序：工具栏 → 运营中银行列表 → KPI → �
   assert.doesNotMatch(ledger, /refreshWorkspaceContext|updateWorkspaceSyncContext/);
 });
 
-test("当日流水的银行列表可以折叠：头部常驻，收起时列出实时收款户名，状态记在 localStorage", () => {
-  assert.match(ledger, /const BANKLIST_COLLAPSED_KEY = "bk-banklist-collapsed"/);
-  assert.match(ledger, /class="bk-banklist-toggle" aria-expanded=/);
-  assert.match(ledger, /id="bk-banklist-body"\$\{collapsed \? " hidden" : ""\}/);
-  assert.match(ledger, /const liveNames = collapsed && live\.length/);
-  // 没存过时：电脑展开、手机收起
-  assert.match(ledger, /saved === "1" \? true : saved === "0" \? false : Boolean\(MOBILE_MQ\.matches\)/);
+test("当日流水的银行列表一直展开：没有折叠按钮、没有折叠状态，旧的 localStorage 值清掉", () => {
+  assert.doesNotMatch(ledger, /bk-banklist-toggle|BANKLIST_COLLAPSED_KEY|isBankListCollapsed|setBankListCollapsed/);
+  assert.match(ledger, /<div class="bk-banklist-body" id="bk-banklist-body">\$\{body\}<\/div>/);
+  assert.match(ledger, /localStorage\.removeItem\("bk-banklist-collapsed"\)/);
 });
 
-test("接单区、今日报表与支付渠道不折叠：没有折叠按钮、没有折叠状态", () => {
+test("接单区与今日报表不折叠：没有折叠按钮、没有折叠状态", () => {
   assert.doesNotMatch(index, /bk-intake-toggle/);
   assert.doesNotMatch(index, /sheet-collapse-btn|bk-report-wrap collapsed/, "今日报表一直展开");
   assert.doesNotMatch(ledger, /applyUpperCollapsed/);
   assert.doesNotMatch(ledger, /setIntakeCollapsed|INTAKE_COLLAPSED_KEY/);
-  assert.doesNotMatch(channels, /bkd-toggle-btn|bkdExpanded/);
-  // 详情常驻后要靠缓存，后台每 5 秒重画不能每行重打请求
+});
+
+test("支付渠道每行详情默认收起：点 ▸ 展开才拉，展开过的按签名复用", () => {
+  assert.match(channels, /const bkdExpanded = new Set\(\)/);
+  // 两种行模板都带折叠按钮，详情容器没展开就 hidden
+  assert.equal((channels.match(/\$\{bkdToggleHtml\(b\)\}/g) || []).length, 2);
+  assert.match(channels, /const hidden = bkdExpanded\.has\(b\.id\) \? "" : "hidden "/);
+  // 收起的行不打请求
+  assert.match(channels, /detailQueue = rows\.filter\(\(b\) => bkdExpanded\.has\(b\.id\)\)/);
+  assert.match(channels, /e\.target\.closest\("\.bkd-toggle-btn"\)/);
+  // 换公司清掉展开集合
+  assert.match(channels, /bindCompanySwitch\(\(\) => \{\s*bkdExpanded\.clear\(\);/);
+  // 后台每 5 秒重画，展开着的行不能每次重打请求
   assert.match(channels, /const bkdDetailCache = new Map\(\)/);
   assert.match(channels, /if \(hit && hit\.sig === detailSig\(b\)\) return/);
 });
