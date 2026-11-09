@@ -116,7 +116,7 @@ $env:TUNNEL_EDGE_IP_VERSION="4"
 | `/` | `home.js` | 首页看板 |
 | `/transactions.html` | `transactions.js` | 实时交易 |
 | `/customers.html` | `customers.js` | 客户列表 + 分群 |
-| `/bank-ledger.html` | `bank-ledger.js` | 当日流水：流水表格 + 接单区（平台单审批 / 已跳过）+ 调钱 + 今日报表 / C STATUS |
+| `/bank-ledger.html` | `bank-ledger.js` | 当日流水：运营中银行列表（点行筛流水、逐行勾实时收款）+ KPI + 接单区 + 调钱 + 今日报表 / C STATUS + 流水表格 |
 | `/bank-channels.html` | `bank-channels.js` | 支付渠道：全部渠道汇总 + 运营中 / 封禁中 / 已归档 + 渠道编辑 / 转出余额 |
 | `/company-settings.html` | `company-settings.js` | 公司/API 配置（admin） |
 
@@ -124,7 +124,7 @@ $env:TUNNEL_EDGE_IP_VERSION="4"
 
 ### 表
 
-- `bank_accounts` — 银行账户，`active=1` 表示使用中
+- `bank_accounts` — 银行账户。`active` 是遗留列（原「使用中」，2026-11-09 取消），「正在收款」看 `live_receiving`
 - `bank_ledger` — 账单流水
 - `bank_balance_log` — 已处理充值 tx_id（防双计）
 

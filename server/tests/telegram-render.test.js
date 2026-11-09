@@ -115,7 +115,7 @@ test("/balance 只给在跑着的账户：运营中 + PG 两组，封禁整组�
   assert.ok(!text.includes("123.00"), "封禁户的钱不该出现在 /balance 里\n" + text);
 
   const operating = text.slice(text.indexOf("运营中"), text.indexOf("PaymentGateway"));
-  assert.ok(operating.includes("NAB Perth"), "未勾使用中的账户仍应出现在运营中组");
+  assert.ok(operating.includes("NAB Perth"), "遗留 active = 0 的运营中账户照样出现在运营中组");
   assert.ok(operating.includes("Ubank Ghost"), "幽灵户在钱的口径上与人头同等，照样在运营中组");
   db.close();
 });
@@ -162,18 +162,18 @@ test("已归档账户不出现在 /balance 的任何一组里", () => {
   db.close();
 });
 
-test("/balance 标注当日口径、未使用，并给超标账户打标记", () => {
+test("/balance 标注当日口径，并给超标账户打标记；「使用中」已取消，不再标「停」", () => {
   const db = bankDatabase();
   const ids = seedCompany(db, "alpha");
   db.prepare("UPDATE bank_accounts SET alert_threshold = 100 WHERE id = ?").run(ids.normal);
 
   const text = shown(renderBalance(db, [ALPHA], { dateKey: TODAY }));
   assert.match(text, /ANZ Melbourne·\d{4} 日/, "每日归零账户应标注当日口径");
-  assert.match(text, /NAB Perth·\d{4} 停/, "未勾使用中的账户应标注");
+  assert.ok(!/NAB Perth·\d{4} 停/.test(text), "遗留 active = 0 不再标注\n" + text);
+  assert.ok(!text.includes("停="), "图例里也不该再有「停」\n" + text);
   assert.match(text, /⚠️/, "超标账户应有标记");
   // 标记是单字，含义必须在同一条消息里说明，否则没人看得懂。
   assert.match(text, /日=当日净额/);
-  assert.match(text, /停=未勾使用中/);
 
   // 当日口径账户显示的是当日净额 300.25，而不是累计 4300.25。
   assert.match(text, /300\.25/);

@@ -30,16 +30,18 @@ test(`最多 ${MAX_LIVE_RECEIVING} 个，第 4 个整组拒绝且不改动现状
   assert.deepEqual(setLiveReceiving(db, "alpha", [ids[1], ids[1], ids[2], ids[3]]).after, [ids[1], ids[2], ids[3]]);
 });
 
-test("只能选本公司、运营中、使用中的户", () => {
+test("只能选本公司、运营中的户；遗留 active = 0 的运营中户照样能选（「使用中」已取消）", () => {
   const { db, ids } = setup();
   const other = addAccount(db, { company_id: "beta", bank_branch: "Other Co" });
   const banned = addAccount(db, { lifecycle_status: "banned", active: 0 });
   const archived = addAccount(db, { lifecycle_status: "archived", active: 0 });
   const idle = addAccount(db, { active: 0 });
-  for (const bad of [other, banned, archived, idle, 99999]) {
+  for (const bad of [other, banned, archived, 99999]) {
     assert.throws(() => setLiveReceiving(db, "alpha", [ids[0], bad]), (e) => e.status === 400, `id ${bad} 应被拒`);
   }
   assert.deepEqual(currentLiveIds(db, "alpha"), []);
+  assert.deepEqual(setLiveReceiving(db, "alpha", [idle]).after, [idle]);
+  setLiveReceiving(db, "alpha", []);
   assert.throws(() => setLiveReceiving(db, "alpha", "1,2"), (e) => e.status === 400, "不是数组");
   assert.throws(() => setLiveReceiving(db, "alpha", [0]), (e) => e.status === 400);
 });
@@ -53,7 +55,7 @@ test("公司隔离：改 alpha 不碰 beta 的实时收款", () => {
   assert.equal(accountRow(db, b).live_receiving, 1);
 });
 
-test("路由接线：专用端点在 PUT /:id 之前、只认 req.companyId、写审计；不进 PUT 白名单；封禁 / 归档 / 停用清零", () => {
+test("路由接线：专用端点在 PUT /:id 之前、只认 req.companyId、写审计；不进 PUT 白名单；封禁 / 归档清零", () => {
   const routes = fs.readFileSync(path.join(__dirname, "../routes/banks.js"), "utf8");
   const live = routes.indexOf('router.put("/live-receiving"');
   assert.ok(live > 0 && live < routes.indexOf('router.put("/:id"'), "必须注册在 /:id 之前");
@@ -63,7 +65,9 @@ test("路由接线：专用端点在 PUT /:id 之前、只认 req.companyId、�
   assert.match(handler, /action: "bank_account\.live_receiving"/);
   const allowed = routes.slice(routes.indexOf("const allowed = ["), routes.indexOf("];", routes.indexOf("const allowed = [")));
   assert.doesNotMatch(allowed, /live_receiving/, "不能经 PUT /:id 逐户开关（并发会超过 3 个）");
-  assert.match(routes, /lifecycleOp\.status !== LIFECYCLE\.ACTIVE\)\s*\|\| \(req\.body\.active !== undefined && !Number\(req\.body\.active\)\)\) \{\s*sets\.push\("live_receiving = 0"\);/);
+  assert.match(routes, /if \(lifecycleOp && lifecycleOp\.status !== LIFECYCLE\.ACTIVE\) \{\s*sets\.push\("live_receiving = 0"\);/);
+  // 「使用中」取消后 active 不再可写：旧标签页发 {active:0} 不能顺手清掉实时收款。
+  assert.doesNotMatch(allowed, /"active"/, "active 不该再在 PUT 白名单里");
   // GET /api/banks 要带出来，前端才知道勾了谁
   assert.match(routes, /live_receiving: r\.live_receiving \? 1 : 0/);
 });

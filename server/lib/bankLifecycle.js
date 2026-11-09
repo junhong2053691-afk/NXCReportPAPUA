@@ -50,7 +50,13 @@ function isUsableForEntry(account) {
 // 后端 bankReport 与前端 isBalanceExcluded 都走它。
 function isCountedInTotals(account) {
   if (!isOperating(account)) return false;
-  return String(account.account_kind || "nominee") !== "payment_gateway";
+  return !isPaymentGateway(account);
+}
+
+// 是不是 PaymentGateway。钱的判定只问这一句：枚举外的脏值落在「不是 PG」一侧（计入）。
+// 封禁户余额计入 EXPENSES（blockedExpense.js）也用它排除 PG。
+function isPaymentGateway(account) {
+  return String(account?.account_kind || "nominee") === "payment_gateway";
 }
 
 // ---------------------------------------------------------- 渠道类型（account_kind）
@@ -92,8 +98,8 @@ function kindTag(account) {
   return KIND_TAGS[kindOf(account)];
 }
 
-// 要不要参与 alert_threshold 阈值报警。注意 active = 0（未启用）的账户**照常报警**，
-// 里面可能躺着还没转走的钱——那条规则在 bankAlerts.js 里，不归这里管。
+// 要不要参与 alert_threshold 阈值报警。只看生命周期：运营中就报。遗留的 active 列
+// （原「使用中」，2026-11 已取消）不参与判定。
 function isAlertEligible(account) {
   return isOperating(account);
 }
@@ -163,6 +169,7 @@ module.exports = {
   isArchived,
   isUsableForEntry,
   isCountedInTotals,
+  isPaymentGateway,
   KIND_LABELS,
   KIND_TAGS,
   kindOf,

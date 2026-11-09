@@ -446,11 +446,7 @@ const pageRoutes = {
 </details>
 </div>
 </div>
-<div class="bk-context-strip" role="status" aria-live="polite">
-<div class="bk-context-item"><span>当前公司</span><strong id="bk-current-company">读取中…</strong></div>
-<div class="bk-context-item"><span>流水日期</span><strong id="bk-current-date">-</strong></div>
-<div class="bk-context-item bk-context-sync"><span>同步状态</span><strong id="bk-current-sync">读取中…</strong><small id="bk-current-sync-time"></small></div>
-</div>
+<section class="bk-banklist" id="bk-banklist" aria-label="运营中渠道"></section>
 <div class="bk-kpis">
 <div class="bk-kpi"><em>全部 BALANCE</em><strong id="sum-balance">0.00</strong></div>
 <div class="bk-kpi bk-kpi-in"><em>入账 IN</em><strong id="sum-in">0.00</strong></div>
@@ -460,8 +456,7 @@ const pageRoutes = {
 <div class="reconcile-alert" id="reconcile-alert" hidden role="status" aria-live="polite"></div>
 <section class="bk-intake" id="bk-intake" aria-labelledby="bk-intake-title">
 <div class="bk-intake-head">
-<button type="button" class="bk-intake-toggle" id="bk-intake-toggle" aria-expanded="true" aria-controls="bk-intake-body"><i data-lucide="chevron-down"></i><span id="bk-intake-title">接单区</span></button>
-<div class="bk-live" id="bk-live" hidden></div>
+<h2 class="bk-intake-title" id="bk-intake-title">接单区</h2>
 <div class="pending-tabs" role="tablist" aria-label="待审批类型"><button type="button" class="btn btn-outline btn-xs pending-tab active" data-tab="tx" role="tab" aria-selected="true" aria-controls="pending-tx-panel">平台订单</button><button type="button" class="btn btn-outline btn-xs pending-tab" data-tab="skipped" role="tab" aria-selected="false" tabindex="-1" aria-controls="pending-skipped-panel">已跳过</button></div>
 <span class="bk-intake-empty" id="bk-intake-empty" hidden>✅ 暂无待审批</span>
 <div class="bk-intake-actions"><button type="button" class="bk-pending-action bk-pending-transfer" id="sheet-transfer-btn"><i data-lucide="arrow-left-right"></i>调钱</button><button type="button" class="icon-btn bk-intake-close" id="bk-intake-close" aria-label="关闭接单区"><i data-lucide="x"></i></button></div>
@@ -545,7 +540,7 @@ const pageRoutes = {
 <p id="reason-modal-error" class="form-error" role="alert" aria-live="polite"></p>
 <div class="actions"><button class="btn btn-outline btn-sm" id="reason-modal-cancel" type="button">取消</button><button class="btn btn-danger btn-sm" id="reason-modal-confirm" type="button">确认</button></div>
 </div></div>`,
-    ["/js/ledger-bank-pick.js?v=20261106drill3", "/js/operation-target.js?v=20261106drill1", "/js/render-gate.js?v=20261106drill1", "/js/pending-filter.js?v=20261106drill1", "/js/display-format.js?v=20261106drill2", "/js/cstatus-sheet.js?v=20261106sheet1", "/js/bank-common.js?v=20261109ledger1", "/js/bank-ledger.js?v=20261109preset1"]
+    ["/js/ledger-bank-pick.js?v=20261106drill3", "/js/operation-target.js?v=20261106drill1", "/js/render-gate.js?v=20261106drill1", "/js/pending-filter.js?v=20261106drill1", "/js/display-format.js?v=20261106drill2", "/js/cstatus-sheet.js?v=20261106sheet1", "/js/bank-common.js?v=20261109banklist1", "/js/bank-ledger.js?v=20261109banklist2"]
   ),
   "/bank-channels.html": pageLayout(
     "\u652f\u4ed8\u6e20\u9053",
@@ -602,7 +597,7 @@ const pageRoutes = {
 <p id="drain-err" class="form-error" role="alert" aria-live="polite"></p>
 <div class="actions"><button class="btn btn-outline btn-sm" id="drain-cancel" type="button">取消</button><button class="btn btn-success btn-sm" id="drain-submit" type="button">确认转出</button></div>
 </div></div>`,
-    ["/js/ledger-bank-pick.js?v=20261106drill3", "/js/operation-target.js?v=20261106drill1", "/js/render-gate.js?v=20261106drill1", "/js/display-format.js?v=20261106drill2", "/js/appeal-csv.js?v=20261106drill1", "/js/cstatus-sheet.js?v=20261106sheet1", "/js/bank-common.js?v=20261109ledger1", "/js/bank-channels.js?v=20261109ledger1"]
+    ["/js/ledger-bank-pick.js?v=20261106drill3", "/js/operation-target.js?v=20261106drill1", "/js/render-gate.js?v=20261106drill1", "/js/display-format.js?v=20261106drill2", "/js/appeal-csv.js?v=20261106drill1", "/js/cstatus-sheet.js?v=20261106sheet1", "/js/bank-common.js?v=20261109banklist1", "/js/bank-channels.js?v=20261109banklist2"]
   ),
   "/audit-history.html": pageLayout(
     "\u64cd\u4f5c\u5386\u53f2",
@@ -712,7 +707,7 @@ const globalFeedbackHtml = '<div class="app-toast-stack" id="app-toast-stack" ar
 // i18n.js holds the dictionary + translation engine. It is injected into <head> (ahead of the
 // render-blocking stylesheet) so the first paint is already in the saved language, instead of
 // painting Chinese and rewriting it after the two vendored scripts at the end of <body> load.
-const i18nHeadHtml = '<script src="/js/i18n.js?v=20261109mob1"></script>';
+const i18nHeadHtml = '<script src="/js/i18n.js?v=20261109banklist1"></script>';
 // One full translation pass at the end of <body>, where the whole document
 // exists but the two vendored scripts below have not been fetched yet. Anything
 // painted while they load is already in the right language. Must come after
@@ -725,7 +720,7 @@ for (const route of Object.keys(pageRoutes)) {
     .replace('<link rel="stylesheet" href="/css/style.css?v=20260812transferfix1">', i18nHeadHtml + '<link rel="stylesheet" href="/css/style.css?v=20260812transferfix1">')
     .replace('<div class="company-bar glass-control" id="company-bar">', '<div class="company-bar glass-control" id="company-bar">' + companyCompactEntryHtml)
     .replace('<script src="/vendor/lucide-1.65.0.min.js"></script>', globalFeedbackHtml + i18nBootHtml + '<script src="/vendor/lucide-1.65.0.min.js"></script>')
-    .replace('/css/style.css?v=20260812transferfix1', '/css/style.css?v=20261109mtd3')
+    .replace('/css/style.css?v=20260812transferfix1', '/css/style.css?v=20261109banklist2')
     .replace('/js/customer-detail.js?v=20260731bankfix4', '/js/customer-detail.js?v=20261109mtd1')
     .replace('/css/style.css?v=20260802topbarflow1', '/css/style.css?v=20261001archive1')
     .replace('/js/app.js?v=20260802platformsound3', '/js/app.js?v=20261109mob1');

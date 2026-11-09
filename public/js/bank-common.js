@@ -186,6 +186,56 @@
     const stats = (report?.bankRows || []).find((r) => r.id === b.id);
     return Number(stats?.balance ?? b.balance ?? 0);
   }
+  // 与后端 bankAlerts.js 的判定口径保持一致：阈值 > 0、运营中、余额 ≥ 阈值。
+  // 这里只是给列表加个视觉提示，真正的报警判定在服务端。
+  function alertThresholdReached(b, report) {
+    const threshold = Number(b.alert_threshold || 0);
+    if (!(threshold > 0)) return false;
+    if (!LC.isOperating(b)) return false;
+    return Math.round(bankDisplayBalance(b, report) * 100) >= Math.round(threshold * 100);
+  }
+
+  // 银行资料（BSB / ACCOUNT / PAYID）的展示与复制。当日流水的银行列表与支付渠道页共用。
+  function bankInfoFields(b) {
+    return [
+      ["BSB", b?.bsb],
+      ["ACCOUNT", b?.account_number],
+      ["PAYID", b?.payid],
+    ].filter(([, value]) => String(value ?? "").trim());
+  }
+  function bankCopyText(b) {
+    const fields = bankInfoFields(b);
+    return fields.length
+      ? fields.map(([label, value]) => `${label} : ${String(value).trim()}`).join("\n")
+      : "未填写银行资料";
+  }
+  function bankInfoHtml(b) {
+    const fields = bankInfoFields(b);
+    if (!fields.length) return '<div class="bk-bank-info bk-bank-info-empty">未填写银行资料</div>';
+    return `<div class="bk-bank-info" title="点击复制完整银行资料">${fields.map(([label, value]) => {
+      return `<span class="bk-bank-info-line"><span class="bk-bank-info-label">${label}</span><span class="bk-bank-info-value" translate="no">${esc(String(value).trim())}</span></span>`;
+    }).join("")}</div>`;
+  }
+  function writeClipboard(text) {
+    if (navigator.clipboard?.writeText) return navigator.clipboard.writeText(text);
+    const textarea = document.createElement("textarea");
+    textarea.value = text;
+    textarea.setAttribute("readonly", "");
+    textarea.style.position = "fixed";
+    textarea.style.opacity = "0";
+    document.body.appendChild(textarea);
+    textarea.select();
+    const copied = document.execCommand("copy");
+    textarea.remove();
+    return copied ? Promise.resolve() : Promise.reject(new Error("copy failed"));
+  }
+  function copyBankInfo(bank) {
+    if (!bank) return;
+    writeClipboard(bankCopyText(bank))
+      .then(() => showToast("已复制完整银行资料", { tone: "success" }))
+      .catch(() => showToast("复制失败", { tone: "error" }));
+  }
+
   function cStatusNames(options) {
     // is_self = 本公司自己的名字（别家怎么叫我），录入时不能填，服务端也会拒（见 bankApply.selfCStatusNames）。
     return (options || []).filter((o) => !Number(o.is_self)).map((o) => o.name);
@@ -196,6 +246,6 @@
     tr, esc, plainDisplayText, ledgerNameText, fmt, fmtMetric, parseNum,
     statusList, loadStatusOptions, parseStatus, statusLabel, statusClass, statusStyleAttr,
     bankBranchOf, tabLabel, bankPickerLabel, usableBanks, isBalanceExcluded, totalBalance,
-    bankDisplayBalance, cStatusNames,
+    bankDisplayBalance, cStatusNames, alertThresholdReached, bankInfoHtml, bankCopyText, copyBankInfo,
   };
 })();

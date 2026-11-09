@@ -119,7 +119,7 @@ function normalizeKind(v) {
 //     带原因的 banned 事件，而且「封禁中」页签成为通往归档的唯一入口——待清理队列没法
 //     被绕过。
 //  2. **unarchive 回落到 banned 而不是 active**。取消归档只是把账户捞回可见的待清理
-//     队列，要回到运营还得再显式解封一次。这与「解封不自动恢复 active 列」是同一种
+//     队列，要回到运营还得再显式解封一次。这与「解封不自动恢复实时收款」是同一种
 //     谨慎：让钱重新流动永远需要一次明确的人为动作。
 const LIFECYCLE_OPS = {
   ban: {
@@ -498,11 +498,14 @@ router.put("/:id", (req, res) => {
   //
   // lifecycle_status 同理不在白名单里：它只能经下面的 ban / unban / archive / unarchive
   // 四个分支改动。放进白名单的话，一条 PUT {"lifecycle_status":"archived"} 就能绕过
-  // 归档闸门（把还有余额的账户藏起来）、绕过 active = 0 的不变量（sync.js 的自动入账
-  // 只看 active，于是「假封禁」的账户照样收钱）、也不会留下 bank_account_events。
+  // 归档闸门（把还有余额的账户藏起来）、绕过 active = 0 的不变量，也不会留下
+  // bank_account_events。
+  //
+  // active（原「使用中」）2026-11-09 起取消，由实时收款取代、不用的户直接封禁，所以也不在
+  // 白名单里：没有任何读者，留着唯一的作用是让一个旧标签页发 {active:0} 顺手清掉实时收款。
   const allowed = [
     "bank_branch", "account_name", "bsb", "account_number", "payid", "balance",
-    "active", "reset_daily_balance", "note", "sort_order", "account_kind",
+    "reset_daily_balance", "note", "sort_order", "account_kind",
     "alert_threshold",
   ];
   const sets = [];
@@ -561,17 +564,16 @@ router.put("/:id", (req, res) => {
     }
     sets.push("lifecycle_status = ?");
     vals.push(lifecycleOp.status);
-    // 不变量：banned | archived ⇒ active = 0。sync.js 的自动入账只看 active，靠这条
-    // 保证封禁 / 归档的账户拿不到新充值。
+    // 不变量：banned | archived ⇒ active = 0。active 是遗留列（原「使用中」），已无读者；
+    // 照写是为了让库里的旧不变量保持成立（sync.js 那段死代码只看 active）。
     if (lifecycleOp.active != null) {
       sets.push("active = ?");
       vals.push(lifecycleOp.active);
     }
   }
-  // 封禁 / 归档 / 取消「使用中」的户不能再挂在实时收款里，同一条 UPDATE 清掉
-  // （lib/bankLiveReceiving.js）。解封不恢复——要再用得重新勾。
-  if ((lifecycleOp && lifecycleOp.status !== LIFECYCLE.ACTIVE)
-    || (req.body.active !== undefined && !Number(req.body.active))) {
+  // 封禁 / 归档的户不能再挂在实时收款里，同一条 UPDATE 清掉（lib/bankLiveReceiving.js）。
+  // 解封不恢复——要再用得重新勾。
+  if (lifecycleOp && lifecycleOp.status !== LIFECYCLE.ACTIVE) {
     sets.push("live_receiving = 0");
   }
 

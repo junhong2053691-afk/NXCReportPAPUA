@@ -1,7 +1,7 @@
 // 月报（MONTHLY REPORT › REPORT）口径。每条定义见仓库根目录 CONTEXT.md「月报」一节。
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { bankDatabase, addAccount, addLedger } = require("./bank-fixture");
+const { bankDatabase, addAccount, addLedger, addAccountEvent } = require("./bank-fixture");
 const { computeMonthlyReport, computeYearlyReport } = require("../lib/monthlyReport");
 
 function setup() {
@@ -185,4 +185,17 @@ test("年视图：12 行每月一行，月行 = 当月合计，末行年合计",
 
   const feb2026 = computeMonthlyReport(db, "alpha", { month: "2026-02", today: "2026-11-04" }).total;
   assert.deepEqual({ ...feb, month: undefined, future: undefined }, { ...feb2026, month: undefined, future: undefined });
+});
+
+test("EXPENSES 含封禁户余额（正数），WIN/LOSE 不扣", () => {
+  const { db, acc } = setup();
+  addLedger(db, acc, 1000, "2026-11-01", { status: "deposit" });
+  db.prepare("UPDATE bank_accounts SET lifecycle_status = 'banned' WHERE id = ?").run(acc);
+  addAccountEvent(db, acc, "banned", "2026-11-03 01:00:00");
+
+  const report = computeMonthlyReport(db, "alpha", { month: "2026-11", today: "2026-11-04" });
+  assert.equal(day(report, "2026-11-03").expenses, 1000);
+  assert.equal(day(report, "2026-11-03").blockedExpense, 1000);
+  assert.equal(day(report, "2026-11-03").winLose, 0);
+  assert.equal(report.total.winLose, 1000);
 });

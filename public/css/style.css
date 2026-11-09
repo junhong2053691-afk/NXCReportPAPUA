@@ -2406,51 +2406,6 @@ tr:hover .bank-bal-btns { opacity: 1; }
 .bk-more-item:hover { background: var(--surface-2); color: var(--text); }
 .bk-more-item svg { width: 15px; height: 15px; }
 
-.bk-context-strip {
-  display: grid;
-  grid-template-columns: minmax(180px, 1.35fr) minmax(130px, .85fr) minmax(220px, 1.2fr);
-  gap: 8px;
-  padding: 8px 10px;
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius-sm);
-  background: var(--surface-2);
-  box-shadow: var(--inset-highlight);
-}
-.bk-context-item {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  min-width: 0;
-  color: var(--muted);
-  font-size: 11px;
-}
-/* 标签原来是 flex:0 0 auto（不可收缩），于是英文标签变长时挤压的全是右边的【值】——
-   而值是租户数据（公司名、流水日期）。实测 375px 下 #bk-current-date 的 2026-09-30
-   被截掉 28px。改成可收缩：宽度不够时先牺牲标签，值优先保全。 */
-.bk-context-item > span {
-  flex: 0 1 auto;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-weight: var(--weight-bold);
-}
-.bk-context-item > strong {
-  min-width: 0;
-  overflow: hidden;
-  color: var(--text);
-  font-size: 12px;
-  font-weight: var(--weight-bold);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.bk-context-sync { flex-wrap: wrap; }
-.bk-context-sync > small { color: var(--muted); font-size: 10px; }
-.bk-context-sync[data-state="healthy"] > strong { color: var(--green); }
-.bk-context-sync[data-state="warning"] > strong { color: var(--orange); }
-.bk-context-sync[data-state="error"] > strong,
-.bk-context-sync[data-state="denied"] > strong { color: var(--red); }
-
 .bk-kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
 .bk-kpi {
   min-width: 0;
@@ -2473,6 +2428,8 @@ tr:hover .bank-bal-btns { opacity: 1; }
 .bk-kpi-in strong { color: var(--green); }
 .bk-kpi-out strong { color: var(--red); }
 .bk-kpi-help strong { color: var(--accent); }
+/* 日报 EXPENSES 下面那行「其中封禁 X」（封禁户余额计入 EXPENSES 的那一份）。 */
+.report-sub { display: block; margin-top: 1px; color: var(--muted); font-size: 10px; font-weight: var(--weight-bold); white-space: nowrap; }
 .reconcile-alert {
   display: flex;
   align-items: center;
@@ -2607,8 +2564,6 @@ tr:hover .bank-bal-btns { opacity: 1; }
 }
 @media (max-width: 900px) {
   .bk-kpis { grid-template-columns: repeat(2, 1fr); }
-  .bk-context-strip { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
-  .bk-context-sync { grid-column: 1 / -1; }
 }
 
 .bk-rail {
@@ -3425,9 +3380,7 @@ tr:hover .bank-bal-btns { opacity: 1; }
 .bkd-item-sub { font-size: 11px; font-weight: var(--weight-normal); color: var(--muted); margin-left: 4px; }
 .bkd-item-bal { font-size: 14px; font-weight: var(--weight-black); font-family: "SF Mono","Consolas",monospace; margin-left: auto; }
 .bkd-item-acts { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-.bkd-item-acts .bank-active-chk { width: 16px; height: 16px; cursor: pointer; accent-color: var(--green); }
 .bkd-excl-tag { font-size: 9px; font-style: italic; color: var(--muted-2); background: var(--surface-3); padding: 1px 5px; border-radius: 999px; }
-.bkd-toggle-btn { min-width: 28px; font-size: 12px; }
 .bkd-card-banned-btn { border-color: var(--red) !important; }
 
 .bkd-item-body { background: var(--surface-2); padding: 12px 14px; border-top: 1px solid var(--border); }
@@ -4302,21 +4255,6 @@ body.tr-drawer-open { overflow: hidden; }
      弹窗吸底的确认栏，按「确认」误点成切去别家。节点还在、报警照常计时，关弹窗就回来。 */
   body.modal-open .app-toast--order { display: none; }
 
-  /* 支付渠道页：待处理 → KPI → 渠道（折叠）→ 筛选 → 流水。.bkv2 本身是 flex column。 */
-  .bkv2 > .bk-pending-summary { order: 1; }
-  .bkv2 > .reconcile-alert { order: 2; }
-  .bkv2 > .bk-kpis { order: 3; }
-  .bkv2 > .bk-context-strip { order: 4; }
-  .bkv2 > .bk-rail { order: 5; }
-  .bkv2 > .bk-toolbar { order: 6; }
-  .bkv2 > .bk-report-wrap { order: 7; }
-  .bkv2 > .bk-grid-head { order: 8; }
-  .bkv2 > .sheet-table-wrap { order: 9; }
-  .bkv2 > datalist { order: 10; }
-
-  /* 渠道列表默认折叠，只留「全部渠道」汇总；状态在 bank-accounts.js 的 directoryOpen。 */
-  .bk-directory:not(.is-open) .bk-channel-list,
-  .bk-directory:not(.is-open) .bk-banned-summary { display: none; }
   .bk-directory-toggle {
     display: flex;
     align-items: center;
@@ -5174,114 +5112,104 @@ body.tr-drawer-open { overflow: hidden; }
 }
 .bk-intake.is-empty { border-color: var(--border); border-left-color: var(--border-strong); }
 .bk-intake-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 8px 10px; }
-.bk-intake-toggle {
+.bk-intake-title { margin: 0; padding: 4px 6px; color: var(--text); font-size: 13px; font-weight: var(--weight-black); line-height: 24px; }
+#bk-intake .pending-tabs { margin: 0; }
+
+/* ===== 当日流水顶上的运营中银行列表（bank-ledger.js 的 renderBankList，2026-11-09）=====
+   行的网格、指标、银行资料沿用上面 .bk-channel-list / .bk-bank-row 那套；这里只管外框、
+   头部和「实时收款」勾。整块可折叠（头部常驻，收起时头部列出实时收款户名）。 */
+.bk-banklist {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--surface-solid);
+  box-shadow: var(--inset-highlight), var(--shadow-sm);
+}
+.bk-banklist:empty { display: none; }
+.bk-banklist-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 8px 12px; border-bottom: 1px solid var(--border); }
+.bk-banklist-toggle {
   display: inline-flex;
   align-items: center;
   gap: 6px;
   min-height: 32px;
-  padding: 4px 6px;
+  padding: 4px 8px 4px 4px;
   border: 0;
   border-radius: var(--radius-sm);
   background: transparent;
   color: var(--text);
   font: inherit;
   font-size: 13px;
-  font-weight: var(--weight-black);
   cursor: pointer;
 }
-.bk-intake-toggle:hover { background: var(--surface-2); }
-.bk-intake-toggle svg { width: 16px; height: 16px; transition: transform .18s var(--ease); }
-.bk-intake.is-collapsed .bk-intake-toggle svg { transform: rotate(-90deg); }
-#bk-intake .pending-tabs { margin: 0; }
-/* 实时收款银行选择器（bank-ledger.js 的 renderLivePicker） */
-.bk-live { position: relative; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; min-width: 0; }
-.bk-live[hidden] { display: none; }
-.bk-live-label { color: var(--text-soft); font-size: 11px; font-weight: var(--weight-black); letter-spacing: .04em; }
-.bk-live-empty { color: var(--orange); font-size: 11px; }
-.bk-live-chip {
+.bk-banklist-toggle:hover { background: var(--surface-2); }
+.bk-banklist-toggle svg { width: 16px; height: 16px; transition: transform .18s var(--ease); }
+.bk-banklist.is-collapsed .bk-banklist-toggle svg { transform: rotate(-90deg); }
+.bk-banklist-toggle strong { font-weight: var(--weight-black); }
+.bk-banklist-toggle b { font-family: var(--font-mono); font-size: 15px; }
+.bk-banklist-toggle span { color: var(--muted); font-size: 12px; }
+.bk-banklist.is-collapsed .bk-banklist-head { border-bottom: 0; }
+.bk-banklist-body[hidden] { display: none; }
+.bk-banklist-livenames { display: inline-flex; flex-wrap: wrap; gap: 4px; min-width: 0; }
+.bk-banklist-live { color: var(--text-soft); font-size: 12px; }
+.bk-banklist-live b { font-family: var(--font-mono); color: var(--text); }
+.bk-banklist-all { margin-left: auto; }
+.bk-banklist-all.active { border-color: var(--primary); background: var(--primary-soft); color: var(--primary-text); }
+.bk-banklist-empty { padding: 14px 12px; color: var(--muted); font-size: 12px; }
+.bk-banklist .bk-col-actions { gap: 6px; }
+.bk-flag-live {
+  border: 1px solid color-mix(in srgb, var(--green, #10b981) 40%, var(--border));
+  background: color-mix(in srgb, var(--green, #10b981) 14%, var(--surface-solid));
+  color: var(--text);
+}
+.bk-bank-row.is-live { box-shadow: inset 3px 0 0 var(--green, #10b981); }
+.bk-bank-row.is-live.active { box-shadow: inset 3px 0 0 var(--primary); }
+.bk-live-toggle {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  max-width: 220px;
-  padding: 2px 4px 2px 8px;
-  border: 1px solid color-mix(in srgb, var(--green, #10b981) 40%, var(--border));
+  gap: 6px;
+  min-height: 32px;
+  padding: 4px 10px;
+  border: 1px solid var(--border-strong);
   border-radius: 999px;
-  background: color-mix(in srgb, var(--green, #10b981) 12%, var(--surface-solid));
-  color: var(--text);
-  font-size: 11px;
-  font-weight: var(--weight-bold);
-}
-.bk-live-chip > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.bk-live-remove, .bk-live-add {
-  border: 0;
-  background: transparent;
+  background: var(--surface);
   color: var(--text-soft);
-  font: inherit;
+  font-size: 12px;
+  font-weight: var(--weight-bold);
+  white-space: nowrap;
   cursor: pointer;
 }
-.bk-live-remove { display: inline-grid; place-items: center; width: 20px; height: 20px; border-radius: 999px; font-size: 14px; line-height: 1; }
-.bk-live-remove:hover { background: var(--surface-2); color: var(--red); }
-.bk-live-add { padding: 3px 8px; border: 1px dashed var(--border-strong); border-radius: 999px; font-size: 11px; font-weight: var(--weight-bold); }
-.bk-live-add:hover { color: var(--primary-text); border-color: var(--primary); }
-.bk-live-pop {
-  position: absolute;
-  top: calc(100% + 6px);
-  left: 0;
-  z-index: var(--z-sticky);
-  display: grid;
-  gap: 2px;
-  min-width: 260px;
-  max-height: 320px;
-  overflow-y: auto;
-  padding: 8px;
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius);
-  background: var(--surface-solid);
-  box-shadow: var(--shadow-sm);
+.bk-live-toggle input { flex: 0 0 auto; width: 16px; height: 16px; min-height: 0; margin: 0; }
+.bk-live-toggle.is-on {
+  border-color: color-mix(in srgb, var(--green, #10b981) 50%, var(--border));
+  background: color-mix(in srgb, var(--green, #10b981) 14%, var(--surface-solid));
+  color: var(--text);
 }
-.bk-live-pop[hidden] { display: none; }
-.bk-live-pop-head { display: flex; justify-content: space-between; padding: 2px 4px 6px; color: var(--muted); font-size: 11px; }
-.bk-live-option { display: flex; align-items: center; gap: 8px; padding: 6px; border-radius: var(--radius-sm); font-size: 12px; cursor: pointer; }
-.bk-live-option:hover { background: var(--surface-2); }
-/* 要压过 #bk-intake input { width: 100% } 那条（ID 选择器）。 */
-#bk-intake .bk-live-option input { flex: 0 0 auto; width: 16px; height: 16px; min-height: 0; margin: 0; }
-.bk-live-option > span { white-space: nowrap; }
-.bk-live-option small { margin-left: auto; color: var(--muted); }
-.bk-live-option.is-disabled { color: var(--muted); cursor: not-allowed; }
-.bk-live-add-mob { display: none; }
-/* 手机（decisions.md 增量 G）：选满 3 户时标签把浮层头部折成四行（约 170px），而头部不跟着滚。
-   头部只留一个「实时收款 N」按钮，标签和 × 都不摆，增删全在弹层里勾；弹层改挂在整个头部下面、
-   左右各留 12px，每行 44px。 */
+.bk-live-toggle.is-disabled { opacity: .55; cursor: not-allowed; }
+/* 手机：不折叠又不想占满一屏，每户压成两行——名字 + BALANCE / 实时收款勾 + 复制。
+   银行资料、COUNT、OUTFLOW 在这里不显示（复制按钮照样拿得到完整资料）。 */
 @media (max-width: 700px) {
-  .bk-intake-head { position: relative; }
-  .bk-live { position: static; }
-  .bk-live-label,
-  .bk-live-chip,
-  .bk-live-empty,
-  .bk-live-add-desk { display: none; }
-  .bk-live-add-mob { display: inline-flex; align-items: center; gap: 6px; }
-  .bk-live-add {
-    min-height: 40px;
-    padding: 6px 14px;
-    border-style: solid;
-    border-color: color-mix(in srgb, var(--green, #10b981) 40%, var(--border));
-    background: color-mix(in srgb, var(--green, #10b981) 12%, var(--surface-solid));
-    color: var(--text);
-    font-size: 12px;
-  }
-  .bk-live-add b { font-family: var(--font-mono); font-size: 13px; }
-  .bk-live-add.is-empty { border-color: color-mix(in srgb, var(--orange) 50%, var(--border)); background: transparent; color: var(--orange); }
-  .bk-live-pop { top: calc(100% - 4px); right: 12px; left: 12px; min-width: 0; max-height: 60vh; }
-  .bk-live-option { min-height: 44px; padding: 8px; font-size: 14px; }
-  .bk-live-option > span { overflow: hidden; text-overflow: ellipsis; }
-  #bk-intake .bk-live-option input { width: 20px; height: 20px; }
+  .bk-banklist .bk-bank-row { grid-template-columns: 30px minmax(0, 1fr) auto; }
+  .bk-banklist .bk-bank-row > .bk-col-order { grid-column: 1; grid-row: 1 / span 2; padding: 10px 0 0 8px; }
+  .bk-banklist .bk-bank-row > .bk-col-channel { grid-column: 2; grid-row: 1; padding: 8px 6px 2px; }
+  .bk-banklist .bk-bank-row > .bk-col-info { display: none; }
+  .bk-banklist .bk-bank-row > .bk-col-balance { grid-column: 3; grid-row: 1; padding: 8px 10px 2px 4px; text-align: right; }
+  .bk-banklist .bk-bank-row > .bk-col-actions { grid-column: 2 / -1; grid-row: 2; padding: 4px 10px 8px 6px; justify-content: flex-start; }
+  .bk-banklist .bk-metric-grid { display: block; }
+  .bk-banklist .bk-metric:not(.bk-metric-balance) { display: none; }
+  .bk-banklist .bk-field-group-label,
+  .bk-banklist .bk-name-label { display: none; }
+  .bk-banklist .bk-channel-meta { display: inline-block; margin-top: 2px; }
+  .bk-banklist .bk-live-toggle { min-height: 44px; padding: 6px 14px; font-size: 13px; }
+  .bk-banklist .bk-live-toggle input { width: 20px; height: 20px; }
+  .bk-banklist .bk-copy-btn { min-height: 44px; }
+  .bk-banklist-toggle { min-height: 44px; }
 }
 .bk-intake-empty { color: var(--text-soft); font-size: 12px; }
 .bk-intake-empty[hidden] { display: none; }
 .bk-intake-actions { display: flex; align-items: center; gap: 8px; margin-left: auto; }
 .bk-intake-close { display: none; }
 .bk-intake-body { padding: 0 10px 10px; }
-.bk-intake.is-collapsed .bk-intake-body,
 .bk-intake.is-empty .bk-intake-body,
 .bk-intake.is-empty .pending-tabs { display: none; }
 #bk-intake .table-wrap { height: auto; max-height: min(52vh, 460px); }
@@ -5356,8 +5284,6 @@ body.tr-drawer-open { overflow: hidden; }
     padding-top: env(safe-area-inset-top);
   }
   .bk-intake.is-sheet-open .bk-intake-head { border-bottom: 1px solid var(--border); padding: 8px 12px; }
-  .bk-intake.is-sheet-open .bk-intake-toggle { pointer-events: none; }
-  .bk-intake.is-sheet-open .bk-intake-toggle svg,
   .bk-intake.is-sheet-open #sheet-transfer-btn { display: none; }   /* 底栏有「调钱」 */
   .bk-intake.is-sheet-open .bk-intake-close { display: inline-grid; place-items: center; width: 44px; height: 44px; }
   .bk-intake.is-sheet-open:not(.is-empty) .bk-intake-body {
@@ -5429,11 +5355,10 @@ body.tr-drawer-open { overflow: hidden; }
 /* 行之间插了详情体，nth-child 的奇偶会错位，按 article 计。 */
 .channels-app .bk-bank-row:nth-child(even) { background: var(--surface); }
 .channels-app .bk-bank-row:nth-of-type(even) { background: color-mix(in srgb, var(--surface-2) 46%, var(--surface)); }
-/* 操作列：上一行复制、下一行编辑 / 使用中 / 封禁 / 详情，右对齐。 */
+/* 操作列：上一行复制、下一行编辑 / 封禁，右对齐。详情 2026-11-09 起常驻在行下面，不再有展开按钮。 */
 .channels-app .bk-col-actions { flex-direction: column; align-items: flex-end; justify-content: center; gap: 6px; }
 .channels-app .bk-copy-btn { min-height: 30px; }
 .bk-row-acts { display: flex; align-items: center; justify-content: flex-end; gap: 4px; flex-wrap: wrap; }
-.bk-active-toggle { display: inline-flex; align-items: center; gap: 4px; color: var(--text-soft); font-size: 11px; white-space: nowrap; cursor: pointer; }
 .bk-row-body { min-width: 960px; padding: 10px 12px; border-bottom: 1px solid var(--border); background: var(--surface-2); cursor: default; }
 .bk-row-body[hidden] { display: none; }
 :root[data-theme="dark"] .ch-summary { background: linear-gradient(105deg, color-mix(in srgb, var(--primary-soft) 70%, var(--surface)), var(--surface)); }

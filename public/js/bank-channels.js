@@ -20,13 +20,23 @@
   let editingBankId = null;
   let bankReorderBusy = false;
   let draggedBankId = null;
-  // 三个页签的视图状态。每个页签各自记页码（切回来还在原处），搜索词与展开集合跨页签
-  // 共享。BKD_PAGE_SIZE 把封禁 / 归档同时渲染的行数钉死；运营中不分页（要能整列拖拽排序）。
+  // 三个页签的视图状态。每个页签各自记页码（切回来还在原处），搜索词跨页签共享。
+  // BKD_PAGE_SIZE 把封禁 / 归档同时渲染的行数钉死；运营中不分页（要能整列拖拽排序）。
   let bkdTab = "operating";
   const bkdPage = { operating: 1, banned: 1, archived: 1 };
   let bkdQuery = "";
-  const bkdExpanded = new Set();
   const BKD_PAGE_SIZE = 20;
+  // 每行详情 2026-11-09 起常驻展开（用户要求不折叠）。后台每 5 秒可能整块重画，详情 HTML 按
+  // 渠道缓存、签名不变就直接复用，否则每次重画都要对每行再打 2 个请求。换公司时 detailGen++，
+  // 迟到的旧响应一律丢掉。
+  const bkdDetailCache = new Map(); // id -> { sig, html }
+  let detailGen = 0;
+  const DETAIL_CONCURRENCY = 3;
+  let detailQueue = [];
+  let detailActive = 0;
+  // 正在拉的渠道 id。拉的途中页面被重画（首屏 loadBanks 与 loadDailyReport 各画一次），新节点
+  // 又是 data-loaded="0"，不挡住就会对同一户重复请求；响应回来时按 id 写进当前那个节点。
+  const detailInflight = new Set();
 
   let bankLoadRequest = 0;
   let reportLoadRequest = 0;
@@ -88,27 +98,6 @@
     }).catch(() => {});
   }
 
-  function bankDirectoryCopyText(b) {
-    const fields = [
-      ["BSB", b?.bsb],
-      ["ACCOUNT", b?.account_number],
-      ["PAYID", b?.payid],
-    ].filter(([, value]) => String(value ?? "").trim());
-    return fields.length
-      ? fields.map(([label, value]) => `${label} : ${String(value).trim()}`).join("\n")
-      : "未填写银行资料";
-  }
-  function bankDirectoryInfoHtml(b) {
-    const fields = [
-      ["BSB", b.bsb],
-      ["ACCOUNT", b.account_number],
-      ["PAYID", b.payid],
-    ].filter(([, value]) => String(value ?? "").trim());
-    if (!fields.length) return '<div class="bk-bank-info bk-bank-info-empty">未填写银行资料</div>';
-    return `<div class="bk-bank-info" title="点击复制完整银行资料">${fields.map(([label, value]) => {
-      return `<span class="bk-bank-info-line"><span class="bk-bank-info-label">${label}</span><span class="bk-bank-info-value" translate="no">${esc(String(value).trim())}</span></span>`;
-    }).join("")}</div>`;
-  }
   function bankDirectoryStats(b) {
     const stats = (dailyReport?.bankRows || []).find((r) => r.id === b.id);
     return {
@@ -117,16 +106,8 @@
       displayBalance: bankDisplayBalance(b),
       excluded: isBalanceExcluded(b),
       isPG: String(b.account_kind || "nominee") === "payment_gateway",
-      overAlert: alertThresholdReached(b),
+      overAlert: BC.alertThresholdReached(b, dailyReport),
     };
-  }
-  // 与后端 bankAlerts.js 的判定口径保持一致：阈值 > 0、运营中、余额 ≥ 阈值。
-  // 这里只是给列表加个视觉提示，真正的报警判定在服务端。
-  function alertThresholdReached(b) {
-    const threshold = Number(b.alert_threshold || 0);
-    if (!(threshold > 0)) return false;
-    if (!LC.isOperating(b)) return false;
-    return Math.round(bankDisplayBalance(b) * 100) >= Math.round(threshold * 100);
   }
   function bankDirectoryStatusHtml(b, stats) {
     const alertFlag = stats.overAlert
@@ -135,12 +116,8 @@
     if (stats.isPG) {
       return '<span class="bk-flag bk-flag-pg" title="PaymentGateway 余额不计入合计">PG</span>' + alertFlag;
     }
-    // 以前写死英文 Active / Inactive，中文模式下也是英文（员工演练）。中文原文 + 字典翻译。
-    return (
-      (b.active
-        ? '<span class="bk-flag bk-flag-active">使用中</span>'
-        : '<span class="bk-flag bk-flag-idle">未启用</span>') + alertFlag
-    );
+    // 「使用中 / 未启用」2026-11-09 取消，换成只读的「实时收款」标（在当日流水的银行列表里勾）。
+    return (Number(b.live_receiving) ? '<span class="bk-flag bk-flag-live">实时收款</span>' : "") + alertFlag;
   }
   // 「运营中」页签的一行。点行本身去当日流水（筛到这个渠道），操作按钮各管各的。
   function bankDirectoryRowHtml(b, index, draggable) {
@@ -148,7 +125,6 @@
     const bankLabel = bankBranchOf(b) || "未命名渠道";
     const accountName = String(b.account_name || "").trim();
     const nameHtml = accountName ? `<div class="bk-channel-sub"><span class="bk-name-label">NAME</span><span translate="no">${esc(accountName)}</span></div>` : "";
-    const expanded = bkdExpanded.has(b.id);
     const drag = draggable ? ' draggable="true"' : "";
     const handle = draggable
       ? `<button type="button" class="bk-order-handle" draggable="true" aria-label="Drag ${esc(bankLabel)} to reorder" title="Drag to reorder"><i data-lucide="grip-vertical"></i></button>`
@@ -156,32 +132,15 @@
     return `<article class="bk-bank-row${stats.isPG ? " bk-bank-row-pg" : ""}" data-id="${b.id}" role="listitem" tabindex="0"${drag} title="${esc(tr("点击查看这个渠道的当日流水"))}">
 <div class="bk-col-order">${handle}<span class="bk-row-no">${index + 1}</span></div>
 <div class="bk-col-channel"><span class="bk-field-group-label bk-channel-label">BANK BRANCH</span><div class="bk-channel-name"><strong translate="no">${esc(bankLabel)}</strong>${bankDirectoryStatusHtml(b, stats)}</div>${nameHtml}<div class="bk-channel-meta"><span class="kind-tag kind-${esc(b.account_kind || "nominee")}">${esc(KIND_LABEL[b.account_kind] || b.account_kind || "人头")}</span></div></div>
-<div class="bk-col-info"><span class="bk-field-group-label">银行资料</span>${bankDirectoryInfoHtml(b)}</div>
+<div class="bk-col-info"><span class="bk-field-group-label">银行资料</span>${BC.bankInfoHtml(b)}</div>
 <div class="bk-col-balance"><div class="bk-metric-grid"><div class="bk-metric bk-metric-balance"><span>BALANCE</span><strong class="bk-row-balance${stats.excluded ? " bk-balance-excluded" : ""}">${fmt(stats.displayBalance)}</strong></div><div class="bk-metric"><span>COUNT</span><strong>${fmtMetric(stats.txCount)}</strong></div><div class="bk-metric bk-metric-outflow"><span>TOTAL OUTFLOW</span><strong>${fmt(stats.outflow)}</strong></div></div>${stats.excluded ? '<span class="bk-row-flow bk-excluded-note">不计入总余额</span>' : ""}</div>
-<div class="bk-col-actions"><button type="button" class="bk-copy-btn" data-copy-bank-id="${b.id}" title="Copy complete bank information"><i data-lucide="copy"></i><span>Copy info</span></button><div class="bk-row-acts"><button type="button" class="btn btn-outline btn-xs bkd-edit-btn" data-id="${b.id}">${esc(tr("编辑"))}</button><label class="bk-active-toggle" title="${esc(tr("使用中（新充值自动入账）"))}"><input type="checkbox" class="bank-active-chk" data-id="${b.id}"${b.active ? " checked" : ""}><span>${esc(tr("使用中"))}</span></label><button type="button" class="btn btn-outline btn-xs bkd-ban-btn" data-id="${b.id}">${esc(tr("封禁"))}</button><button type="button" class="btn btn-outline btn-xs bkd-toggle-btn" data-id="${b.id}" aria-expanded="${expanded ? "true" : "false"}" aria-label="${esc(tr("详情"))}">${expanded ? "▾" : "▸"}</button></div></div>
+<div class="bk-col-actions"><button type="button" class="bk-copy-btn" data-copy-bank-id="${b.id}" title="Copy complete bank information"><i data-lucide="copy"></i><span>Copy info</span></button><div class="bk-row-acts"><button type="button" class="btn btn-outline btn-xs bkd-edit-btn" data-id="${b.id}">${esc(tr("编辑"))}</button><button type="button" class="btn btn-outline btn-xs bkd-ban-btn" data-id="${b.id}">${esc(tr("封禁"))}</button></div></div>
 </article>
-<div class="bkd-item-body bk-row-body" id="bkd-body-${b.id}"${expanded ? "" : " hidden"} data-loaded="0"><div class="bkd-loading">${esc(tr("加载中..."))}</div></div>`;
+<div class="bkd-item-body bk-row-body" id="bkd-body-${b.id}" ${bkdBodyAttrs(b)}</div>`;
   }
 
-  function writeBankClipboard(text) {
-    if (navigator.clipboard?.writeText) return navigator.clipboard.writeText(text);
-    const textarea = document.createElement("textarea");
-    textarea.value = text;
-    textarea.setAttribute("readonly", "");
-    textarea.style.position = "fixed";
-    textarea.style.opacity = "0";
-    document.body.appendChild(textarea);
-    textarea.select();
-    const copied = document.execCommand("copy");
-    textarea.remove();
-    return copied ? Promise.resolve() : Promise.reject(new Error("copy failed"));
-  }
   function copyBankDirectoryInfo(bankId) {
-    const bank = bankRows.find((row) => row.id === Number(bankId));
-    if (!bank) return;
-    writeBankClipboard(bankDirectoryCopyText(bank))
-      .then(() => showToast("已复制完整银行资料", { tone: "success" }))
-      .catch(() => showToast("复制失败", { tone: "error" }));
+    BC.copyBankInfo(bankRows.find((row) => row.id === Number(bankId)));
   }
   function persistBankDirectoryOrder(ordered) {
     if (bankReorderBusy) return;
@@ -346,14 +305,47 @@
     return `<div class="bkd-pair"><span class="bkd-pair-label">${esc(label)}</span><span class="bkd-pair-val${mono ? " mono" : ""}" translate="no">${esc(String(val))}</span></div>`;
   }
 
+  // 详情缓存的签名：余额、笔数、资料与生命周期任何一项变了都要重拉（refreshBankBalance 会
+  // 改 updated_at，所以记一笔流水也算变了）。
+  function detailSig(b) {
+    return [b.updated_at, b.tx_count, b.total_in, b.total_out, b.balance, bankDisplayBalance(b), b.lifecycle_status, b.live_receiving].join("|");
+  }
+  // 详情容器的属性 + 内容：缓存命中就直接给 HTML（data-loaded="1"），否则占位等队列去拉。
+  function bkdBodyAttrs(b) {
+    const hit = bkdDetailCache.get(b.id);
+    if (hit && hit.sig === detailSig(b)) return `data-loaded="1">${hit.html}`;
+    return `data-loaded="0"><div class="bkd-loading">${esc(tr("加载中..."))}</div>`;
+  }
+  function queueBkdDetails(rows) {
+    detailQueue = rows.map((b) => b.id);
+    pumpBkdDetails();
+  }
+  function pumpBkdDetails() {
+    while (detailActive < DETAIL_CONCURRENCY && detailQueue.length) {
+      const id = detailQueue.shift();
+      const bodyEl = document.getElementById(`bkd-body-${id}`);
+      if (!bodyEl || bodyEl.dataset.loaded !== "0" || detailInflight.has(id)) continue;
+      detailActive += 1;
+      detailInflight.add(id);
+      loadBkdDetail(id, bodyEl).finally(() => {
+        detailActive -= 1;
+        detailInflight.delete(id);
+        pumpBkdDetails();
+      });
+    }
+  }
+
   function loadBkdDetail(bankId, bodyEl) {
     const b = bankRows.find((r) => r.id === bankId);
-    if (!b) return;
+    if (!b) return Promise.resolve();
     bodyEl.dataset.loaded = "1";
-    Promise.all([
+    const gen = detailGen;
+    const sig = detailSig(b);
+    return Promise.all([
       api(`/api/banks/${bankId}/recent-transactions`, { bg: true }),
       api(`/api/banks/${bankId}/events`, { bg: true }),
     ]).then(([txData, evData]) => {
+      if (gen !== detailGen) return;
       const recentIn = txData.recentIn || [];
       const recentOut = txData.recentOut || [];
       const events = evData.rows || [];
@@ -377,11 +369,11 @@
             ? '<span class="bk-flag bk-flag-archived">已归档</span>'
             : LC.isBanned(b)
               ? '<span class="bk-flag bk-flag-banned">封禁中</span>'
-              : (b.active ? '<span class="bk-flag bk-flag-active">使用中</span>' : "未启用")
+              : '<span class="bk-flag bk-flag-active">运营中</span>'
         }</span></div>
       </div>`;
 
-      const txSection = `<div class="bkd-tx-toolbar"><button type="button" class="btn btn-outline btn-xs bkd-download-btn" title="这个户口全部客户入账，带户名、BSB、账号与合计，给银行申诉用">下载申诉记录 (CSV)</button></div><div class="bkd-tx-wrap">
+      const txSection = `<div class="bkd-tx-toolbar"><button type="button" class="btn btn-outline btn-xs bkd-download-btn" data-id="${b.id}" title="这个户口全部客户入账，带户名、BSB、账号与合计，给银行申诉用">下载申诉记录 (CSV)</button></div><div class="bkd-tx-wrap">
         <div class="bkd-tx-col">
           <div class="bkd-tx-title bkd-tx-in-title">最近 10 笔入账</div>
           ${recentIn.length
@@ -405,9 +397,16 @@
       }).join("") || "<li>暂无记录</li>";
       const evSection = `<details class="bkd-events-wrap"><summary>操作历史</summary><ul class="bkd-events-list">${evList}</ul></details>`;
 
-      bodyEl.innerHTML = `<div class="bkd-detail">${infoGrid}${txSection}${evSection}</div>`;
-      bodyEl.querySelector(".bkd-download-btn")?.addEventListener("click", () => downloadBkdCsv(b));
+      const html = `<div class="bkd-detail">${infoGrid}${txSection}${evSection}</div>`;
+      // 签名按「写入时」的数据取：拉的途中日报到了（余额显示口径变了）就记成未命中，下一轮重画再拉一次。
+      const now = bankRows.find((r) => r.id === bankId);
+      bkdDetailCache.set(bankId, { sig: now && detailSig(now) === sig ? sig : "", html });
+      // 拉的这段时间里这一行可能已经被重画过：按 id 找当前那个节点写进去。
+      const target = document.getElementById(`bkd-body-${bankId}`) || bodyEl;
+      target.innerHTML = html;
+      target.dataset.loaded = "1";
     }).catch(() => {
+      if (gen !== detailGen) return;
       bodyEl.innerHTML = '<div class="bkd-empty">加载失败，请重试</div>';
     });
   }
@@ -460,10 +459,9 @@
       ? `<span class="bk-flag bk-flag-archived">${esc(tr("已归档"))}</span>`
       : banned
         ? `<span class="bk-flag bk-flag-banned">${esc(tr("封禁中"))}</span>`
-        : (b.active ? `<span class="bk-flag bk-flag-active">${esc(tr("使用中"))}</span>` : "");
+        : "";
 
-    // 操作按钮按状态分化。已归档行不给编辑、不给「使用中」复选框——服务端已强制
-    // active = 0，UI 上也要让「归档即惰性」成立：要改资料先取消归档。
+    // 操作按钮按状态分化。已归档行不给编辑——UI 上也要让「归档即惰性」成立：要改资料先取消归档。
     let acts = "";
     if (archived) {
       acts = `<button type="button" class="btn btn-outline btn-xs bkd-unarchive-btn" data-id="${b.id}">${esc(tr("取消归档"))}</button>`;
@@ -480,11 +478,9 @@
     } else {
       acts =
         `<button type="button" class="btn btn-outline btn-xs bkd-edit-btn" data-id="${b.id}">${esc(tr("编辑"))}</button>`
-        + `<input type="checkbox" class="bank-active-chk" data-id="${b.id}" title="${esc(tr("使用中（新充值自动入账）"))}"${b.active ? " checked" : ""}>`
         + `<button type="button" class="btn btn-outline btn-xs bkd-ban-btn" data-id="${b.id}">${esc(tr("封禁"))}</button>`;
     }
 
-    const expanded = bkdExpanded.has(b.id);
     const cls = `bkd-item${banned ? " bkd-item-banned" : ""}${archived ? " bkd-item-archived" : ""}`;
     // 银行名与户名是租户数据，必须 translate="no"：否则中英切换会把
     // 「Public Bank Amy」改成「Public 银行 Amy」，顺带也挡住浏览器自带的自动翻译。
@@ -499,12 +495,9 @@
     <span class="bkd-item-bal" translate="no">${fmt(bankDisplayBalance(b))}</span>
     <div class="bkd-item-acts">
       ${acts}
-      <button type="button" class="btn btn-outline btn-xs bkd-toggle-btn" data-id="${b.id}" aria-expanded="${expanded ? "true" : "false"}">${expanded ? "▾" : "▸"}</button>
     </div>
   </div>
-  <div class="bkd-item-body" id="bkd-body-${b.id}"${expanded ? "" : " hidden"} data-loaded="0">
-    <div class="bkd-loading">${esc(tr("加载中..."))}</div>
-  </div>
+  <div class="bkd-item-body" id="bkd-body-${b.id}" ${bkdBodyAttrs(b)}</div>
 </div>`;
   }
 
@@ -564,11 +557,7 @@
       const operating = renderOperatingPanel(panel);
       document.getElementById("bkd-pager")?.setAttribute("hidden", "");
       renderIcons(panel);
-      operating.forEach((b) => {
-        if (!bkdExpanded.has(b.id)) return;
-        const bodyEl = document.getElementById(`bkd-body-${b.id}`);
-        if (bodyEl && bodyEl.dataset.loaded === "0") loadBkdDetail(b.id, bodyEl);
-      });
+      queueBkdDetails(operating);
       return;
     }
     const rows = bkdFiltered(bkdTab);
@@ -591,13 +580,8 @@
     });
     renderIcons(panel);
 
-    // \u5c55\u5f00\u72b6\u6001\u8de8\u5206\u9875\u4e0e\u9875\u7b7e\u4fdd\u7559\uff0c\u660e\u7ec6\u6bcf\u6b21\u91cd\u65b0\u62c9\uff1a\u4f59\u989d\u548c\u6700\u8fd1\u6d41\u6c34\u6b63\u662f\u5c01\u7981 / \u5ba1\u6279\u4e4b\u540e
-    // \u4f1a\u53d8\u7684\u4e1c\u897f\uff0c\u5728\u8fd9\u91cc\u505a\u7f13\u5b58\u7b49\u4e8e\u62ff\u6570\u636e\u51c6\u786e\u6362\u4e00\u6b21\u7f51\u7edc\u8bf7\u6c42\u3002
-    slice.forEach((b) => {
-      if (!bkdExpanded.has(b.id)) return;
-      const bodyEl = document.getElementById(`bkd-body-${b.id}`);
-      if (bodyEl && bodyEl.dataset.loaded === "0") loadBkdDetail(b.id, bodyEl);
-    });
+    // 详情常驻：没缓存（或数据变了）的行排队拉，最多 DETAIL_CONCURRENCY 个并发。
+    queueBkdDetails(slice);
   }
 
   function switchBkdTab(tab) {
@@ -860,7 +844,9 @@
     reloadAll();
     if (typeof bindCompanySwitch === "function") {
       bindCompanySwitch(() => {
-        bkdExpanded.clear();
+        bkdDetailCache.clear();
+        detailGen += 1;
+        detailQueue = [];
         return reloadAll();
       });
     }
@@ -929,26 +915,17 @@
     document.getElementById("bank-cancel-btn")?.addEventListener("click", closeBankModal);
     document.getElementById("bank-save-btn")?.addEventListener("click", saveBankModal);
 
-    // 页签、展开详情、编辑、封禁 / 解封 / 归档 / 使用中，整页一个委托（行会被后台刷新整块重画）。
+    // 页签、下载申诉记录、编辑、封禁 / 解封 / 归档，整页一个委托（行会被后台刷新整块重画）。
     document.getElementById("bank-channels-page")?.addEventListener("click", async (e) => {
       const tabBtn = e.target.closest(".bkd-tab");
       if (tabBtn) {
         switchBkdTab(tabBtn.dataset.tab);
         return;
       }
-      const toggle = e.target.closest(".bkd-toggle-btn");
-      if (toggle) {
-        const id = Number(toggle.dataset.id);
-        const bodyEl = document.getElementById(`bkd-body-${id}`);
-        if (!bodyEl) return;
-        const open = !bodyEl.hidden;
-        bodyEl.hidden = open;
-        // \u5c55\u5f00\u96c6\u5408\u662f\u6e32\u67d3\u7684\u771f\u6e90\uff1a\u7ffb\u9875\u6216\u5207\u9875\u7b7e\u540e\u91cd\u65b0\u6e32\u67d3\u65f6\uff0c\u9760\u5b83\u6062\u590d\u5c55\u5f00\u72b6\u6001\u3002
-        if (open) bkdExpanded.delete(id);
-        else bkdExpanded.add(id);
-        toggle.setAttribute("aria-expanded", open ? "false" : "true");
-        toggle.textContent = open ? "\u25b8" : "\u25be";
-        if (!open && bodyEl.dataset.loaded === "0") loadBkdDetail(id, bodyEl);
+      const download = e.target.closest(".bkd-download-btn[data-id]");
+      if (download) {
+        const bank = bankRows.find((b) => String(b.id) === download.dataset.id);
+        if (bank) downloadBkdCsv(bank);
         return;
       }
       const edit = e.target.closest(".bkd-edit-btn");
@@ -1028,16 +1005,6 @@
           }).then(() => {
             // \u53d6\u6d88\u5f52\u6863\u56de\u843d\u5230\u300c\u5c01\u7981\u4e2d\u300d\u800c\u4e0d\u662f\u76f4\u63a5\u590d\u6d3b\uff0c\u8981\u518d\u663e\u5f0f\u89e3\u5c01\u4e00\u6b21\u624d\u56de\u8fd0\u8425\u3002
             showToast(tr("\u5df2\u53d6\u6d88\u5f52\u6863\uff0c\u73b0\u5728\u5728\u300c\u5c01\u7981\u4e2d\u300d\u9875\u7b7e"), { tone: "success" });
-          })
-        );
-        return;
-      }
-      const chk = e.target.closest(".bank-active-chk");
-      if (chk) {
-        bkdMutate(
-          api(`/api/banks/${chk.dataset.id}`, {
-            method: "PUT",
-            body: JSON.stringify({ active: chk.checked ? 1 : 0 }),
           })
         );
         return;

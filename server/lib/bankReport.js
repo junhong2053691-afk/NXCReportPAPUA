@@ -3,6 +3,8 @@ const { isDemoTenant } = require("./readConfig");
 // bankLifecycle 顶层不 require 任何本项目模块（它对 bankReport 的依赖是惰性的），
 // 所以这里顶层 require 不会形成循环。
 const { isCountedInTotals } = require("./bankLifecycle");
+// blockedExpense 不 require 本模块，顶层引用无环。
+const { blockedExpenseByDay } = require("./blockedExpense");
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -339,6 +341,12 @@ function computeBankDailyReport(db, companyId, opts = {}) {
     }
   }
 
+  // 封禁户余额计入 EXPENSES（口径见 blockedExpense.js / CONTEXT.md）。只加金额、**不加笔数**：
+  // 笔数是「expenses 流水几笔」，对的是 Excel，卡住的钱不是一笔流水。
+  // 解封 / 转出余额那天它是负的，EXPENSES 可能因此变成正数，这是对的。
+  const blockedExpense = (blockedExpenseByDay(db, companyId, date, date).get(date) || 0) / 100;
+  if (blockedExpense !== 0) addReport(report, "expenses", -blockedExpense, 0);
+
   // Daily-reset accounts start from zero for each report date. Their displayed
   // balance is the net movement of the selected day, while regular accounts
   // keep the cumulative balance calculated above.
@@ -353,7 +361,7 @@ function computeBankDailyReport(db, companyId, opts = {}) {
     { leftLabel: "CASH IN", leftValue: report["cash in"]?.amount || 0, rightLabel: "UNIQUE CUST", rightValue: userSet.size, rightIsMetric: true },
     { leftLabel: "CASH OUT", leftValue: report["cash out"]?.amount || 0, rightLabel: "NEW REG", rightValue: newReg, rightIsMetric: true },
     { leftLabel: "GIVE BACK", leftValue: report["give back"]?.amount || 0, rightLabel: "UNCLAIM", rightValue: unclaimAmount, rightIsMetric: false },
-    { leftLabel: "EXPENSES", leftValue: report.expenses?.amount || 0, rightLabel: "TEST IN", rightValue: report["test in"]?.amount || 0, rightIsMetric: false },
+    { leftLabel: "EXPENSES", leftValue: report.expenses?.amount || 0, leftBlocked: blockedExpense, rightLabel: "TEST IN", rightValue: report["test in"]?.amount || 0, rightIsMetric: false },
     { leftLabel: "EXCHANGE", leftValue: report.exchange?.amount || 0, rightLabel: "REDEP", rightValue: report.redeposit?.count || 0, rightIsMetric: true },
     { leftLabel: "TEST OUT", leftValue: report["test out"]?.amount || 0, rightLabel: "", rightValue: 0, rightIsMetric: true },
   ];
@@ -365,7 +373,7 @@ function computeBankDailyReport(db, companyId, opts = {}) {
     report["cash in"] || { key: "cash in", label: "CASH IN", amount: 0, count: 0 },
     report["cash out"] || { key: "cash out", label: "CASH OUT", amount: 0, count: 0 },
     report["give back"] || { key: "give back", label: "GIVE BACK", amount: 0, count: 0 },
-    report.expenses || { key: "expenses", label: "EXPENSES", amount: 0, count: 0 },
+    { ...(report.expenses || { key: "expenses", label: "EXPENSES", amount: 0, count: 0 }), blocked: blockedExpense },
     report.exchange || { key: "exchange", label: "EXCHANGE", amount: 0, count: 0 },
     report.redeposit || { key: "redeposit", label: "REDEPOSIT", amount: 0, count: 0, isMetric: true },
     report["test in"] || { key: "test in", label: "TEST IN", amount: 0, count: 0 },
@@ -510,6 +518,8 @@ function computeBankDailyReport(db, companyId, opts = {}) {
       total_out: totalOut,
       win_loss: (report.deposit?.amount || 0) + (report.withdraw?.amount || 0),
       ledger_rows: rows.length,
+      // EXPENSES 里属于封禁户余额的那一份，正数 = 开销（REPORT 里显示为负）。
+      blocked_expense: blockedExpense,
       // 汇总口径的唯一真源：只有运营中的非 PG 账户进合计。封禁与归档的钱不算自有
       // 余额，PG 里的钱不是自有资金。前端 isBalanceExcluded 是这条规则的镜像。
       total_balance: [...bankMap.values()].reduce((s, b) => {

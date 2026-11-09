@@ -92,3 +92,41 @@ test("支付渠道页点渠道行去当日流水并带 ?bank=；当日流水从�
   // 拆页后渠道页不再碰流水表
   assert.doesNotMatch(channels, /loadSheet|activeBankId/);
 });
+
+test("当日流水页顺序：工具栏 → 运营中银行列表 → KPI → 对平告警 → 接单区 → 今日报表；当前公司那一行已删", () => {
+  const page = index.slice(index.indexOf('"/bank-ledger.html": pageLayout('), index.indexOf('"/bank-channels.html": pageLayout('));
+  const order = ['class="bk-toolbar"', 'id="bk-banklist"', 'class="bk-kpis"', 'id="reconcile-alert"', 'id="bk-intake"', 'id="sheet-upper-wrap"']
+    .map((k) => page.indexOf(k));
+  order.forEach((pos, i) => assert.ok(pos > 0 && (i === 0 || pos > order[i - 1]), `第 ${i + 1} 块位置不对`));
+  assert.doesNotMatch(page, /bk-context-strip|bk-current-company|bk-current-sync/, "当前公司 / 流水日期 / 同步状态那一行已移除");
+  assert.doesNotMatch(ledger, /refreshWorkspaceContext|updateWorkspaceSyncContext/);
+});
+
+test("当日流水的银行列表可以折叠：头部常驻，收起时列出实时收款户名，状态记在 localStorage", () => {
+  assert.match(ledger, /const BANKLIST_COLLAPSED_KEY = "bk-banklist-collapsed"/);
+  assert.match(ledger, /class="bk-banklist-toggle" aria-expanded=/);
+  assert.match(ledger, /id="bk-banklist-body"\$\{collapsed \? " hidden" : ""\}/);
+  assert.match(ledger, /const liveNames = collapsed && live\.length/);
+  // 没存过时：电脑展开、手机收起
+  assert.match(ledger, /saved === "1" \? true : saved === "0" \? false : Boolean\(MOBILE_MQ\.matches\)/);
+});
+
+test("接单区与支付渠道不折叠：没有折叠按钮、没有折叠状态", () => {
+  assert.doesNotMatch(index, /bk-intake-toggle/);
+  assert.doesNotMatch(ledger, /setIntakeCollapsed|INTAKE_COLLAPSED_KEY/);
+  assert.doesNotMatch(channels, /bkd-toggle-btn|bkdExpanded/);
+  // 详情常驻后要靠缓存，后台每 5 秒重画不能每行重打请求
+  assert.match(channels, /const bkdDetailCache = new Map\(\)/);
+  assert.match(channels, /if \(hit && hit\.sig === detailSig\(b\)\) return/);
+});
+
+test("实时收款取代使用中：入口只在当日流水银行列表的每一行，旧勾选器与使用中勾都没了", () => {
+  assert.doesNotMatch(index, /id="bk-live"/);
+  assert.doesNotMatch(ledger, /renderLivePicker|bindLivePicker/);
+  assert.match(ledger, /class="bk-live-chk" data-id="\$\{b\.id\}"/);
+  assert.match(ledger, /api\("\/api\/banks\/live-receiving", \{ method: "PUT"/);
+  assert.doesNotMatch(channels, /bank-active-chk|active: chk\.checked/);
+  // 列表点行与工具栏下拉是同一个筛选
+  assert.match(ledger, /selectBankFilter\(activeBankId === id \? ALL_BANKS : id\)/);
+  assert.match(ledger, /getElementById\("sheet-bank-filter"\)\?\.addEventListener\("change", \(e\) => \{\s*selectBankFilter\(e\.target\.value\);/);
+});

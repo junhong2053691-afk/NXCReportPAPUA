@@ -231,24 +231,31 @@ $env:TUNNEL_EDGE_IP_VERSION="4"
 | `/` | `home.js` | 首页看板 |
 | `/transactions.html` | `transactions.js` | 实时交易 |
 | `/customers.html` | `customers.js` | 客户列表 + 分群 |
-| `/bank-ledger.html` | `bank-ledger.js` | 当日流水：流水表格 + 接单区（平台单审批 / 已跳过）+ 调钱 + 今日报表 / C STATUS |
+| `/bank-ledger.html` | `bank-ledger.js` | 当日流水：运营中银行列表（点行筛流水、逐行勾实时收款）+ KPI + 接单区（平台单审批 / 已跳过）+ 调钱 + 今日报表 / C STATUS + 流水表格 |
 | `/bank-channels.html` | `bank-channels.js` | 支付渠道：全部渠道汇总 + 运营中 / 封禁中 / 已归档 + 渠道编辑 / 转出余额 |
 | `/company-settings.html` | `company-settings.js` | 公司/API + 各公司 Telegram Bot（admin） |
 | `/telegram-settings.html` | `telegram-settings.js` | 总控 Bot、总开关、运行参数、推送状态（admin） |
 
 > 2026-11 拆页：原 `/bank-accounts.html`（`bank-accounts.js`）拆成侧边栏「流水记录」分组下的当日流水与支付渠道，旧地址 302 到当日流水（`#channels` 再转去支付渠道）。两页共用的格式化、STATUS 词表与余额口径在 `bank-common.js`。operator 只能进这两页（`server/index.js` 的 `OPERATOR_PAGES` 与 `app.js` 的 `loadUser` 是同一份名单）。接单区常驻当日流水页：后台刷新只做增量，员工动过的行（`data-dirty`）绝不重画，被别人处理掉的只标灰；刷新时切页签必须带 `{ silent: true }`，否则会把平台待审批报警顺手 ack 掉。
 
-> **实时收款银行**（`bank_accounts.live_receiving`，`lib/bankLiveReceiving.js`）：接单区顶上勾最多 3 个「现在正在收款的户」，
+> 2026-11-09 当日流水重排：顶上是**运营中银行列表**（`renderBankList`，点行与工具栏 `#sheet-bank-filter` 是同一个筛选
+> `selectBankFilter`），下面才是 4 个 KPI；「当前公司 / 流水日期 / 同步状态」那一行删了。银行列表**可以折叠**（头部常驻，
+> 收起时列出实时收款户名，`localStorage["bk-banklist-collapsed"]`，没存过时电脑展开、手机收起）。**接单区与支付渠道每行详情不再折叠**
+> （今日报表的折叠保留）。支付渠道页详情常驻后靠 `bkdDetailCache` 按签名复用，别改回每次重画都重拉。
+
+> **实时收款银行**（`bank_accounts.live_receiving`，`lib/bankLiveReceiving.js`）：在当日流水**银行列表的每一行**勾，最多 3 个「现在正在收款的户」
+> （2026-11-09 起取代「使用中」：不用的户直接封禁，只要求运营中），
 > 充值单的 BANK 下拉只列它们，**恰好勾 1 户时预选它、勾 2～3 户不预选**（2026-11-09 用户要求），末尾「其他渠道…」展开完整列表；一个没勾就是完整列表（不预选）；提现不受影响。
 > 只能经 `PUT /api/banks/live-receiving` 整组替换（注册在 `PUT /:id` 之前），**不进 PUT 白名单**——逐户开关时两人同时勾
-> 会各自通过「≤ 3」变成 4 个。封禁 / 归档 / 取消使用中在同一条 UPDATE 里清零，解封不恢复。改动写审计
+> 会各自通过「≤ 3」变成 4 个。封禁 / 归档在同一条 UPDATE 里清零，解封不恢复。改动写审计
 > `bank_account.live_receiving`。它只决定下拉列谁，**绝不自动审批**。测试 `server/tests/live-receiving.test.js`。
 
 ## 支付渠道 & 账单流水 (`/api/banks`)
 
 ### 表
 
-- `bank_accounts` — 银行账户，`active=1` 表示使用中
+- `bank_accounts` — 银行账户。`active` 是遗留列（原「使用中」，2026-11-09 取消），无任何读者、不在 PUT 白名单，
+  封禁 / 归档时照写 0；「在用」看生命周期（运营中），「正在收款」看 `live_receiving`
 - `bank_ledger` — 账单流水
 - `bank_balance_log` — 已处理充值 tx_id（防双计）
 

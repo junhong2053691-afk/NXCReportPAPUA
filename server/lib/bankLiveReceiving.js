@@ -1,12 +1,13 @@
-// 实时收款银行（bank_accounts.live_receiving）：员工在当日流水的接单区勾选「现在正在收款的
-// 户」，审批平台充值单时 BANK 下拉只列这几个（前端 bank-ledger.js）。2026-11 用户需求。
+// 实时收款银行（bank_accounts.live_receiving）：员工在当日流水页的银行列表里逐行勾选「现在
+// 正在收款的户」，审批平台充值单时 BANK 下拉只列这几个（前端 bank-ledger.js）。2026-11 用户需求。
+// 2026-11-09 起它取代了原来的「使用中」（active 列）：不用的户直接封禁，不再有「运营中但未启用」。
 //
 // 约束：
-//   - 每家公司最多 MAX_LIVE_RECEIVING 个，只能是运营中且「使用中」（active = 1）的户。
+//   - 每家公司最多 MAX_LIVE_RECEIVING 个，只能是运营中的户（遗留的 active 列不再参与判定）。
 //   - 只能经 setLiveReceiving 整组替换（PUT /api/banks/live-receiving）。这一列刻意不在
 //     PUT /api/banks/:id 的白名单里——逐户开关时两个人同时勾，会各自通过「≤ 3」的检查、
 //     合起来变成 4 个；整组替换在一条 UPDATE 里完成，better-sqlite3 同步执行，不会超。
-//   - 封禁 / 归档 / 取消「使用中」时由 routes/banks.js 在同一条 UPDATE 里清掉。
+//   - 封禁 / 归档时由 routes/banks.js 在同一条 UPDATE 里清掉。
 //   - 它只决定下拉里列哪些户，**不自动审批**：钱要有人点「审批」才入账，这条
 //     铁律不变（同步本身不碰余额）。预选只在恰好勾 1 户时做（2026-11-09 用户要求），
 //     勾 2～3 户不预选；规则在前端 bank-ledger.js 的 depositBankOptionsHtml。
@@ -52,12 +53,12 @@ function setLiveReceiving(db, companyId, input) {
   if (ids.length) {
     const marks = ids.map(() => "?").join(", ");
     const rows = db
-      .prepare(`SELECT id, lifecycle_status, active FROM bank_accounts WHERE company_id = ? AND id IN (${marks})`)
+      .prepare(`SELECT id, lifecycle_status FROM bank_accounts WHERE company_id = ? AND id IN (${marks})`)
       .all(cid, ...ids);
     // 别家公司的 id 在这里查不到，与不存在同样处理——不泄露「这个 id 属于别家」。
     if (rows.length !== ids.length) throw httpError(400, "渠道不存在");
-    if (rows.some((r) => !isOperating(r) || !Number(r.active))) {
-      throw httpError(400, "只能选运营中、使用中的渠道");
+    if (rows.some((r) => !isOperating(r))) {
+      throw httpError(400, "只能选运营中的渠道");
     }
   }
   const before = currentLiveIds(db, cid);

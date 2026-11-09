@@ -68,7 +68,7 @@ function accountEntry(db, account, dateKey) {
   const threshold = Number(account.alert_threshold || 0);
   const marks = [];
   if (account.reset_daily_balance) marks.push("日");
-  if (!account.active) marks.push("停");
+  // 原来还有「停=未勾使用中」。使用中 2026-11-09 取消（不用的户直接封禁），标记一并删掉。
   return {
     bank: bankBranchOf(account) || "(未命名渠道)",
     holder: String(account.account_name || "").trim(),
@@ -323,7 +323,6 @@ function renderBalance(db, companies, opts = {}) {
       );
       const marks = [];
       if (shownMarkers.some((m) => m.includes("日"))) marks.push("日=当日净额");
-      if (shownMarkers.some((m) => m.includes("停"))) marks.push("停=未勾使用中");
       // 多公司明细（/balance all）时粒数是整条消息的合计——脚注跟着合计块走，一条
       // 消息一份，不必每家重复一遍。
       const totalCounts = sections.reduce(

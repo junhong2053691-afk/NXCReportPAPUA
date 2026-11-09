@@ -10,7 +10,7 @@ const test = require("node:test");
 const assert = require("node:assert");
 
 const { computeBankDailyReport } = require("../lib/bankReport");
-const { bankDatabase, addAccount, addLedger } = require("./bank-fixture");
+const { bankDatabase, addAccount, addLedger, addAccountEvent } = require("./bank-fixture");
 
 const DAY = "2026-10-01";
 
@@ -74,4 +74,19 @@ test("EXCHANGE 保持正数（Excel 口径），REDEP 只记笔数", () => {
   assert.deepStrictEqual(pairOf(r, "REDEP"), { value: 2, metric: true });
   // 手工录的 REDEPOSIT +100 不进 DEPOSIT
   assert.strictEqual(rowOf(r, "deposit").amount, 0);
+});
+
+test("EXPENSES 含封禁户当天卡住的余额：金额并入、笔数不变、WIN/LOSE 不变", () => {
+  const db = bankDatabase();
+  const acc = addAccount(db, { lifecycle_status: "banned", active: 0 });
+  addAccountEvent(db, acc, "banned", "2026-09-30 23:00:00"); // 悉尼 2026-10-01 上午
+  addLedger(db, acc, 500, "2026-09-20", { status: "deposit" });
+  addLedger(db, acc, 0, DAY, { status: "expenses", amount_out: 20 });
+
+  const report = reportOf(db);
+  assert.strictEqual(rowOf(report, "expenses").amount, -500);
+  assert.strictEqual(rowOf(report, "expenses").count, 1);
+  assert.strictEqual(pairOf(report, "EXPENSES").value, -500);
+  assert.strictEqual(report.totals.blocked_expense, 480);
+  assert.strictEqual(report.totals.win_loss, 0);
 });

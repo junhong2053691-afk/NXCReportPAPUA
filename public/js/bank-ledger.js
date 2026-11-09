@@ -1,9 +1,9 @@
 (function () {
   "use strict";
 
-  // 当日流水页（/bank-ledger.html）：流水表格、接单区（平台单审批 / 已跳过）、调钱、
-  // 今日报表、C STATUS 与未对平报警。渠道目录与渠道管理在 bank-channels.js（2026-11 拆页），
-  // 两页共用的格式化与口径在 bank-common.js。
+  // 当日流水页（/bank-ledger.html）：运营中银行列表（点行筛流水、逐行勾实时收款）、流水表格、
+  // 接单区（平台单审批 / 已跳过）、调钱、今日报表、C STATUS 与未对平报警。渠道编辑 / 封禁 /
+  // 归档在 bank-channels.js（2026-11 拆页），两页共用的格式化与口径在 bank-common.js。
   //
   // 渠道生命周期判定的唯一入口（镜像见 app.js 的 window.BankLifecycle，真源在
   // server/lib/bankLifecycle.js）。不要在本文件里再写 lifecycle_status 的字面量比较——
@@ -42,7 +42,6 @@
   const RECONCILE_ALARM_SOUND = "/sounds/dragon-studio-alert-444816.mp3";
   let reconcileAlarm = null;
   let reconcileRendering = false;
-  let workspaceContextRequest = 0;
   let lastSkippedPendingCount = 0;
 
   let bankLoadRequest = 0;
@@ -798,12 +797,12 @@
       }
       if (!gateRender("banks", opts, { rows: bankRows, active: activeBankId })) return;
       renderBankFilter();
-      renderLivePicker();
+      renderBankList();
       refreshDepositBankSelects();
     });
   }
-  // 工具栏的「渠道」下拉：ALL + 运营中渠道，顺序与编号同支付渠道页。渠道目录挪到支付渠道页
-  // 之后，这是本页唯一的按渠道筛选入口；选中值同步到地址栏 ?bank=，刷新与分享都还在。
+  // 工具栏的「渠道」下拉：ALL + 运营中渠道，顺序与编号同支付渠道页。和下面的银行列表是同一个
+  // 筛选（selectBankFilter），手机上它是吸顶的那个入口；选中值同步到地址栏 ?bank=。
   function renderBankFilter() {
     updateGridTitle();
     const sel = document.getElementById("sheet-bank-filter");
@@ -827,7 +826,16 @@
     activeBankId = !value || value === ALL_BANKS ? ALL_BANKS : Number(value);
     syncBankParam();
     renderBankFilter();
+    renderBankList();
     return loadSheet();
+  }
+  // 下拉与银行列表共用：换筛选前先收掉正在编辑 / 新增的行，否则它们会被换到别的渠道底下。
+  function selectBankFilter(value) {
+    editingRowId = null;
+    adding = false;
+    hideGridPicker();
+    resetEnterSave();
+    return setActiveBank(value);
   }
   function bankFromUrl() {
     try {
@@ -980,27 +988,17 @@
 
   // ---- 接单区 ---------------------------------------------------------------
   // 原来的「待处理」弹窗，2026-11 摊开到页面上（KPI 下面、今日报表上面），单子来了就看得见，
-  // 不用再点按钮。手机上不占页面：底栏「待处理」把同一个节点以全屏浮层打开（MOBILE_MQ），
-  // 跟以前的弹窗一样，只有一份实现。
+  // 不用再点按钮。2026-11-09 起电脑上**永远展开、不能折叠**（用户要求）。手机上不占页面：
+  // 底栏「待处理」把同一个节点以全屏浮层打开（MOBILE_MQ），只有一份实现。
   //
   // 刷新由 refreshPendingBadge（每 5 / 8 秒）驱动：平台单数或已跳过数一变就拉一次，
   // 数字没变也每 INTAKE_FALLBACK_MS 补拉一次（一笔进一笔出时数字不变）。
-  const INTAKE_COLLAPSED_KEY = "bk-intake-collapsed";
   const INTAKE_FALLBACK_MS = 30000;
   let intakeCounts = null; // 上次画进接单区的 [平台单数, 已跳过数]
   let intakeLoadedAt = 0;
 
   function intakeZone() {
     return document.getElementById("bk-intake");
-  }
-  function setIntakeCollapsed(collapsed, persist) {
-    const zone = intakeZone();
-    if (!zone) return;
-    zone.classList.toggle("is-collapsed", collapsed);
-    document.getElementById("bk-intake-toggle")?.setAttribute("aria-expanded", collapsed ? "false" : "true");
-    if (persist) {
-      try { localStorage.setItem(INTAKE_COLLAPSED_KEY, collapsed ? "1" : "0"); } catch (_) {}
-    }
   }
   function openIntake(tab) {
     const zone = intakeZone();
@@ -1010,7 +1008,6 @@
       document.body.classList.add("bk-intake-locked");
       window.requestAnimationFrame(() => document.getElementById("bk-intake-close")?.focus());
     } else {
-      setIntakeCollapsed(false, true);
       zone.scrollIntoView({ behavior: "smooth", block: "start" });
     }
     return loadPendingPanels().then(() => {
@@ -1036,84 +1033,6 @@
     if (changed || Date.now() - intakeLoadedAt > INTAKE_FALLBACK_MS) {
       loadPendingPanels({ background: true }).catch(() => {});
     }
-  }
-
-  function updateWorkspaceCompanyContext() {
-    const companyEl = document.getElementById("bk-current-company");
-    const dateEl = document.getElementById("bk-current-date");
-    const select = document.getElementById("company-select");
-    if (companyEl) {
-      const option = select?.selectedOptions?.[0];
-      const name = option?.textContent?.trim() || select?.value || "未选择公司";
-      companyEl.textContent = name;
-      companyEl.title = name;
-      if (select && !select.options.length) {
-        window.setTimeout(updateWorkspaceCompanyContext, 180);
-      }
-    }
-    if (dateEl) dateEl.textContent = sheetDate || todaySydney();
-  }
-
-  function formatWorkspaceSyncTime(at) {
-    if (!at) return "";
-    const date = new Date(at);
-    if (Number.isNaN(date.getTime())) return String(at);
-    return new Intl.DateTimeFormat("en-AU", {
-      timeZone: "Australia/Sydney",
-      month: "2-digit",
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: false,
-    }).format(date);
-  }
-
-  function updateWorkspaceSyncContext(state) {
-    const syncEl = document.getElementById("bk-current-sync");
-    const timeEl = document.getElementById("bk-current-sync-time");
-    const wrap = syncEl?.closest(".bk-context-sync");
-    if (!syncEl || !wrap) return;
-    const message = String(state?.message || "");
-    const denied = Boolean(state?.accessDenied) || /invalid access|access denied/i.test(message);
-    const at = state?.at;
-    const age = at ? Date.now() - new Date(at).getTime() : Infinity;
-    let kind = "loading";
-    let label = "等待首次同步";
-    if (state?.unconfigured) {
-      kind = "warning";
-      label = "API 未配置";
-    } else if (denied) {
-      kind = "denied";
-      label = "API 访问被拒绝";
-    } else if (state?.ok === false) {
-      kind = "error";
-      label = "同步失败";
-    } else if (at && age > 90000) {
-      kind = "warning";
-      label = "同步延迟";
-    } else if (at) {
-      kind = "healthy";
-      label = state?.mode === "fast" ? "实时同步正常" : "同步正常";
-    }
-    wrap.dataset.state = kind;
-    syncEl.textContent = label;
-    syncEl.title = message || label;
-    if (timeEl) timeEl.textContent = at ? `最后同步 ${formatWorkspaceSyncTime(at)}` : "暂无同步时间";
-  }
-
-  function refreshWorkspaceContext() {
-    const request = ++workspaceContextRequest;
-    updateWorkspaceCompanyContext();
-    return api("/api/data/sync-status", { bg: true })
-      .then((state) => {
-        if (request !== workspaceContextRequest) return;
-        updateWorkspaceCompanyContext();
-        updateWorkspaceSyncContext(state);
-      })
-      .catch((error) => {
-        if (request !== workspaceContextRequest) return;
-        updateWorkspaceSyncContext({ ok: false, message: error?.message || "同步状态读取失败" });
-      });
   }
 
   function renderFooterTotals() {
@@ -1170,6 +1089,7 @@
   }
   function renderDailyPanels() {
     renderBanksPanel();
+    renderBankList(); // 余额 / COUNT / OUTFLOW 来自所选日期的日报
     renderReconcileAlertV2();
     renderReportPanel();
     renderCstatusPanel();
@@ -1181,6 +1101,8 @@
   function reportValClass(label, value, isMetric) {
     if (isMetric) return "";
     const v = Number(value || 0);
+    // EXPENSES 含封禁户余额变动（blockedExpense.js）：从封禁户收回钱的那天它会是正数，按正负上色。
+    if (label === "EXPENSES") return v > 0 ? "report-pos" : v < 0 ? "report-neg" : "";
     if (label === "DEPOSIT" || label === "CASH IN" || (v > 0 && label !== "WITHDRAW" && label !== "CASH OUT" && label !== "EXPENSES" && label !== "WRONG")) {
       return v > 0 ? "report-pos" : "";
     }
@@ -1196,7 +1118,10 @@
     if (pairs?.length) {
       tbody.innerHTML = pairs.map((p) => {
         const leftCls = reportValClass(p.leftLabel, p.leftValue, false);
-        const leftVal = fmtSigned(p.leftValue);
+        // EXPENSES 里属于封禁户余额的那一份另起一行注明；数字单独一个节点，不进翻译。
+        const blocked = Number(p.leftBlocked || 0);
+        const leftVal = fmtSigned(p.leftValue)
+          + (blocked ? `<small class="report-sub"><span>其中封禁</span> <span translate="no">${fmtSigned(-blocked)}</span></small>` : "");
         const right = p.rightLabel
           ? `<td class="report-label">${esc(p.rightLabel)}</td><td class="num-col report-val">${p.rightIsMetric === false ? fmtSigned(p.rightValue) : fmtMetric(p.rightValue)}</td>`
           : `<td></td><td></td>`;
@@ -1506,7 +1431,7 @@
   }
 
   // ---- 实时收款银行（server/lib/bankLiveReceiving.js）---------------------------
-  // 接单区顶上勾最多 3 个「现在正在收款的户」。充值单的 BANK 下拉只列它们，末尾留
+  // 页面顶上的银行列表里逐行勾，最多 3 个「现在正在收款的户」（2026-11-09 起取代「使用中」）。充值单的 BANK 下拉只列它们，末尾留
   // 「其他渠道…」：客户转进了非实时的户（比如还在用旧户）时，选它就展开完整列表——不留退路
   // 会在真实对账时把人卡死。一个都没勾就是原来的完整列表。提现单不受影响。
   // 预选：**恰好勾 1 户时预选它**（2026-11-09 用户要求：只有一个可选还得每笔点一下太麻烦）；
@@ -1530,75 +1455,128 @@
     document.querySelectorAll('#pending-tx-rows tr[data-txid]:not([data-dirty="1"]) select.pend-bank-deposit:not([data-expanded])')
       .forEach((sel) => { sel.innerHTML = depositBankOptionsHtml(); });
   }
-  function renderLivePicker() {
-    const box = document.getElementById("bk-live");
-    if (!box) return;
-    const usable = usableBanks();
-    box.hidden = !usable.length;
-    if (!usable.length) return;
-    const live = liveBanks();
-    const open = Boolean(box.querySelector(".bk-live-pop:not([hidden])"));
-    const chips = live.map((b) =>
-      `<span class="bk-live-chip"><span translate="no">${esc(tabLabel(b))}</span><button type="button" class="bk-live-remove" data-id="${b.id}" aria-label="取消实时收款" title="取消实时收款"${liveSaving ? " disabled" : ""}>×</button></span>`
-    ).join("");
-    const full = live.length >= LIVE_MAX;
-    const options = usable.map((b) => {
-      const checked = Number(b.live_receiving) === 1;
-      const idle = !Number(b.active);
-      const disabled = liveSaving || idle || (full && !checked);
-      return `<label class="bk-live-option${disabled ? " is-disabled" : ""}"><input type="checkbox" class="bk-live-check" value="${b.id}"${checked ? " checked" : ""}${disabled ? " disabled" : ""}><span translate="no">${esc(tabLabel(b))}</span>${idle ? `<small>${esc(tr("未启用"))}</small>` : ""}</label>`;
-    }).join("");
-    // 按钮里两套文案，CSS 按宽度二选一：电脑「+ 选择」；手机（≤700）头部只剩这一个按钮
-    // 「实时收款 N」，标签都收进弹层里（.scratch/ui-responsive/decisions.md 增量 G）。
-    const mobileLabel = live.length
-      ? `<span>实时收款</span> <b translate="no">${live.length}</b>`
-      : `<span>未设置实时收款银行</span>`;
-    box.innerHTML = `<span class="bk-live-label">实时收款</span>`
-      + (chips || `<span class="bk-live-empty">未设置实时收款银行</span>`)
-      + `<button type="button" class="bk-live-add${live.length ? "" : " is-empty"}" aria-haspopup="true" aria-expanded="${open ? "true" : "false"}"><span class="bk-live-add-desk">+ 选择</span><span class="bk-live-add-mob">${mobileLabel}</span></button>`
-      + `<div class="bk-live-pop"${open ? "" : " hidden"}><div class="bk-live-pop-head"><span>最多选 3 个</span><strong translate="no">${live.length} / ${LIVE_MAX}</strong></div>${options}</div>`;
-  }
   function saveLiveReceiving(ids) {
     if (liveSaving) return Promise.resolve();
     liveSaving = true;
-    renderLivePicker();
+    renderBankList();
     return api("/api/banks/live-receiving", { method: "PUT", body: JSON.stringify({ bank_ids: ids }) })
       .then(() => loadBanks())
       .catch((e) => showToast(e.message || "保存失败", { tone: "error" }))
       .finally(() => {
         liveSaving = false;
-        renderLivePicker();
+        renderBankList();
         refreshDepositBankSelects();
       });
   }
-  function bindLivePicker() {
-    const box = document.getElementById("bk-live");
+  // ---- 运营中银行列表（页面顶上，2026-11-09 从支付渠道页搬回来）--------------------
+  // 只列运营中的户。点行 = 按这个渠道筛流水（与工具栏下拉同一个筛选），再点一次回到全部；
+  // 每行的「实时收款」勾就是实时收款名单的唯一入口（取代了原来的「使用中」与接单区顶上的勾选器）。
+  // 编辑 / 封禁 / 归档 / 排序仍在支付渠道页。
+  //
+  // 整个列表**可以折叠**（2026-11-09 用户：全部渠道该折叠还是要折叠）：头部常驻，收起时头部直接
+  // 列出实时收款的户名，员工不展开也知道钱进哪户。状态存 localStorage，没存过时电脑展开、手机收起
+  // （与原来手机上渠道目录默认收起一致）。接单区与渠道页每行详情仍然不折叠。
+  const BANKLIST_COLLAPSED_KEY = "bk-banklist-collapsed";
+  let bankListCollapsed = null; // null = 还没读过
+  function isBankListCollapsed() {
+    if (bankListCollapsed == null) {
+      let saved = null;
+      try { saved = localStorage.getItem(BANKLIST_COLLAPSED_KEY); } catch (_) {}
+      bankListCollapsed = saved === "1" ? true : saved === "0" ? false : Boolean(MOBILE_MQ.matches);
+    }
+    return bankListCollapsed;
+  }
+  function setBankListCollapsed(collapsed) {
+    bankListCollapsed = Boolean(collapsed);
+    try { localStorage.setItem(BANKLIST_COLLAPSED_KEY, bankListCollapsed ? "1" : "0"); } catch (_) {}
+    renderBankList();
+  }
+  function bankListRowHtml(b, index) {
+    const stats = (dailyReport?.bankRows || []).find((r) => r.id === b.id);
+    const isPG = String(b.account_kind || "nominee") === "payment_gateway";
+    const excluded = BC.isBalanceExcluded(b);
+    const live = Number(b.live_receiving) === 1;
+    const full = liveBanks().length >= LIVE_MAX;
+    const disabled = liveSaving || (full && !live);
+    const bankLabel = bankBranchOf(b) || "未命名渠道";
+    const accountName = String(b.account_name || "").trim();
+    const nameHtml = accountName ? `<div class="bk-channel-sub"><span class="bk-name-label">NAME</span><span translate="no">${esc(accountName)}</span></div>` : "";
+    const flags = (isPG ? '<span class="bk-flag bk-flag-pg" title="PaymentGateway 余额不计入合计">PG</span>' : "")
+      + (live ? '<span class="bk-flag bk-flag-live">实时收款</span>' : "")
+      + (BC.alertThresholdReached(b, dailyReport) ? '<span class="bk-flag bk-flag-alert" title="余额已达报警阈值">⚠️</span>' : "");
+    const kind = b.account_kind || "nominee";
+    const liveTitle = disabled && !live && !liveSaving ? ` title="${esc(tr("最多选 3 个"))}"` : "";
+    return `<article class="bk-bank-row${activeBankId === b.id ? " active" : ""}${isPG ? " bk-bank-row-pg" : ""}${live ? " is-live" : ""}" data-id="${b.id}" role="listitem" tabindex="0" title="${esc(tr("点击渠道行可筛选流水"))}">
+<div class="bk-col-order"><span class="bk-row-no">${index + 1}</span></div>
+<div class="bk-col-channel"><div class="bk-channel-name"><strong translate="no">${esc(bankLabel)}</strong>${flags}</div>${nameHtml}<div class="bk-channel-meta"><span class="kind-tag kind-${esc(kind)}">${esc(BC.KIND_LABEL[kind] || kind)}</span></div></div>
+<div class="bk-col-info">${BC.bankInfoHtml(b)}</div>
+<div class="bk-col-balance"><div class="bk-metric-grid"><div class="bk-metric bk-metric-balance"><span>BALANCE</span><strong class="bk-row-balance${excluded ? " bk-balance-excluded" : ""}">${fmt(BC.bankDisplayBalance(b, dailyReport))}</strong></div><div class="bk-metric"><span>COUNT</span><strong>${fmtMetric(Number(stats?.tx_count ?? 0))}</strong></div><div class="bk-metric bk-metric-outflow"><span>TOTAL OUTFLOW</span><strong>${fmt(Math.abs(Number(stats?.total_outflow ?? 0)))}</strong></div></div>${excluded ? '<span class="bk-row-flow bk-excluded-note">不计入总余额</span>' : ""}</div>
+<div class="bk-col-actions"><label class="bk-live-toggle${live ? " is-on" : ""}${disabled ? " is-disabled" : ""}"${liveTitle}><input type="checkbox" class="bk-live-chk" data-id="${b.id}"${live ? " checked" : ""}${disabled ? " disabled" : ""}><span>实时收款</span></label><button type="button" class="bk-copy-btn" data-copy-bank-id="${b.id}" title="Copy complete bank information"><i data-lucide="copy"></i><span>Copy info</span></button></div>
+</article>`;
+  }
+  function renderBankList() {
+    const box = document.getElementById("bk-banklist");
+    if (!box) return;
+    const list = usableBanks();
+    const all = activeBankId === ALL_BANKS || !activeBankId;
+    const live = liveBanks();
+    const collapsed = isBankListCollapsed();
+    box.classList.toggle("is-collapsed", collapsed);
+    // 收起时把实时收款的户名摆在头部（户名是租户数据，translate="no"）。
+    const liveNames = collapsed && live.length
+      ? `<span class="bk-banklist-livenames">${live.map((b) => `<span class="bk-flag bk-flag-live" translate="no">${esc(tabLabel(b))}</span>`).join("")}</span>`
+      : "";
+    const head = `<div class="bk-banklist-head"><button type="button" class="bk-banklist-toggle" aria-expanded="${collapsed ? "false" : "true"}" aria-controls="bk-banklist-body"><i data-lucide="chevron-down"></i><strong>运营中</strong><b translate="no">${list.length}</b><span>个渠道</span></button>`
+      + `<span class="bk-banklist-live"><span>实时收款</span> <b translate="no">${live.length} / ${LIVE_MAX}</b></span>`
+      + liveNames
+      + `<button type="button" class="btn btn-outline btn-xs bk-banklist-all${all ? " active" : ""}" data-bank-select="all" aria-pressed="${all ? "true" : "false"}">全部渠道</button></div>`;
+    const body = list.length
+      ? `<div class="bk-channel-list" role="list"><div class="bk-channel-list-head" aria-hidden="true"><span>NO</span><span>BANK BRANCH / NAME</span><span>BSB / ACCOUNT / PAYID</span><span>BALANCE / COUNT / OUTFLOW</span><span>实时收款</span></div>`
+        + list.map(bankListRowHtml).join("")
+        + "</div>"
+      : '<div class="bk-banklist-empty">暂无运营渠道</div>';
+    box.innerHTML = head + `<div class="bk-banklist-body" id="bk-banklist-body"${collapsed ? " hidden" : ""}>${body}</div>`;
+    renderIcons(box);
+  }
+  function bindBankList() {
+    const box = document.getElementById("bk-banklist");
     if (!box || box.dataset.bound === "1") return;
     box.dataset.bound = "1";
-    const setOpen = (open) => {
-      box.querySelector(".bk-live-pop")?.toggleAttribute("hidden", !open);
-      box.querySelector(".bk-live-add")?.setAttribute("aria-expanded", open ? "true" : "false");
-    };
-    box.addEventListener("click", (e) => {
-      if (e.target.closest(".bk-live-add")) {
-        setOpen(Boolean(box.querySelector(".bk-live-pop[hidden]")));
-        return;
-      }
-      const remove = e.target.closest(".bk-live-remove");
-      if (remove) saveLiveReceiving(liveBanks().map((b) => b.id).filter((id) => id !== Number(remove.dataset.id)));
-    });
     box.addEventListener("change", (e) => {
-      const chk = e.target.closest(".bk-live-check");
+      const chk = e.target.closest(".bk-live-chk");
       if (!chk) return;
-      const ids = liveBanks().map((b) => b.id).filter((id) => id !== Number(chk.value));
-      if (chk.checked) ids.push(Number(chk.value));
+      const id = Number(chk.dataset.id);
+      const ids = liveBanks().map((b) => b.id).filter((x) => x !== id);
+      if (chk.checked) ids.push(id);
       saveLiveReceiving(ids);
     });
-    document.addEventListener("pointerdown", (e) => {
-      if (!box.contains(e.target)) setOpen(false);
+    box.addEventListener("click", (e) => {
+      if (e.target.closest(".bk-banklist-toggle")) {
+        setBankListCollapsed(!isBankListCollapsed());
+        return;
+      }
+      if (e.target.closest('[data-bank-select="all"]')) {
+        selectBankFilter(ALL_BANKS);
+        return;
+      }
+      const copy = e.target.closest("[data-copy-bank-id]");
+      if (copy) {
+        BC.copyBankInfo(bankRows.find((b) => b.id === Number(copy.dataset.copyBankId)));
+        return;
+      }
+      if (e.target.closest("input, label, button, a")) return;
+      const row = e.target.closest(".bk-bank-row[data-id]");
+      if (!row) return;
+      const id = Number(row.dataset.id);
+      selectBankFilter(activeBankId === id ? ALL_BANKS : id);
     });
-    document.addEventListener("keydown", (e) => {
-      if (e.key === "Escape" && !box.querySelector(".bk-live-pop[hidden]")) setOpen(false);
+    box.addEventListener("keydown", (e) => {
+      if (e.key !== "Enter" && e.key !== " ") return;
+      const row = e.target.closest?.(".bk-bank-row[data-id]");
+      if (!row || e.target !== row) return;
+      e.preventDefault();
+      const id = Number(row.dataset.id);
+      selectBankFilter(activeBankId === id ? ALL_BANKS : id);
     });
   }
   // 待处理平台单：先画一批，「显示更多」往后追加，不重画已有的行（员工填了一半的不丢）。
@@ -2048,7 +2026,7 @@
     return loadStatusOptions()
       .then(loadCStatus)
       .then(loadBanks)
-      .then(() => Promise.all([loadSheet(), loadDailyReport(), refreshPendingBadge(), refreshWorkspaceContext()]));
+      .then(() => Promise.all([loadSheet(), loadDailyReport(), refreshPendingBadge()]));
   }
 
   function refreshSharedWorkspace() {
@@ -2110,14 +2088,10 @@
     if (dateEl) dateEl.value = sheetDate;
     activeBankId = bankFromUrl();
 
-    let intakeCollapsed = false;
-    try { intakeCollapsed = localStorage.getItem(INTAKE_COLLAPSED_KEY) === "1"; } catch (_) {}
-    setIntakeCollapsed(intakeCollapsed, false);
-    document.getElementById("bk-intake-toggle")?.addEventListener("click", () => {
-      setIntakeCollapsed(!intakeZone()?.classList.contains("is-collapsed"), true);
-    });
+    // 接单区以前能折叠、状态存在 localStorage「bk-intake-collapsed」；现在永远展开，清掉旧值。
+    try { localStorage.removeItem("bk-intake-collapsed"); } catch (_) {}
     document.getElementById("bk-intake-close")?.addEventListener("click", closeIntakeSheet);
-    bindLivePicker();
+    bindBankList();
     document.addEventListener("keydown", (e) => {
       if (e.key === "Escape" && intakeZone()?.classList.contains("is-sheet-open")) closeIntakeSheet();
     });
@@ -2128,11 +2102,7 @@
     // 宽屏 ↔ 手机来回切（转屏、拉窗口）时，浮层状态不能留在宽屏布局上。
     MOBILE_MQ.addEventListener?.("change", () => { if (!MOBILE_MQ.matches) closeIntakeSheet(); });
     document.getElementById("sheet-bank-filter")?.addEventListener("change", (e) => {
-      editingRowId = null;
-      adding = false;
-      hideGridPicker();
-      resetEnterSave();
-      setActiveBank(e.target.value);
+      selectBankFilter(e.target.value);
     });
 
     let upperCollapsed = true;
@@ -2163,9 +2133,9 @@
         return reloadAll();
       });
     }
-    window.addEventListener("company-changed", refreshWorkspaceContext);
     window.addEventListener("language-changed", () => {
       renderBankFilter();
+      renderBankList();
       renderGrid();
       applyUpperCollapsed(document.getElementById("sheet-upper-wrap")?.classList.contains("collapsed"));
     });
@@ -2204,7 +2174,6 @@
 
     document.getElementById("sheet-date")?.addEventListener("change", (e) => {
       sheetDate = e.target.value || todaySydney();
-      updateWorkspaceCompanyContext();
       editingRowId = null;
       adding = false;
       hideGridPicker();

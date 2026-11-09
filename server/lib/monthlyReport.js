@@ -4,14 +4,15 @@
 //
 // 数据源只有 bank_ledger。entry_time 是实例时区的墙上时间字符串，所以日界一律用
 // 字符串前缀比较（substr 前 10 位 = 日期键），不做任何时区换算。
-const { todayKey } = require("./dates");
+const { todayKey, shiftDateKey } = require("./dates");
+const { blockedExpenseByDay } = require("./blockedExpense");
 
 const DEP_STATUSES = ["deposit", "new", "amopay"];
 
 const MONTH_RE = /^(\d{4})-(0[1-9]|1[0-2])$/;
 const YEAR_RE = /^\d{4}$/;
 
-const SUM_KEYS = ["dep", "wd", "unclaim", "wrong", "expenses", "depCount", "wdCount", "uniqueCust"];
+const SUM_KEYS = ["dep", "wd", "unclaim", "wrong", "expenses", "blocked", "depCount", "wdCount", "uniqueCust"];
 
 // 金额全部按「分」整数累加，避免 0.1 + 0.2 这类浮点残差出现在合计行里。
 const cents = (v) => Math.round(Number(v || 0) * 100);
@@ -52,10 +53,19 @@ function dailyRows(db, companyId, from, toExclusive) {
       unclaim: cents(r.unclaim),
       wrong: cents(r.wrong),
       expenses: cents(r.expenses),
+      blocked: 0,
       depCount: r.depCount,
       wdCount: r.wdCount,
       uniqueCust: r.uniqueCust,
     });
+  }
+  // 封禁户余额计入 EXPENSES，与日报同一份实现（blockedExpense.js），所以同一天两边逐分相等。
+  // 封禁那天可能一笔流水都没有，所以要能新建一行。
+  for (const [d, c] of blockedExpenseByDay(db, companyId, from, shiftDateKey(toExclusive, -1))) {
+    if (!map.has(d)) map.set(d, emptyAcc());
+    const row = map.get(d);
+    row.expenses += c;
+    row.blocked += c;
   }
   return map;
 }
@@ -81,6 +91,8 @@ function finish(acc) {
     unclaim: acc.unclaim / 100,
     wrong: acc.wrong / 100,
     expenses: acc.expenses / 100,
+    // EXPENSES 里属于封禁户余额变动的那一份（已含在 expenses 内）。
+    blockedExpense: acc.blocked / 100,
     depCount: acc.depCount,
     wdCount: acc.wdCount,
     totalCount: acc.depCount + acc.wdCount,

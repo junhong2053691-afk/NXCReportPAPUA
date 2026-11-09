@@ -15,7 +15,7 @@
 | **WIN RATE** | `WIN/LOSE ÷ DEP`；DEP = 0 时为「—」。合计行用合计相除，**不是**每日百分比的平均 |
 | **UNCLAIM** | 状态 `unclaim` 的入账金额，单列，不进 DEP |
 | **WRONG** | 状态 `wrong` 的出账金额（转账 / 操作失误亏损），正数显示 |
-| **EXPENSES** | 状态 `expenses` 的出账金额（开销），正数显示 |
+| **EXPENSES** | 状态 `expenses` 的出账金额（开销）**+ 当天的封禁户余额变动**（见下文「封禁户余额」），正数显示；从封禁户收回钱的日子可能是负数 |
 | **DEP单 / WD单** | 上面 DEP 那组状态 / `withdraw` 中金额 > 0 的笔数 |
 | **总单** | DEP单 + WD单 |
 | **UNIQUE CUST** | 当天有 DEP 流水的不同 `username` 数（当天充值顾客数）。按 `TRIM` 后原样比较，区分大小写，与日报一致 |
@@ -35,9 +35,30 @@
 
 同一天两个页面的 DEPOSIT 数字不一样是**对的**。要统一须先和运营对齐 Excel。
 
+日报 REPORT 的 **EXPENSES 同样含封禁户余额变动**（负数显示，与月报逐分相等），但**笔数只数 `expenses` 流水**——
+卡住的钱不是一笔流水。数字下面另起一行「其中封禁 X」，接口字段是 `totals.blocked_expense` / reportPairs 的 `leftBlocked`。
+
 日报 REPORT 里另外三条看着像 bug、其实是 Excel 口径（2026-11-06 与运营确认，`daily-report-status.test.js` 守着）：
 **GIVE BACK** 单独一行、负数；**EXCHANGE** 显示正数（换钱总额），与其他出账类不同号；
 **REDEP** 只记笔数，手工录的 REDEPOSIT 入账金额只进余额、不进任何汇总行。
+
+## 封禁户余额（计入 EXPENSES）
+
+2026-11-09 用户定：**封禁里的银行数额一律视作 expenses**。只改报表口径，**不写任何流水**。
+实现只有一份：`server/lib/blockedExpense.js`，日报与月报共用，测试 `blocked-expense.test.js`。
+
+| 术语 / 规则 | 定义 |
+|---|---|
+| **卡住的钱 stuck(X)** | X 日结束时处于封禁 / 归档的户，各自累计余额（`entry_time <= X 23:59:59`）之和 |
+| **封禁 EXPENSES(D)** | `stuck(D) − stuck(D−1)`：封禁当天 +余额；之后「转出余额」那天 −转出数；解封当天 −全部；归档 / 取消归档不变 |
+| **封禁日** | 按 `bank_account_events`（banned / unbanned / archived / unarchived）回放；`created_at` 是 UTC，换成实例时区的日期 |
+| **老户** | 没有任何生命周期事件、但现在是封禁 / 归档的户：视作一直封禁，每天的流水净额落在当天。事件回放终态与当前状态不符时，在最后一个事件日补一次转换 |
+| **PG** | 不算。PG 的钱本来就不是自有资金 |
+| **每日归零** | 忽略，用累计余额（与归档闸门、`/blocked` 同问题：「这户里还卡着多少」） |
+| **封禁户上记的 expenses 流水** | 已经在流水 EXPENSES 里，卡住的钱随之减少，不重复计 |
+
+- 已封禁的老户**补记在各自的封禁日**，所以过去某些日子的 EXPENSES 会因此改变；改封禁户的旧流水也会改动旧日子。
+- 恒等式 `全部 BALANCE + 累计封禁 EXPENSES = 全部的钱` **只对今天、且非每日归零户成立**：`total_balance` 用的是当前生命周期和当日口径。
 
 ## 往来账（MONTHLY REPORT › COMPANY EXPENSES）
 

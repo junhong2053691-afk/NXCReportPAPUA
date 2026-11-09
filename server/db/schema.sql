@@ -168,7 +168,7 @@ CREATE TABLE IF NOT EXISTS bank_accounts (
   alert_fired_at TEXT NOT NULL DEFAULT '',
   alert_fired_date TEXT NOT NULL DEFAULT '',
   -- 实时收款银行（lib/bankLiveReceiving.js）：每公司最多 3 个，只经专用端点整组替换；
-  -- 封禁 / 归档 / 取消使用中时清零。只影响审批下拉，不自动入账。
+  -- 封禁 / 归档时清零。只影响审批下拉，不自动入账。2026-11-09 起取代 active（原「使用中」）。
   live_receiving INTEGER NOT NULL DEFAULT 0,
   -- 上次报警时的余额。超标期间只有比它更高才再报一次——同一桶钱来回动不是新信息。
   alert_fired_balance REAL NOT NULL DEFAULT 0,
