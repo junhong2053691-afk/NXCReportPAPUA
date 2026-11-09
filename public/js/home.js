@@ -10,9 +10,10 @@ function renderCards(d) {
       d.date;
   }
   animateValue(document.getElementById("dep-count"), d.deposits.count, { suffix: " \u7b14" });
-  animateValue(document.getElementById("dep-total"), d.deposits.total, { prefix: "\u5408\u8ba1 $", decimals: 2 });
+  // \u5361\u7247\u6807\u7b7e\u5df2\u7ecf\u5199\u4e86\u300c\u5145\u503c / \u63d0\u73b0\u300d\uff0c\u5927\u6570\u5b57\u524d\u4e0d\u518d\u6302\u300c\u5408\u8ba1\u300d\u2014\u2014\u5b83\u548c\u91d1\u989d\u4e00\u6837\u662f 24px \u7c97\u4f53\uff0c\u62a2\u4e86\u6570\u5b57\u7684\u4f4d\u7f6e
+  animateValue(document.getElementById("dep-total"), d.deposits.total, { prefix: "$", decimals: 2 });
   animateValue(document.getElementById("wd-count"), d.withdrawals.count, { suffix: " \u7b14" });
-  animateValue(document.getElementById("wd-total"), d.withdrawals.total, { prefix: "\u5408\u8ba1 $", decimals: 2 });
+  animateValue(document.getElementById("wd-total"), d.withdrawals.total, { prefix: "$", decimals: 2 });
   animateValue(document.getElementById("online-count"), d.onlineToday, { suffix: " \u4eba" });
   animateValue(document.getElementById("dep-users-count"), d.depositUsersToday, { suffix: " \u4eba" });
   animateValue(document.getElementById("cust-total"), d.customers.total, {});
