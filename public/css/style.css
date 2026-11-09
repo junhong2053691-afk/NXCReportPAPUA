@@ -512,9 +512,9 @@ table { border-spacing: 0; }
 .icon-btn {
   display: inline-grid;
   place-items: center;
-  width: 44px;
-  min-width: 44px;
-  height: 44px;
+  width: var(--control-h);
+  min-width: var(--control-h);
+  height: var(--control-h);
   padding: 0;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
@@ -662,13 +662,13 @@ table { border-spacing: 0; }
   align-items: center;
   justify-content: center;
   gap: 7px;
-  min-height: 44px;
-  padding: 9px 15px;
+  min-height: var(--control-h);
+  padding: 6px 14px;
   border: 1px solid transparent;
   border-radius: var(--radius-sm);
   background: var(--material-shine), var(--surface-2);
   color: var(--text);
-  font-size: var(--text-sm);
+  font-size: var(--control-fs);
   font-weight: var(--weight-semibold);
   line-height: 1.2;
   text-align: center;
@@ -684,12 +684,19 @@ table { border-spacing: 0; }
 .btn-danger { background: linear-gradient(180deg, color-mix(in srgb, var(--red) 90%, white), var(--red)); color: #fff; }
 .btn-outline { border-color: var(--border); background: var(--surface-2); color: var(--text-soft); }
 .btn-outline:hover { border-color: var(--border-strong); background: var(--surface-strong); color: var(--text); }
-.btn-sm, .btn-xs { min-height: 40px; padding: 8px 12px; font-size: var(--text-xs); }
+/* 控件两档（decisions.md Q1）：.btn / .btn-sm / 输入框 / 下拉 / 页签 = 标准 --control-h（36），
+   .btn-xs 与表格行内按钮 = 紧凑 --control-h-sm（32）。≤700 两档都是 44。 */
+.btn-sm { min-height: var(--control-h); padding: 6px 12px; font-size: var(--control-fs); }
+.btn-xs { min-height: var(--control-h-sm); padding: 4px 10px; font-size: var(--control-fs-sm); }
+/* lucide 把 <i> 换成 24px 的 <svg>，带图标的按钮会被撑到 38，和同一行的 36 对不齐 */
+.btn > svg.lucide { flex: none; width: 16px; height: 16px; }
+/* 日期 / 时间框自带内部高度，只给 min-height 会多出 1px */
+input[type="date"], input[type="time"] { height: var(--control-h); }
 input, select, textarea {
   width: auto;
   max-width: 100%;
-  min-height: 44px;
-  padding: 9px 11px;
+  min-height: var(--control-h);
+  padding: 6px 11px;
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-sm);
   outline: none;
@@ -754,13 +761,14 @@ input:focus, select:focus, textarea:focus { border-color: var(--focus); box-shad
 }
 .seg-btn {
   flex: 0 0 auto;
-  min-height: 40px;
-  padding: 8px 12px;
+  min-width: var(--control-h); /* 「月 / 年」这种单字页签手机上原来只有 39px 宽 */
+  min-height: var(--control-h);
+  padding: 6px 12px;
   border: 1px solid transparent;
   border-radius: var(--radius-sm);
   background: transparent;
   color: var(--text-soft);
-  font-size: var(--text-xs);
+  font-size: var(--control-fs);
   font-weight: var(--weight-semibold);
   transition: background var(--motion-fast) var(--ease), color var(--motion-fast) var(--ease), box-shadow var(--motion-fast) var(--ease), transform var(--motion-fast) var(--ease-spring);
 }
@@ -913,8 +921,8 @@ input:focus, select:focus, textarea:focus { border-color: var(--focus); box-shad
 .archive-date-chip {
   flex: 0 0 auto;
   min-width: 58px;
-  min-height: 40px;
-  padding: 7px 9px;
+  min-height: var(--control-h);
+  padding: 4px 9px;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   background: var(--surface-2);
@@ -986,7 +994,7 @@ tbody tr:focus-within td { background: var(--primary-soft); }
 .extra-table .th-group, .th-sub { text-align: center; }
 .extra-count, .extra-total { text-align: right; font-variant-numeric: tabular-nums; }
 .pager { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 6px; min-height: 44px; margin-top: 10px; }
-.pager button { min-width: 40px; min-height: 40px; padding: 7px 10px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface-2); color: var(--text-soft); }
+.pager button { min-width: var(--control-h); min-height: var(--control-h); padding: 4px 10px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface-2); color: var(--text-soft); }
 .pager button.active { border-color: var(--primary); background: var(--primary); color: #fff; }
 .pager-info { color: var(--muted); font-size: var(--text-xs); }
 .table-wrap.is-loading::before, .data-surface.is-loading::before {
@@ -1349,7 +1357,7 @@ body.customer-drawer-open { overflow: hidden; }
 .required { color: var(--danger); }
 
 .btn-xs {
-  padding: 3px 9px; font-size: var(--text-2xs); border-radius: 4px;
+  border-radius: 4px;
   cursor: pointer; border: 1px solid transparent; font-weight: var(--weight-medium);
   transition: background .12s, color .12s, border-color .12s;
 }
@@ -1407,7 +1415,7 @@ body.customer-drawer-open { overflow: hidden; }
 .bank-col-actions { width: 80px; white-space: nowrap; text-align: right; padding-right: 10px !important; }
 
 .bank-check-wrap { display: inline-flex; align-items: center; cursor: pointer; }
-.bank-check-wrap input[type="checkbox"] { width: 15px; height: 15px; accent-color: #059669; cursor: pointer; }
+.bank-check-wrap input[type="checkbox"] { width: 16px; height: 16px; accent-color: #059669; cursor: pointer; }
 
 /* Bank name display */
 .bank-tag {
@@ -2129,7 +2137,8 @@ tr:hover .bank-bal-btns { opacity: 1; }
 .sheet-date { width: 140px; }
 .sheet-filter { min-width: 100px; }
 .sheet-search { flex: 1; min-width: 160px; max-width: 320px; }
-.sheet-toolbar .btn-sm { height: 32px; }
+/* 原来写 height:32 但被 .btn-sm 的 min-height 40 顶掉，从没生效过；工具栏和旁边的输入框同高即可 */
+.sheet-toolbar .btn-sm { min-height: var(--control-h); }
 
 .sheet-tabs-wrap {
   background: var(--surface-2); border: 1px solid var(--border-strong);
@@ -2386,7 +2395,7 @@ tr:hover .bank-bal-btns { opacity: 1; }
 .bk-tools > * { min-width: 0; }
 .bk-tools .sheet-search { max-width: 360px; }
 .bk-actions { display: flex; gap: 8px; flex-wrap: wrap; min-width: 0; }
-.bk-actions .btn-sm { height: 32px; }
+.bk-actions .btn-sm { min-height: var(--control-h); }
 .bk-more-menu { position: relative; z-index: calc(var(--z-modal) + 1); }
 .bk-more-menu > summary { list-style: none; }
 .bk-more-menu > summary::-webkit-details-marker { display: none; }
@@ -2417,8 +2426,8 @@ tr:hover .bank-bal-btns { opacity: 1; }
   align-items: center;
   gap: 7px;
   width: 100%;
-  min-height: 36px;
-  padding: 7px 9px;
+  min-height: var(--control-h); /* 手机上随 token 变 44 */
+  padding: 4px 9px;
   border: 0;
   border-radius: 6px;
   background: transparent;
@@ -3358,12 +3367,13 @@ tr:hover .bank-bal-btns { opacity: 1; }
 }
 .bkd-tab {
   flex: 0 0 auto;
-  padding: 7px 14px;
+  min-height: var(--control-h); /* 和 .seg-btn 同档；手机上随 token 变 44（原来只有 34） */
+  padding: 4px 14px;
   border: 1px solid transparent;
   border-radius: var(--radius-sm);
   background: transparent;
   color: var(--text-soft);
-  font-size: var(--text-xs);
+  font-size: var(--control-fs);
   font-weight: var(--weight-semibold);
   cursor: pointer;
   transition: background var(--motion-fast) var(--ease), color var(--motion-fast) var(--ease);
@@ -3975,7 +3985,7 @@ tr:hover .bank-bal-btns { opacity: 1; }
 .audit-panel-heading h2 { margin: 0 0 3px; font-size: var(--text-lg); }
 .audit-panel-heading p { margin: 0; color: var(--muted); font-size: var(--text-xs); }
 .audit-trace-form { display: grid; grid-template-columns: minmax(220px, 1fr) 130px auto; gap: 8px; max-width: 760px; }
-.audit-trace-form input, .audit-trace-form select, .audit-trace-form .btn { min-height: 44px; }
+.audit-trace-form input, .audit-trace-form select, .audit-trace-form .btn { min-height: var(--control-h); }
 /* 原来是 repeat(5, minmax(126px,1fr)) minmax(210px,1.4fr) auto，下限约 1028px，而
    首个降列断点在 ≤1180px —— 侧栏展开时 1200px 视口只有 894px 可用，实测溢出 171px
    并被 body{overflow-x:hidden} 静默吃掉，查询/重置按钮够不着。
@@ -3984,9 +3994,9 @@ tr:hover .bank-bal-btns { opacity: 1; }
 .audit-filters .audit-filter-actions { grid-column: 1 / -1; justify-content: flex-end; }
 .audit-filters .form-group { margin: 0; min-width: 0; }
 .audit-filters label { margin-bottom: 4px; font-size: var(--text-2xs); }
-.audit-filters input, .audit-filters select { width: 100%; min-height: 38px; padding: 7px 9px; font-size: var(--text-xs); }
+.audit-filters input, .audit-filters select { width: 100%; min-height: var(--control-h); padding: 4px 9px; font-size: var(--text-xs); }
 .audit-filter-actions { display: flex; gap: 6px; }
-.audit-filter-actions .btn { min-height: 38px; }
+.audit-filter-actions .btn { min-height: var(--control-h); }
 .audit-table-wrap { min-height: 300px; }
 .audit-table { min-width: 1040px; }
 .audit-table th { white-space: nowrap; }
@@ -4016,7 +4026,7 @@ tr:hover .bank-bal-btns { opacity: 1; }
 .audit-ref-link:hover, .audit-ref-link:focus-visible, .audit-inline-detail:hover, .audit-inline-detail:focus-visible { text-decoration-color: currentColor; }
 .audit-summary-cell { min-width: 210px; max-width: 360px; }
 .audit-reason-cell { min-width: 150px; max-width: 280px; color: var(--text-soft); }
-.audit-detail-btn { min-width: 44px; width: 44px; height: 44px; }
+.audit-detail-btn { min-width: var(--control-h-sm); width: var(--control-h-sm); height: var(--control-h-sm); }
 .audit-empty { min-height: 240px; }
 .audit-empty svg { width: 28px; height: 28px; color: var(--muted); }
 .audit-pager { display: flex; align-items: center; justify-content: center; gap: 12px; margin-top: 12px; }
@@ -4171,8 +4181,8 @@ body[data-user-role="admin"] .bkv2 .sheet-table .col-act { width: 100px; }
 
 /* MONTHLY REPORT › TOP REFERRAL：第二列是推荐人名，左对齐；名次列不用等宽。 */
 .tr-field { display: inline-flex; align-items: center; gap: 6px; color: var(--text-soft); font-size: var(--text-sm); }
-.tr-field select { min-height: 32px; }
-.tr-search { width: 200px; min-height: 32px; }
+.tr-field select { min-height: var(--control-h); }
+.tr-search { width: 200px; min-height: var(--control-h); }
 #tr-table th:nth-child(2), #tr-table td:nth-child(2) { text-align: left; }
 #tr-table td:first-child { font-family: inherit; color: var(--text-soft); }
 #tr-table .tr-organic td { color: var(--text-soft); font-weight: 600; border-top: 2px solid var(--border-strong); }
@@ -5380,7 +5390,7 @@ body.tr-drawer-open { overflow: hidden; }
 .channels-app .bk-bank-row:nth-of-type(even) { background: color-mix(in srgb, var(--surface-2) 46%, var(--surface)); }
 /* 操作列：上一行复制、下一行编辑 / 封禁，右对齐。详情 2026-11-09 起常驻在行下面，不再有展开按钮。 */
 .channels-app .bk-col-actions { flex-direction: column; align-items: flex-end; justify-content: center; gap: 6px; }
-.channels-app .bk-copy-btn { min-height: 30px; }
+.channels-app .bk-copy-btn { min-height: var(--control-h-sm); }
 .bk-row-acts { display: flex; align-items: center; justify-content: flex-end; gap: 4px; flex-wrap: wrap; }
 .bk-row-body { min-width: 960px; padding: 10px 12px; border-bottom: 1px solid var(--border); background: var(--surface-2); cursor: default; }
 .bk-row-body[hidden] { display: none; }
@@ -5397,4 +5407,13 @@ body.tr-drawer-open { overflow: hidden; }
 }
 @media (max-width: 700px) {
   .channels-app .bk-bank-row { grid-template-columns: 30px minmax(0, 1fr); }
+}
+/* ===== 控件两档 · 电脑端收尾（2026-11-09 UI 精修 第 4 组）=====
+   只在 ≥769 生效：≤768 有自己的 44px 触控规则，不能被这里的紧凑档压下去。 */
+@media (min-width: 769px) {
+  /* 表格行内的按钮一律紧凑档：审批 / 跳过、支付设置的保存 / 删除、渠道行尾的编辑 / 封禁。
+     原来是 40px 高的框配 11px 字。 */
+  td .btn, td .btn-sm, td .btn-xs { min-height: var(--control-h-sm); padding: 4px 10px; font-size: var(--control-fs-sm); }
+  /* 勾选框统一 16px（原来 13 / 14 / 15 / 18 并存；没写尺寸的还会继承 input 的 min-height 被拉成 44 高） */
+  input[type="checkbox"], input[type="radio"] { width: 16px; min-width: 16px; height: 16px; min-height: 0; padding: 0; }
 }
