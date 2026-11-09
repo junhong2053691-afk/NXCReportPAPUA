@@ -31,6 +31,7 @@
   --lg-flow-b: #5a7bb6;
   --lg-flow-c: #2a64d8;
   --lg-pulse: #0b93d4;
+  --lg-tag-bg: rgba(255, 255, 255, .86);
 }
 :root[data-theme="dark"] {
   --lg-bg: #050d1f;
@@ -54,6 +55,7 @@
   --lg-flow-b: #a9c3ee;
   --lg-flow-c: #3d7cf5;
   --lg-pulse: #5fd3fa;
+  --lg-tag-bg: rgba(5, 13, 31, .8);
 }
 
 /* Beats style.css's `:root[data-theme="dark"] body` gradient. */

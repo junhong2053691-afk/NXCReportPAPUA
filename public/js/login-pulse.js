@@ -6,6 +6,9 @@
 //     fanning out of one back office
 //   - every SYNC_MS (the fast lane's ~6 s cycle) a pulse ring leaves the logo
 //     and kicks the streams it crosses, so they flare and speed up
+//   - a few streams carry a ledger tag (DEPOSIT / WITHDRAW / BANK TRF ...,
+//     amount masked): deposits spiral in and are absorbed at the logo,
+//     withdrawals spiral out
 // Input: the mouse parts and swirls the streams around it and a click fires a
 // shock ring; on a phone a finger does the same through passive touch events
 // (pointer events get cancelled as soon as the browser treats a drag as a
@@ -44,14 +47,18 @@
     col.b = v("--lg-flow-b", col.b);
     col.c = v("--lg-flow-c", col.c);
     col.pulse = v("--lg-pulse", col.pulse);
+    col.pill = v("--lg-tag-bg", "rgba(5,13,31,.78)");
+    col.ink2 = v("--lg-ink-2", "#9cb1d4");
     col.dark = root.getAttribute("data-theme") === "dark";
+    FONT_FAMILY = (getComputedStyle(document.body).fontFamily || "").trim() || "system-ui, sans-serif";
+    for (var i = 0; i < tags.length; i++) labelTag(tags[i]);
   }
 
   // ---- geometry
   var W = 0, H = 0, DPR = 1;
   var C = { x: 0, y: 0, r: 0 };
-  var quiet = []; // rects the streams stay out of: the form and the brand text
-  var quietEls = [".lg-form", ".lg-name", ".lg-title"].map(function (s) { return document.querySelector(s); });
+  var quiet = []; // rects the streams stay out of: the form, the brand text, the tools, the footer
+  var quietEls = [".lg-form", ".lg-name", ".lg-title", ".lg-tools", ".lg-foot"].map(function (s) { return document.querySelector(s); });
   function measure() {
     var r = logo.getBoundingClientRect();
     C.x = r.left + r.width / 2;
@@ -117,6 +124,180 @@
     p.hot = 0;
   }
 
+  // ---- ledger tags: some streams carry a bank-ledger entry
+  // Deposits ride the spiral inward and are absorbed at the logo; withdrawals
+  // ride it out. Statuses are the ledger's own vocabulary; amounts are always
+  // masked: the page is unauthenticated and must not show or invent numbers.
+  var IN_STATUS = ["DEPOSIT", "CASH IN", "BANK TRANSFER", "DEPOSIT"];
+  var OUT_STATUS = ["WITHDRAW", "CASH OUT", "BANK TRF", "WITHDRAW"];
+  var tags = [], absorbs = [];
+  var FONT_FAMILY = "system-ui, sans-serif";
+  function pick(list) { return list[Math.floor(Math.random() * list.length)]; }
+  function masked() {
+    var n = Math.random();
+    return n < 0.45 ? "•••.••" : n < 0.9 ? "•,•••.••" : "••,•••.••";
+  }
+  function labelTag(t) {
+    if (!t.status) {
+      t.status = pick(t.inbound ? IN_STATUS : OUT_STATUS);
+      t.amount = (t.inbound ? "+$" : "−$") + masked();
+    }
+    ctx.font = "600 10px " + FONT_FAMILY;
+    t.w1 = ctx.measureText(t.status).width;
+    ctx.font = "700 11px " + FONT_FAMILY;
+    t.w2 = ctx.measureText(t.amount).width;
+  }
+  function tagCount() { return W < 720 ? 6 : 12; }
+  function spawnTag(t, anywhere) {
+    t.inbound = Math.random() < 0.6;
+    var far = Math.hypot(Math.max(C.x, W - C.x), Math.max(C.y, H - C.y));
+    // born somewhere visible: a tag that starts under the form is a wasted tag
+    for (var tries = 0; tries < 10; tries++) {
+      var a = Math.random() * TAU, r;
+      if (t.inbound) {
+        // enter from somewhere on screen near the edges, then spiral in
+        r = anywhere ? C.r * 2.2 + Math.random() * (far - C.r * 2.2) : far * (0.55 + Math.random() * 0.45);
+      } else {
+        r = anywhere ? C.r * 1.4 + Math.random() * (far - C.r * 1.4) : C.r * 1.3;
+      }
+      t.x = Math.max(16, Math.min(W - 16, C.x + Math.cos(a) * r));
+      t.y = Math.max(16, Math.min(H - 16, C.y + Math.sin(a) * r));
+      if (!isQuiet(t.x, t.y)) break;
+    }
+    if (!t.tx) { t.tx = new Float32Array(TRAIL); t.ty = new Float32Array(TRAIL); }
+    t.n = 0; t.head = 0;
+    remember(t);
+    t.vx = 0; t.vy = 0;
+    t.speed = 0.8 + Math.random() * 0.45;
+    t.age = 0;
+    t.life = 900 + Math.random() * 700;
+    t.hot = 0;
+    t.status = ""; // new direction, new entry
+    labelTag(t);
+  }
+  function stepTags(dt, mx, my, ms) {
+    var want = tagCount();
+    while (tags.length < want) { var nt = {}; spawnTag(nt, true); tags.push(nt); }
+    if (tags.length > want) tags.length = want;
+    for (var i = 0; i < tags.length; i++) {
+      var t = tags[i];
+      var dcx = t.x - C.x, dcy = t.y - C.y, dc = Math.sqrt(dcx * dcx + dcy * dcy);
+      var a = fieldAngle(t.x, t.y, clock) + (t.inbound ? Math.PI : 0);
+      t.vx += (Math.cos(a) * t.speed - t.vx) * 0.05 * dt;
+      t.vy += (Math.sin(a) * t.speed - t.vy) * 0.05 * dt;
+      if (ms > 0.01) {
+        var dx = t.x - mx, dy = t.y - my, d = Math.sqrt(dx * dx + dy * dy);
+        if (d < 130 && d > 0.1) {
+          var f = 1 - d / 130; f = f * f * ms;
+          t.vx += (dx / d) * 1.2 * f * dt;
+          t.vy += (dy / d) * 1.2 * f * dt;
+          t.hot = Math.max(t.hot, f * 1.6);
+        }
+      }
+      for (var j = 0; j < pulses.length; j++) {
+        var q = pulses[j], qx = t.x - q.x, qy = t.y - q.y, qd = Math.sqrt(qx * qx + qy * qy) || 1;
+        if (Math.abs(qd - q.r) < 34) t.hot = Math.max(t.hot, q.life);
+      }
+      t.x += t.vx * dt;
+      t.y += t.vy * dt;
+      t.hot *= Math.pow(0.95, dt);
+      t.age += dt;
+      remember(t);
+      var gone = t.x < -60 || t.x > W + 60 || t.y < -40 || t.y > H + 40 || t.age > t.life;
+      if (t.inbound && dc < C.r * 1.2) {
+        absorbs.push({ x: t.x, y: t.y, life: 1 });
+        gone = true;
+      }
+      if (gone) spawnTag(t, false);
+    }
+    for (var k = absorbs.length - 1; k >= 0; k--) {
+      absorbs[k].life -= 0.03 * dt;
+      if (absorbs[k].life <= 0) absorbs.splice(k, 1);
+    }
+  }
+  function boxQuiet(l, t, r, b) {
+    for (var i = 0; i < quiet.length; i++) {
+      var q = quiet[i];
+      if (l < q.r && r > q.l && t < q.b && b > q.t) return true;
+    }
+    return false;
+  }
+  var drawnBoxes = [];
+  function drawTag(t, alpha, pillAlpha) {
+    var cIn = t.inbound ? col.a : col.b;
+    var x = t.x, y = t.y;
+    var padX = 8, gap = 6, h = 20;
+    var w = padX * 2 + t.w1 + gap + t.w2;
+    var l = x + 7, top = y - h / 2;
+    if (l + w > W - 6) l = x - 7 - w; // near the right edge the label hangs left of its dot
+    var bl = Math.min(l, x - 3), br = Math.max(l + w, x + 3);
+    if (boxQuiet(bl, top, br, top + h)) return;
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = cIn;
+    ctx.beginPath(); ctx.arc(x, y, 2.2, 0, TAU); ctx.fill();
+    // the plate folds away near the logo and never stacks on another plate
+    if (pillAlpha < 0.02) return;
+    for (var i = 0; i < drawnBoxes.length; i++) {
+      var d = drawnBoxes[i];
+      if (bl < d.r && br > d.l && top < d.b && top + h > d.t) return;
+    }
+    drawnBoxes.push({ l: bl - 4, t: top - 4, r: br + 4, b: top + h + 4 });
+    alpha *= pillAlpha;
+    ctx.fillStyle = col.pill;
+    ctx.beginPath();
+    if (ctx.roundRect) ctx.roundRect(l, top, w, h, 6); else ctx.rect(l, top, w, h);
+    ctx.fill();
+    ctx.strokeStyle = cIn;
+    ctx.globalAlpha = alpha * 0.55;
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    ctx.globalAlpha = alpha;
+    ctx.textAlign = "left";
+    ctx.fillStyle = col.ink2;
+    ctx.font = "600 10px " + FONT_FAMILY;
+    ctx.fillText(t.status, l + padX, y);
+    ctx.fillStyle = cIn;
+    ctx.font = "700 11px " + FONT_FAMILY;
+    ctx.fillText(t.amount, l + padX + t.w1 + gap, y);
+  }
+  function drawTags() {
+    ctx.textBaseline = "middle";
+    ctx.lineCap = "round";
+    drawnBoxes.length = 0;
+    for (var i = 0; i < tags.length; i++) {
+      var t = tags[i], n = t.n;
+      var fadeIn = Math.min(1, t.age / 40);
+      var dc = Math.hypot(t.x - C.x, t.y - C.y);
+      var near = t.inbound ? Math.min(1, Math.max(0, (dc - C.r * 1.2) / (C.r * 0.9))) : 1;
+      var plate = Math.min(1, Math.max(0, (dc - C.r * 2.3) / (C.r * 0.8)));
+      var a = fadeIn * near * Math.min(1, (col.dark ? 0.62 : 0.72) + t.hot * 0.5);
+      if (a < 0.02) continue;
+      // the stream the tag rides on
+      if (n > 1) {
+        var oldest = (t.head - n + TRAIL) % TRAIL, pen = false;
+        ctx.beginPath();
+        for (var s = 0; s < n; s++) {
+          var ix = (oldest + s) % TRAIL, x = t.tx[ix], y = t.ty[ix];
+          if (isQuiet(x, y)) { pen = false; continue; }
+          if (pen) ctx.lineTo(x, y); else { ctx.moveTo(x, y); pen = true; }
+        }
+        ctx.strokeStyle = t.inbound ? col.a : col.b;
+        ctx.globalAlpha = a * 0.55;
+        ctx.lineWidth = 1.6;
+        ctx.stroke();
+      }
+      drawTag(t, a, plate);
+    }
+    ctx.strokeStyle = col.a;
+    ctx.lineWidth = 1.4;
+    for (var k = 0; k < absorbs.length; k++) {
+      var ab = absorbs[k];
+      ctx.globalAlpha = ab.life * 0.7;
+      ctx.beginPath(); ctx.arc(ab.x, ab.y, (1 - ab.life) * 14 + 2, 0, TAU); ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+  }
+
   function resize() {
     DPR = Math.min(window.devicePixelRatio || 1, 2);
     W = window.innerWidth;
@@ -129,6 +310,8 @@
     if (particles.length > want) particles.length = want;
     while (particles.length < want) particles.push({});
     for (var i = 0; i < particles.length; i++) spawn(particles[i], true);
+    tags.length = 0;
+    absorbs.length = 0;
     ctx.clearRect(0, 0, W, H);
     if (reduced()) drawStatic();
   }
@@ -234,6 +417,7 @@
       remember(p);
       if (p.x < -40 || p.x > W + 40 || p.y < -40 || p.y > H + 40 || p.life <= 0 || dc < C.r * 0.9) spawn(p, false);
     }
+    stepTags(dt, mx, my, ms);
   }
 
   // ---- drawing
@@ -274,6 +458,7 @@
       ctx.lineWidth = hot ? 2 : (col.dark ? 1.2 : 1.35);
       ctx.stroke(paths[k2]);
     }
+    drawTags();
 
     ctx.strokeStyle = col.pulse;
     ctx.lineWidth = 1.5;
@@ -310,6 +495,18 @@
         if (isQuiet(x, y)) ctx.moveTo(x, y); else ctx.lineTo(x, y);
       }
       ctx.stroke();
+    }
+    // a handful of ledger tags parked on the still streams
+    ctx.textBaseline = "middle";
+    drawnBoxes.length = 0;
+    var far = Math.min(W, H) * 0.42;
+    for (var k = 0; k < 6; k++) {
+      var ang = (k / 6) * TAU + 0.35, t = { inbound: k % 2 === 0 };
+      t.x = C.x + Math.cos(ang) * Math.max(C.r * 2.2, far);
+      t.y = C.y + Math.sin(ang) * Math.max(C.r * 2.2, far);
+      if (t.x < 20 || t.x > W - 20 || t.y < 20 || t.y > H - 20) continue;
+      labelTag(t);
+      drawTag(t, col.dark ? 0.62 : 0.72, 1);
     }
     ctx.globalAlpha = 1;
   }
