@@ -111,8 +111,10 @@ test("当日流水的银行列表可以折叠：头部常驻，收起时列出�
   assert.match(ledger, /saved === "1" \? true : saved === "0" \? false : Boolean\(MOBILE_MQ\.matches\)/);
 });
 
-test("接单区与支付渠道不折叠：没有折叠按钮、没有折叠状态", () => {
+test("接单区、今日报表与支付渠道不折叠：没有折叠按钮、没有折叠状态", () => {
   assert.doesNotMatch(index, /bk-intake-toggle/);
+  assert.doesNotMatch(index, /sheet-collapse-btn|bk-report-wrap collapsed/, "今日报表一直展开");
+  assert.doesNotMatch(ledger, /applyUpperCollapsed/);
   assert.doesNotMatch(ledger, /setIntakeCollapsed|INTAKE_COLLAPSED_KEY/);
   assert.doesNotMatch(channels, /bkd-toggle-btn|bkdExpanded/);
   // 详情常驻后要靠缓存，后台每 5 秒重画不能每行重打请求

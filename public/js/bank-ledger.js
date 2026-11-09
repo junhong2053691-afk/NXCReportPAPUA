@@ -2067,16 +2067,6 @@
     renderGate.remember("pending-skipped", null); // 下一轮无论数据是什么都重画已跳过
   }
 
-  function applyUpperCollapsed(collapsed) {
-    const wrap = document.getElementById("sheet-upper-wrap");
-    const btn = document.getElementById("sheet-collapse-btn");
-    if (!wrap || !btn) return;
-    wrap.classList.toggle("collapsed", collapsed);
-    btn.setAttribute("aria-expanded", collapsed ? "false" : "true");
-    btn.textContent = collapsed ? tr("今日报表 ▸") : tr("今日报表 ▾");
-    try { localStorage.setItem("sheet-upper-collapsed", collapsed ? "1" : "0"); } catch (_) {}
-  }
-
   document.addEventListener("DOMContentLoaded", () => {
     // 老书签 /bank-accounts.html#channels 经 302 落到这里，hash 原样带着。
     if (location.hash === "#channels") {
@@ -2088,8 +2078,11 @@
     if (dateEl) dateEl.value = sheetDate;
     activeBankId = bankFromUrl();
 
-    // 接单区以前能折叠、状态存在 localStorage「bk-intake-collapsed」；现在永远展开，清掉旧值。
-    try { localStorage.removeItem("bk-intake-collapsed"); } catch (_) {}
+    // 接单区与今日报表以前能折叠、状态存在 localStorage；现在永远展开（2026-11-09 用户要求），清掉旧值。
+    try {
+      localStorage.removeItem("bk-intake-collapsed");
+      localStorage.removeItem("sheet-upper-collapsed");
+    } catch (_) {}
     document.getElementById("bk-intake-close")?.addEventListener("click", closeIntakeSheet);
     bindBankList();
     document.addEventListener("keydown", (e) => {
@@ -2103,18 +2096,6 @@
     MOBILE_MQ.addEventListener?.("change", () => { if (!MOBILE_MQ.matches) closeIntakeSheet(); });
     document.getElementById("sheet-bank-filter")?.addEventListener("change", (e) => {
       selectBankFilter(e.target.value);
-    });
-
-    let upperCollapsed = true;
-    try {
-      const saved = localStorage.getItem("sheet-upper-collapsed");
-      if (saved === "0") upperCollapsed = false;
-      else if (saved === "1") upperCollapsed = true;
-    } catch (_) {}
-    applyUpperCollapsed(upperCollapsed);
-    document.getElementById("sheet-collapse-btn")?.addEventListener("click", () => {
-      const wrap = document.getElementById("sheet-upper-wrap");
-      applyUpperCollapsed(!wrap?.classList.contains("collapsed"));
     });
 
     populateStatusFilter();
@@ -2137,7 +2118,6 @@
       renderBankFilter();
       renderBankList();
       renderGrid();
-      applyUpperCollapsed(document.getElementById("sheet-upper-wrap")?.classList.contains("collapsed"));
     });
     setInterval(refreshSharedWorkspace, 5000);
     window.addEventListener("focus", refreshSharedWorkspace);

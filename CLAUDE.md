@@ -240,8 +240,7 @@ $env:TUNNEL_EDGE_IP_VERSION="4"
 
 > 2026-11-09 当日流水重排：顶上是**运营中银行列表**（`renderBankList`，点行与工具栏 `#sheet-bank-filter` 是同一个筛选
 > `selectBankFilter`），下面才是 4 个 KPI；「当前公司 / 流水日期 / 同步状态」那一行删了。银行列表**可以折叠**（头部常驻，
-> 收起时列出实时收款户名，`localStorage["bk-banklist-collapsed"]`，没存过时电脑展开、手机收起）。**接单区与支付渠道每行详情不再折叠**
-> （今日报表的折叠保留）。支付渠道页详情常驻后靠 `bkdDetailCache` 按签名复用，别改回每次重画都重拉。
+> 收起时列出实时收款户名，`localStorage["bk-banklist-collapsed"]`，没存过时电脑展开、手机收起）。**接单区、今日报表与支付渠道每行详情都不再折叠**。支付渠道页详情常驻后靠 `bkdDetailCache` 按签名复用，别改回每次重画都重拉。
 
 > **实时收款银行**（`bank_accounts.live_receiving`，`lib/bankLiveReceiving.js`）：在当日流水**银行列表的每一行**勾，最多 3 个「现在正在收款的户」
 > （2026-11-09 起取代「使用中」：不用的户直接封禁，只要求运营中），
