@@ -1,21 +1,35 @@
 // Escalating alarm: the shared state machine behind every audible warning in
-// the dashboard (platform pending approvals, C STATUS out of balance).
+// the dashboard (platform pending approvals, C STATUS out of balance, bank
+// balance over its limit).
 //
-// The point of this file is that "don't let me miss it" and "don't nag me" are
-// not in conflict once the alarm is allowed to stay quiet for a while. An
-// alarm here NEVER loops. It stays silent for FIRST_DELAY_MS after a problem
-// appears -- long enough that anything you deal with straight away never makes
-// a sound at all -- then plays exactly once, and once more every REPEAT_MS
-// while the problem is still there.
+// By default an alarm stays silent for FIRST_DELAY_MS after a problem appears,
+// then plays exactly once, and once more every REPEAT_MS while the problem is
+// still there. Each caller picks a preset from ALARM_PRESETS instead
+// (2026-11-10, user decision: each kind of alarm gets its own cadence):
+//   pending   -- platform pending approvals: play at once, repeat every 10 min.
+//   reconcile -- C STATUS out of balance: play at once and KEEP playing
+//                (continuous, audio.loop) until somebody presses OK. This is the
+//                only alarm allowed to loop; the user asked for it explicitly.
+//   balance   -- bank balance over its limit: play at once, repeat every 10 min.
+// Acknowledging any of them silences it for SNOOZE_MS.
 //
 // State lives in localStorage keyed by scope, so a page refresh neither
 // restarts the quiet window nor re-fires the sound. That refresh-and-it-
 // screams-again behaviour was the loudest part of the old implementation.
 
-const FIRST_DELAY_MS = 5 * 60 * 1000; // silent grace period after a problem appears
+const FIRST_DELAY_MS = 5 * 60 * 1000; // default silent grace period after a problem appears
 const REPEAT_MS = 10 * 60 * 1000; // gap between repeats once it has fired
 const SNOOZE_MS = 20 * 60 * 1000; // silence after the operator acknowledges
 const TICK_MS = 15 * 1000; // self-driven, so escalation never waits on a page render
+
+// The only place the per-alarm cadence is defined. Callers pass { preset: "..." }.
+// app.js and cross-company-alerts.js share one storage key per company, so both
+// MUST use "pending".
+const ALARM_PRESETS = {
+  pending: { firstDelayMs: 0, repeatMs: REPEAT_MS, snoozeMs: SNOOZE_MS, continuous: false },
+  reconcile: { firstDelayMs: 0, repeatMs: REPEAT_MS, snoozeMs: SNOOZE_MS, continuous: true },
+  balance: { firstDelayMs: 0, repeatMs: REPEAT_MS, snoozeMs: SNOOZE_MS, continuous: false },
+};
 
 function memoryStorage() {
   const map = {};
@@ -47,9 +61,18 @@ function createEscalatingAlarm(options) {
   const now = typeof opts.now === "function" ? opts.now : function () { return Date.now(); };
   const createAudio = typeof opts.createAudio === "function" ? opts.createAudio : defaultCreateAudio;
   const storage = opts.storage || defaultStorage();
-  const firstDelayMs = opts.firstDelayMs == null ? FIRST_DELAY_MS : opts.firstDelayMs;
-  const repeatMs = opts.repeatMs == null ? REPEAT_MS : opts.repeatMs;
-  const snoozeMs = opts.snoozeMs == null ? SNOOZE_MS : opts.snoozeMs;
+  const preset = (opts.preset && ALARM_PRESETS[opts.preset]) || {};
+  function pick(name, fallback) {
+    if (opts[name] != null) return opts[name];
+    if (preset[name] != null) return preset[name];
+    return fallback;
+  }
+  const firstDelayMs = pick("firstDelayMs", FIRST_DELAY_MS);
+  const repeatMs = pick("repeatMs", REPEAT_MS);
+  const snoozeMs = pick("snoozeMs", SNOOZE_MS);
+  // Continuous: loop the sound for as long as the alarm is loud. Only the
+  // reconcile preset does this (see the header).
+  const continuous = !!pick("continuous", false);
 
   let audio = null;
   let sig = "";
@@ -57,6 +80,7 @@ function createEscalatingAlarm(options) {
   let blocked = false;
   let unlocked = false;
   let timer = null;
+  let playing = false; // continuous mode only: is the loop currently running?
 
   function scopeValue() {
     const scope = opts.scope;
@@ -95,14 +119,15 @@ function createEscalatingAlarm(options) {
     if (audio) return audio;
     audio = createAudio(soundSrc);
     if (!audio) return null;
-    // Never loop. A looping alarm is the thing this module exists to replace.
-    audio.loop = false;
+    // Only a continuous alarm loops; everything else plays once per firing.
+    audio.loop = continuous;
     audio.preload = "auto";
     audio.volume = volume;
     return audio;
   }
 
   function stop() {
+    playing = false;
     if (!audio) return;
     try {
       audio.pause();
@@ -113,11 +138,12 @@ function createEscalatingAlarm(options) {
   function play() {
     const a = getAudio();
     if (!a) return;
-    a.loop = false;
+    a.loop = continuous;
     a.muted = false;
     try {
       a.currentTime = 0;
     } catch (_) {}
+    playing = continuous;
     const played = a.play();
     if (played && typeof played.then === "function") {
       played
@@ -128,6 +154,8 @@ function createEscalatingAlarm(options) {
           }
         })
         .catch(function () {
+          // Autoplay blocked: let the next tick try again once the page has been touched.
+          playing = false;
           blocked = true;
           onStageChange(stage, { blocked: blocked });
         });
@@ -189,7 +217,14 @@ function createEscalatingAlarm(options) {
       state.acked = false;
       state.quietUntil = t + repeatMs;
       writeState(state);
-      play();
+      // A continuous alarm that is already looping just keeps going.
+      if (!(continuous && playing)) play();
+    } else if (continuous) {
+      // Continuous: the sound follows the stage. Resume after a refresh / new
+      // instance while still loud; stop if another tab acknowledged it, or the
+      // scope moved to one that is snoozed.
+      if (stageFor(state) === "loud" && !playing) play();
+      else if (stageFor(state) !== "loud" && playing) stop();
     }
     setStage(stageFor(state));
   }
@@ -256,8 +291,17 @@ function createEscalatingAlarm(options) {
     },
     stop: stop,
     dispose: dispose,
+    playing: function () { return playing; },
+    // The signature stored for the current scope (survives a refresh). balance-alerts.js
+    // uses it to carry its "only new problems re-fire" baseline across reloads.
+    storedSig: function () {
+      const state = readState();
+      return (state && state.sig) || "";
+    },
     firstDelayMs: firstDelayMs,
+    repeatMs: repeatMs,
     snoozeMs: snoozeMs,
+    continuous: continuous,
   };
 }
 
@@ -273,5 +317,6 @@ if (typeof module !== "undefined" && module.exports) {
     REPEAT_MS: REPEAT_MS,
     SNOOZE_MS: SNOOZE_MS,
     TICK_MS: TICK_MS,
+    ALARM_PRESETS: ALARM_PRESETS,
   };
 }

@@ -32,6 +32,8 @@
 | DEPOSIT 金额 | `deposit + new`（**不含 `unclaim`**，UNCLAIM 单列） | `deposit + new + amopay` |
 | DEP COUNT | `deposit + amopay` | `deposit + new + amopay`（与金额同一组） |
 | UNIQUE CUST | 当天任何带 username 的流水（含提现）去重 | 只数 DEP 那组状态 |
+| TRANSACTION / 总单 | TRANSACTION = `deposit` / `amopay` / `withdraw` **以外**的所有流水笔数（带不带 username 都算；2026-11-10 按 Excel 确认） | 总单 = DEP单 + WD单（正好相反：只数充值提现） |
+| WIN/LOSE | `TOTAL WIN/LOSE` = DEPOSIT + WITHDRAW（`totals.win_loss`，WITHDRAW 是负数），显示在 REPORT 最底下 | `DEP − WD`，DEP 含 amopay |
 
 同一天两个页面的 DEPOSIT 数字不一样是**对的**。要统一须先和运营对齐 Excel。
 
@@ -129,7 +131,7 @@ operator 停在 A 公司时，B 公司进了**平台待审批单**（`bank_tx_pe
 | **收起** | 不自动消失。只有：点它 / 关掉它；那笔不再是 pending（别人审批或跳过了）；关掉折叠条（折进去的全收） |
 | **已看过** | 每家公司**一组 tx 的 `bank_tx_pending.id`**（不是一个水位线：关掉 50 号不能吞掉还开着的 45 号），存 localStorage `cross-company-seen`，多标签页共享。只在两种情况记：点或关掉通知；**停在某家时，它当前全部 pending 自动记上**——所以切回别家后不会把刚处理剩下的再弹一遍 |
 | **刷新 / 刚登录** | 没关掉、仍是 pending 的照样弹（第一次没有记录 = 积着的全弹） |
-| **报警** | 每家别家一个 escalating alarm，规则同 `alarm.js`（静默 5 分钟 → 响一遍 → 每 10 分钟一遍）、同一个 `platform-pending.mp3`。与当前公司报警**共用 key** `bank-pending-alarm:<公司>`，所以切公司不重置静默期 |
+| **报警** | 每家别家一个 escalating alarm，规则同 `alarm.js` 的 `pending` 预设（2026-11-10 起：来单立刻响一遍 → 每 10 分钟一遍）、同一个 `platform-pending.mp3`。与当前公司报警**共用 key** `bank-pending-alarm:<公司>`，所以切公司不重置静默期 |
 | **知道了（ack）** | 点开或关掉某家**任意一条**通知 = ack 那家（静默 20 分钟），别家照常计时 |
 
 ### 与「平台待审批报警」（当前公司）的关系

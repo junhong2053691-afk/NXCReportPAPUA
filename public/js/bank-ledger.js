@@ -1,9 +1,13 @@
 (function () {
   "use strict";
 
-  // 当日流水页（/bank-ledger.html）：运营中银行列表（点行筛流水、逐行勾实时收款）、流水表格、
-  // 接单区（平台单审批 / 已跳过）、调钱、今日报表、C STATUS 与未对平报警。渠道编辑 / 封禁 /
-  // 归档在 bank-channels.js（2026-11 拆页），两页共用的格式化与口径在 bank-common.js。
+  // 一份脚本、两种视图（2026-11-10 拆页，按 .bkv2 的 data-view 分流）：
+  //   workspace = 交易页（/bank-ledger.html）：运营中渠道列表（逐行勾实时收款，点行去交易记录）+
+  //               右侧今日报表 + KPI + 未对平报警 + 接单区（平台单审批 / 已跳过）+ 调钱。没有流水表。
+  //   records   = 交易记录页（/bank-transactions.html）：流水表（渠道 / STATUS / 搜索筛选、编辑、
+  //               最近删除、OPERATOR 列）。不跑接单区，待审批角标与报警声由 app.js 负责。
+  // 页面里缺的节点各函数都 ?. 容错，真正分流的只有 VIEW 判断的那几处。
+  // 渠道编辑 / 封禁 / 归档在 bank-channels.js，两页共用的格式化与口径在 bank-common.js。
   //
   // 渠道生命周期判定的唯一入口（镜像见 app.js 的 window.BankLifecycle，真源在
   // server/lib/bankLifecycle.js）。不要在本文件里再写 lifecycle_status 的字面量比较——
@@ -22,6 +26,9 @@
   let companyOptions = [];
   const ALL_BANKS = "all";
   let activeBankId = ALL_BANKS;
+  const RECORDS_URL = "/bank-transactions.html";
+  const VIEW = document.querySelector(".bkv2")?.dataset.view === "records" ? "records" : "workspace";
+  const IS_RECORDS = VIEW === "records";
   // 手机上流水卡片默认只显示摘要，点开的那几张记在这里（同上，整块重渲染不能丢）。
   const openLedgerCards = new Set();
   const MOBILE_MQ = window.matchMedia ? window.matchMedia("(max-width: 700px)") : { matches: false };
@@ -535,6 +542,21 @@
     // is in I18N_ATTRS and would otherwise run the cell text through the engine.
     return `<td class="${cls}" translate="no" title="${esc(text)}"${style}>${esc(text)}</td>`;
   }
+  // OPERATOR 列（交易记录页）：录入 / 审批人，被别人改过时下面小字写最后修改人。名字来自审计表
+  // （server/lib/ledgerOperators.js），审计上线前的老流水两项都空，显示「—」。只读、没有 data-f，
+  // readRow / focusGridCell 都按 input[data-f] 取值，碰不到这一格。
+  function operatorCellHtml(r) {
+    if (!r) return '<td class="col-operator ro-cell"></td>';
+    const creator = Number(r.created_by_system) ? "" : String(r.created_by || "").trim();
+    const editor = String(r.updated_by || "").trim();
+    const main = Number(r.created_by_system)
+      ? "<span>系统</span>"
+      : creator ? `<span translate="no">${esc(creator)}</span>` : '<span class="sheet-op-none">—</span>';
+    const edited = editor && editor !== creator
+      ? `<small class="sheet-op-edit"><span>改</span> · <span translate="no">${esc(editor)}</span></small>`
+      : "";
+    return `<td class="col-operator ro-cell">${main}${edited}</td>`;
+  }
   function buildGridRow(r, no, isNew) {
     const id = r?.id;
     if (!isNew && editingRowId !== id) {
@@ -544,6 +566,7 @@
       return `<tr class="sheet-grid-row sheet-row-ro${openLedgerCards.has(id) ? " m-open" : ""}" data-id="${id}"${expandedAttr}>
         <td class="col-no">${no}</td>
         ${GRID_FIELDS.map((f) => roCellHtml(f, v[f])).join("")}
+        ${operatorCellHtml(r)}
         <td class="col-act"><a class="sheet-history admin-audit-link" href="/audit-history.html?ledger_id=${id}" title="\u67e5\u770b\u64cd\u4f5c\u5386\u53f2" aria-label="\u67e5\u770b\u6d41\u6c34\u64cd\u4f5c\u5386\u53f2">${renderIcon("history", { size: 15 })}<span class="icon-fallback">\u53f2</span></a><button type="button" class="sheet-edit" data-id="${id}" title="\u7f16\u8f91\u6d41\u6c34" aria-label="\u7f16\u8f91\u6d41\u6c34">${renderIcon("pencil", { size: 15 })}<span class="icon-fallback">\u7f16</span></button><button type="button" class="sheet-del" data-id="${id}" title="\u5220\u9664\u6d41\u6c34" aria-label="\u5220\u9664\u6d41\u6c34">${renderIcon("trash-2", { size: 15 })}<span class="icon-fallback">\u5220</span></button></td>
       </tr>`;
     }
@@ -552,6 +575,7 @@
     return `<tr class="sheet-grid-row${isNew ? " grid-row-new" : " grid-row-editing"}"${id ? ` data-id="${id}"` : ""}>
       <td class="col-no">${isNew ? "+" : no}</td>
       ${GRID_FIELDS.map((f) => gridCellHtml(f, v[f], f === "bank_acc" ? bankId : null)).join("")}
+      ${operatorCellHtml(isNew ? null : r)}
       <td class="col-act"><button type="button" class="sheet-save" title="\u4fdd\u5b58\u6d41\u6c34" aria-label="\u4fdd\u5b58\u6d41\u6c34">${renderIcon("check", { size: 16 })}<span class="icon-fallback">\u5b58</span></button><button type="button" class="sheet-cancel" title="\u53d6\u6d88\u7f16\u8f91" aria-label="\u53d6\u6d88\u7f16\u8f91">${renderIcon("x", { size: 16 })}<span class="icon-fallback">\u6d88</span></button></td>
     </tr>`;
   }
@@ -846,6 +870,8 @@
     }
   }
   function loadSheet(opts) {
+    // 交易页 2026-11-10 起既没有流水表也没有 IN / OUT / HELP TRF 卡片，不用拉当天流水。
+    if (!IS_RECORDS) return Promise.resolve();
     const request = ++ledgerLoadRequest;
     if (!bankRows.length) {
       if (isGridBusy()) return Promise.resolve();
@@ -905,6 +931,8 @@
     }).catch(() => {});
   }
   function refreshPendingBadge() {
+    // 交易记录页没有接单区；角标与报警声 app.js 的 startBankPendingWatcher 在每一页都管着。
+    if (IS_RECORDS) return Promise.resolve();
     return api("/api/banks/pending-counts", { bg: true }).then((d) => {
       const total = Number(d.total || 0);
       const platformCount = Number(d.pending_tx || 0);
@@ -1046,9 +1074,6 @@
     set("total-in", tin);
     set("total-out", tout ? -tout : 0);
     set("total-help-trf", thelp);
-    set("sum-in", tin);
-    set("sum-out", tout ? -tout : 0);
-    set("sum-help", thelp);
   }
   function renderGrid() {
     const tbody = document.getElementById("sheet-grid");
@@ -1064,7 +1089,7 @@
     });
     const rowsHtml = filtered.map((r, i) => buildGridRow(r, i + 1, false)).join("");
     const emptyHtml = !rowsHtml && !adding
-      ? `<tr><td colspan="14" class="sheet-empty">${q || sf ? "\u6ca1\u6709\u5339\u914d\u7b5b\u9009\u6761\u4ef6\u7684\u6d41\u6c34" : "\u5f53\u5929\u6682\u65e0\u6d41\u6c34"}</td></tr>`
+      ? `<tr><td colspan="15" class="sheet-empty">${q || sf ? "\u6ca1\u6709\u5339\u914d\u7b5b\u9009\u6761\u4ef6\u7684\u6d41\u6c34" : "\u5f53\u5929\u6682\u65e0\u6d41\u6c34"}</td></tr>`
       : "";
     tbody.innerHTML = rowsHtml + emptyHtml + (adding ? buildGridRow(null, "+", true) : "");
     renderIcons(tbody);
@@ -1088,15 +1113,10 @@
     }
   }
   function renderDailyPanels() {
-    renderBanksPanel();
-    renderBankList(); // 余额 / COUNT / OUTFLOW 来自所选日期的日报
+    renderBankList(); // 余额 / COUNT / OUTFLOW / TOTAL BALANCE 来自所选日期的日报
     renderReconcileAlertV2();
     renderReportPanel();
     renderCstatusPanel();
-  }
-  function renderBanksPanel() {
-    const sumBal = document.getElementById("sum-balance");
-    if (sumBal) sumBal.textContent = fmt(totalBalance());
   }
   function reportValClass(label, value, isMetric) {
     if (isMetric) return "";
@@ -1110,6 +1130,13 @@
       return v ? "report-neg" : "";
     }
     return "";
+  }
+  // TOTAL WIN/LOSE = DEPOSIT + WITHDRAW（WITHDRAW 本身是负数），与运营 Excel 同口径。
+  // 数字来自后端日报 totals.win_loss（bankReport.js），前端不重算。
+  function winLoseRowHtml() {
+    const v = Number(dailyReport?.totals?.win_loss || 0);
+    const cls = v > 0 ? "report-pos" : v < 0 ? "report-neg" : "";
+    return `<tr class="report-total-row"><td class="report-label">TOTAL WIN/LOSE</td><td class="num-col report-val ${cls}">${fmtSigned(v)}</td><td></td><td></td></tr>`;
   }
   function renderReportPanel() {
     const tbody = document.getElementById("sheet-report-rows");
@@ -1126,7 +1153,7 @@
           ? `<td class="report-label">${esc(p.rightLabel)}</td><td class="num-col report-val">${p.rightIsMetric === false ? fmtSigned(p.rightValue) : fmtMetric(p.rightValue)}</td>`
           : `<td></td><td></td>`;
         return `<tr><td class="report-label">${esc(p.leftLabel)}</td><td class="num-col report-val ${leftCls}">${leftVal}</td>${right}</tr>`;
-      }).join("");
+      }).join("") + winLoseRowHtml();
       return;
     }
     const rows = dailyReport?.reportRows || [];
@@ -1168,10 +1195,12 @@
     if (typeof window.createEscalatingAlarm !== "function") return null;
     purgeLegacyReconcileKeys();
     reconcileAlarm = window.createEscalatingAlarm({
+      // 只要不平就一直响，按 OK 停 20 分钟（2026-11-10 用户要求，alarm.js 的 reconcile 预设）。
+      preset: "reconcile",
       soundSrc: RECONCILE_ALARM_SOUND,
       keyPrefix: "bank-reconcile-alarm",
       scope: reconcileScope,
-      // renderDailyPanels only runs on the 5 minute loadDailyReport loop, far too
+      // renderDailyPanels only runs on the 1 minute loadDailyReport loop, too
       // coarse to drive escalation, so the alarm ticks itself and asks for a redraw.
       onStageChange: () => renderReconcileAlertV2(),
     });
@@ -1223,14 +1252,18 @@
     let noteText = "";
     if (loud) noteText = alarm.blocked() ? "点击页面后声音可用" : "";
     else if (alarm && alarm.acked()) noteText = "已暂停，20分钟后复查";
-    else noteText = "已记录，5分钟内未处理会提醒";
     const note = noteText ? `<span class="reconcile-alert-note">${noteText}</span>` : "";
     box.innerHTML = `<span class="reconcile-alert-title">检查账目</span><span class="reconcile-alert-text">C STATUS 未对平：</span>${items}${note}<button type="button" class="btn btn-outline btn-xs reconcile-ok">OK</button>`;
   }
 
   function focusLedgerByCstatus(name) {
+    if (!name) return;
     const query = document.getElementById("sheet-search");
-    if (!query || !name) return;
+    // 交易页没有流水表：带着名字去交易记录页，那边读 ?q= 填进搜索框。
+    if (!query) {
+      location.href = `${RECORDS_URL}?q=${encodeURIComponent(name)}`;
+      return;
+    }
     activeBankId = ALL_BANKS;
     const statusFilter = document.getElementById("sheet-status-filter");
     if (statusFilter) statusFilter.value = "";
@@ -1468,52 +1501,69 @@
         refreshDepositBankSelects();
       });
   }
-  // ---- 运营中银行列表（页面顶上，2026-11-09 从支付渠道页搬回来）--------------------
-  // 只列运营中的户。点行 = 按这个渠道筛流水（与工具栏下拉同一个筛选），再点一次回到全部；
-  // 每行的「实时收款」勾就是实时收款名单的唯一入口（取代了原来的「使用中」与接单区顶上的勾选器）。
-  // 编辑 / 封禁 / 归档 / 排序仍在支付渠道页。
+  // ---- 运营中渠道列表（交易页左上，右边是今日报表）---------------------------------
+  // 只列运营中的户。2026-11-10 收紧成一行四格：
+  //   [实时收款勾] [实时收款 / 人头·幽灵·PG / ⚠️ 标签 + BANK BRANCH / NAME] [余额 / 上限 + 进度条] [BALANCE | COUNT | OUTFLOW]
+  // 每行最左的勾是实时收款名单的唯一入口；银行资料与 Copy info 只留在支付渠道页。
+  // 点行 = 去交易记录页并筛到这个渠道（流水表已搬过去）。编辑 / 封禁 / 归档 / 排序仍在支付渠道页。
   //
-  // 列表**一直展开、不能折叠**（2026-11-09 当天先加了整块收起，用户又要去掉）。接单区、今日报表
-  // 同样不折叠；能折叠的只有支付渠道页每行详情（默认收起、点 ▸ 展开）。
-  function bankListRowHtml(b, index) {
+  // 列表**一直展开、不能折叠**（2026-11-09 用户要求）。接单区、今日报表同样不折叠。
+  function limitHtml(b) {
+    const balance = BC.bankDisplayBalance(b, dailyReport);
+    const threshold = Number(b.alert_threshold || 0);
+    const level = BC.limitLevel(balance, threshold);
+    const balHtml = `<strong translate="no">${fmt(balance)}</strong>`;
+    if (!level) {
+      return `<div class="bk-limit bk-limit-none"><div class="bk-limit-nums">${balHtml}<span class="bk-limit-sep">/</span><span class="bk-limit-cap">未设上限</span></div></div>`;
+    }
+    const pct = Math.max(0, Math.min(100, (balance / threshold) * 100));
+    return `<div class="bk-limit is-${level}"><div class="bk-limit-nums">${balHtml}<span class="bk-limit-sep">/</span><span class="bk-limit-cap" translate="no">${fmtMetric(threshold)}</span></div>`
+      + `<div class="bk-limit-bar" role="meter" aria-label="${esc(tr("余额 / 上限"))}" aria-valuemin="0" aria-valuemax="${threshold}" aria-valuenow="${Math.max(0, balance)}"><span style="width:${pct.toFixed(1)}%"></span></div></div>`;
+  }
+  function bankListRowHtml(b) {
     const stats = (dailyReport?.bankRows || []).find((r) => r.id === b.id);
-    const isPG = String(b.account_kind || "nominee") === "payment_gateway";
+    const kind = String(b.account_kind || "nominee");
+    const isPG = kind === "payment_gateway";
     const excluded = BC.isBalanceExcluded(b);
     const live = Number(b.live_receiving) === 1;
     const full = liveBanks().length >= LIVE_MAX;
     const disabled = liveSaving || (full && !live);
     const bankLabel = bankBranchOf(b) || "未命名渠道";
     const accountName = String(b.account_name || "").trim();
-    const nameHtml = accountName ? `<div class="bk-channel-sub"><span class="bk-name-label">NAME</span><span translate="no">${esc(accountName)}</span></div>` : "";
-    const flags = (isPG ? '<span class="bk-flag bk-flag-pg" title="PaymentGateway 余额不计入合计">PG</span>' : "")
-      + (live ? '<span class="bk-flag bk-flag-live">实时收款</span>' : "")
+    const tags = (live ? '<span class="bk-flag bk-flag-live">实时收款</span>' : "")
+      + (isPG
+        ? '<span class="bk-flag bk-flag-pg" title="PaymentGateway 余额不计入合计">PG</span>'
+        : `<span class="kind-tag kind-${esc(kind)}">${esc(BC.KIND_LABEL[kind] || kind)}</span>`)
       + (BC.alertThresholdReached(b, dailyReport) ? '<span class="bk-flag bk-flag-alert" title="余额已达报警阈值">⚠️</span>' : "");
-    const kind = b.account_kind || "nominee";
-    const liveTitle = disabled && !live && !liveSaving ? ` title="${esc(tr("最多选 3 个"))}"` : "";
-    return `<article class="bk-bank-row${activeBankId === b.id ? " active" : ""}${isPG ? " bk-bank-row-pg" : ""}${live ? " is-live" : ""}" data-id="${b.id}" role="listitem" tabindex="0" title="${esc(tr("点击渠道行可筛选流水"))}">
-<div class="bk-col-order"><span class="bk-row-no">${index + 1}</span></div>
-<div class="bk-col-channel"><div class="bk-channel-name"><strong translate="no">${esc(bankLabel)}</strong>${flags}</div>${nameHtml}<div class="bk-channel-meta"><span class="kind-tag kind-${esc(kind)}">${esc(BC.KIND_LABEL[kind] || kind)}</span></div></div>
-<div class="bk-col-info">${BC.bankInfoHtml(b)}</div>
-<div class="bk-col-balance"><div class="bk-metric-grid"><div class="bk-metric bk-metric-balance"><span>BALANCE</span><strong class="bk-row-balance${excluded ? " bk-balance-excluded" : ""}">${fmt(BC.bankDisplayBalance(b, dailyReport))}</strong></div><div class="bk-metric"><span>COUNT</span><strong>${fmtMetric(Number(stats?.tx_count ?? 0))}</strong></div><div class="bk-metric bk-metric-outflow"><span>TOTAL OUTFLOW</span><strong>${fmt(Math.abs(Number(stats?.total_outflow ?? 0)))}</strong></div></div>${excluded ? '<span class="bk-row-flow bk-excluded-note">不计入总余额</span>' : ""}</div>
-<div class="bk-col-actions"><label class="bk-live-toggle${live ? " is-on" : ""}${disabled ? " is-disabled" : ""}"${liveTitle}><input type="checkbox" class="bk-live-chk" data-id="${b.id}"${live ? " checked" : ""}${disabled ? " disabled" : ""}><span>实时收款</span></label><button type="button" class="bk-copy-btn" data-copy-bank-id="${b.id}" title="Copy complete bank information"><i data-lucide="copy"></i><span>Copy info</span></button></div>
+    const liveTitle = disabled && !live && !liveSaving ? tr("最多选 3 个") : tr("实时收款");
+    const metric = (label, value, cls) => `<div class="bk-mini${cls ? ` ${cls}` : ""}"><span>${label}</span><strong translate="no">${value}</strong></div>`;
+    return `<article class="bk-bank-row${isPG ? " bk-bank-row-pg" : ""}${live ? " is-live" : ""}" data-id="${b.id}" role="listitem" tabindex="0" title="${esc(tr("点击查看这个渠道的交易记录"))}">
+<label class="bk-col-live${disabled ? " is-disabled" : ""}" title="${esc(liveTitle)}"><input type="checkbox" class="bk-live-chk" data-id="${b.id}" aria-label="${esc(liveTitle)}"${live ? " checked" : ""}${disabled ? " disabled" : ""}></label>
+<div class="bk-col-channel"><div class="bk-channel-tags">${tags}</div><div class="bk-channel-text"><strong translate="no">${esc(bankLabel)}</strong>${accountName ? `<span translate="no">${esc(accountName)}</span>` : ""}</div></div>
+<div class="bk-col-limit">${limitHtml(b)}</div>
+<div class="bk-col-metrics${excluded ? " is-excluded" : ""}"${excluded ? ` title="${esc(tr("不计入总余额"))}"` : ""}>${metric("BALANCE", fmt(BC.bankDisplayBalance(b, dailyReport)), excluded ? "bk-balance-excluded" : "")}${metric("COUNT", fmtMetric(Number(stats?.tx_count ?? 0)))}${metric("OUTFLOW", fmt(Math.abs(Number(stats?.total_outflow ?? 0))), "bk-mini-out")}</div>
 </article>`;
   }
   function renderBankList() {
     const box = document.getElementById("bk-banklist");
     if (!box) return;
     const list = usableBanks();
-    const all = activeBankId === ALL_BANKS || !activeBankId;
     const live = liveBanks();
     const head = `<div class="bk-banklist-head"><span class="bk-banklist-title"><strong>运营中</strong><b translate="no">${list.length}</b><span>个渠道</span></span>`
       + `<span class="bk-banklist-live"><span>实时收款</span> <b translate="no">${live.length} / ${LIVE_MAX}</b></span>`
-      + `<button type="button" class="btn btn-outline btn-xs bk-banklist-all${all ? " active" : ""}" data-bank-select="all" aria-pressed="${all ? "true" : "false"}">全部渠道</button></div>`;
+      + `<a class="bk-banklist-all" href="${RECORDS_URL}">交易记录 →</a></div>`;
     const body = list.length
-      ? `<div class="bk-channel-list" role="list"><div class="bk-channel-list-head" aria-hidden="true"><span>NO</span><span>BANK BRANCH / NAME</span><span>BSB / ACCOUNT / PAYID</span><span>BALANCE / COUNT / OUTFLOW</span><span>实时收款</span></div>`
-        + list.map(bankListRowHtml).join("")
+      ? `<div class="bk-channel-list" role="list"><div class="bk-channel-list-head" aria-hidden="true"><span>收款</span><span>BANK BRANCH / NAME</span><span>余额 / 上限</span><span>BALANCE / COUNT / OUTFLOW</span></div>`
+        + list.map((b) => bankListRowHtml(b)).join("")
         + "</div>"
+        // TOTAL BALANCE：照 Excel 放在渠道列表最底下（2026-11-10 取代顶上的四个 KPI 卡片）。
+        // 口径同后端 total_balance：只合计运营中、非 PG 的户，与 BALANCE 列同一天同一口径。
+        + `<div class="bk-banklist-total" title="${esc(tr("只合计运营中、非 PG 渠道"))}"><span>TOTAL BALANCE</span><strong translate="no">${fmt(totalBalance())}</strong></div>`
       : '<div class="bk-banklist-empty">暂无运营渠道</div>';
     box.innerHTML = head + `<div class="bk-banklist-body" id="bk-banklist-body">${body}</div>`;
-    renderIcons(box);
+  }
+  function openBankRecords(id) {
+    location.href = `${RECORDS_URL}?bank=${encodeURIComponent(id)}`;
   }
   function bindBankList() {
     const box = document.getElementById("bk-banklist");
@@ -1528,28 +1578,16 @@
       saveLiveReceiving(ids);
     });
     box.addEventListener("click", (e) => {
-      if (e.target.closest('[data-bank-select="all"]')) {
-        selectBankFilter(ALL_BANKS);
-        return;
-      }
-      const copy = e.target.closest("[data-copy-bank-id]");
-      if (copy) {
-        BC.copyBankInfo(bankRows.find((b) => b.id === Number(copy.dataset.copyBankId)));
-        return;
-      }
       if (e.target.closest("input, label, button, a")) return;
       const row = e.target.closest(".bk-bank-row[data-id]");
-      if (!row) return;
-      const id = Number(row.dataset.id);
-      selectBankFilter(activeBankId === id ? ALL_BANKS : id);
+      if (row) openBankRecords(Number(row.dataset.id));
     });
     box.addEventListener("keydown", (e) => {
       if (e.key !== "Enter" && e.key !== " ") return;
       const row = e.target.closest?.(".bk-bank-row[data-id]");
       if (!row || e.target !== row) return;
       e.preventDefault();
-      const id = Number(row.dataset.id);
-      selectBankFilter(activeBankId === id ? ALL_BANKS : id);
+      openBankRecords(Number(row.dataset.id));
     });
   }
   // 待处理平台单：先画一批，「显示更多」往后追加，不重画已有的行（员工填了一半的不丢）。
@@ -2014,6 +2052,15 @@
 
   const MOBILE_TAB_ACTIONS = ["pending", "ledger", "transfer", "channels"];
   function runMobileTab(action) {
+    // 交易记录页没有接单区和调钱表单：回交易页执行（那边读 hash）。
+    if (IS_RECORDS && (action === "pending" || action === "transfer")) {
+      location.href = `/bank-ledger.html#${action}`;
+      return;
+    }
+    if (!IS_RECORDS && action === "ledger") {
+      location.href = RECORDS_URL;
+      return;
+    }
     if (action === "pending") openIntake("tx");
     else if (action === "transfer") openTransferModal();
     // 渠道已经是独立的一页（老书签 /bank-accounts.html#channels 也会走到这里）。
@@ -2049,7 +2096,16 @@
     sheetDate = todaySydney();
     const dateEl = document.getElementById("sheet-date");
     if (dateEl) dateEl.value = sheetDate;
-    activeBankId = bankFromUrl();
+    // 交易页的 KPI 永远是全部渠道；只有交易记录页认 ?bank=（支付渠道页 / 交易页点渠道行带过来）
+    // 和 ?q=（对平告警、C STATUS 面板点名字带过来）。
+    activeBankId = IS_RECORDS ? bankFromUrl() : ALL_BANKS;
+    if (IS_RECORDS) {
+      try {
+        const q = new URLSearchParams(location.search).get("q");
+        const search = document.getElementById("sheet-search");
+        if (q && search) search.value = q;
+      } catch (_) {}
+    }
 
     // 接单区、今日报表与银行列表以前能折叠、状态存在 localStorage；现在永远展开（2026-11-09 用户要求），清掉旧值。
     try {
@@ -2099,8 +2155,8 @@
       if (!document.hidden) refreshSharedWorkspace();
     });
     setInterval(refreshPendingBadge, 8000);
-    // Patrol linked C STATUS reconciliation every five minutes.
-    setInterval(loadDailyReport, 5 * 60 * 1000);
+    // Patrol linked C STATUS reconciliation every minute (2026-11-10: was five).
+    setInterval(loadDailyReport, 60 * 1000);
     document.getElementById("reconcile-alert")?.addEventListener("click", (e) => {
       const focus = e.target.closest(".reconcile-focus");
       if (focus) {

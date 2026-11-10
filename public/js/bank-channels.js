@@ -74,7 +74,7 @@
       renderChannels();
     });
   }
-  // 余额 / 笔数 / 流出的口径与当日流水页一致：取今天的日报，只用 bankRows 与 totals。
+  // 余额 / 笔数 / 流出的口径与交易页一致：取今天的日报，只用 bankRows 与 totals。
   function loadDailyReport(opts) {
     const request = ++reportLoadRequest;
     return api(`/api/banks/daily-report?date=${encodeURIComponent(todaySydney())}`, { bg: true })
@@ -118,10 +118,10 @@
     if (stats.isPG) {
       return '<span class="bk-flag bk-flag-pg" title="PaymentGateway 余额不计入合计">PG</span>' + alertFlag;
     }
-    // 「使用中 / 未启用」2026-11-09 取消，换成只读的「实时收款」标（在当日流水的银行列表里勾）。
+    // 「使用中 / 未启用」2026-11-09 取消，换成只读的「实时收款」标（在交易页的渠道列表里勾）。
     return (Number(b.live_receiving) ? '<span class="bk-flag bk-flag-live">实时收款</span>' : "") + alertFlag;
   }
-  // 「运营中」页签的一行。点行本身去当日流水（筛到这个渠道），操作按钮各管各的。
+  // 「运营中」页签的一行。点行本身去交易记录（筛到这个渠道），操作按钮各管各的。
   function bankDirectoryRowHtml(b, index, draggable) {
     const stats = bankDirectoryStats(b);
     const bankLabel = bankBranchOf(b) || "未命名渠道";
@@ -131,7 +131,7 @@
     const handle = draggable
       ? `<button type="button" class="bk-order-handle" draggable="true" aria-label="Drag ${esc(bankLabel)} to reorder" title="Drag to reorder"><i data-lucide="grip-vertical"></i></button>`
       : "";
-    return `<article class="bk-bank-row${stats.isPG ? " bk-bank-row-pg" : ""}" data-id="${b.id}" role="listitem" tabindex="0"${drag} title="${esc(tr("点击查看这个渠道的当日流水"))}">
+    return `<article class="bk-bank-row${stats.isPG ? " bk-bank-row-pg" : ""}" data-id="${b.id}" role="listitem" tabindex="0"${drag} title="${esc(tr("点击查看这个渠道的交易记录"))}">
 <div class="bk-col-order">${handle}<span class="bk-row-no">${index + 1}</span></div>
 <div class="bk-col-channel"><span class="bk-field-group-label bk-channel-label">BANK BRANCH</span><div class="bk-channel-name"><strong translate="no">${esc(bankLabel)}</strong>${bankDirectoryStatusHtml(b, stats)}</div>${nameHtml}<div class="bk-channel-meta"><span class="kind-tag kind-${esc(b.account_kind || "nominee")}">${esc(KIND_LABEL[b.account_kind] || b.account_kind || "人头")}</span></div></div>
 <div class="bk-col-info"><span class="bk-field-group-label">银行资料</span>${BC.bankInfoHtml(b)}</div>
@@ -830,8 +830,9 @@
     renderBkdPanel();
   }
 
+  // 流水表 2026-11-10 起在交易记录页（交易页只剩接单区与渠道概览）。
   function goToLedger(bankId) {
-    location.href = `/bank-ledger.html?bank=${encodeURIComponent(bankId)}`;
+    location.href = `/bank-transactions.html?bank=${encodeURIComponent(bankId)}`;
   }
 
   function reloadAll() {
@@ -870,7 +871,7 @@
     // 手机：转出 / 别家公司的 C STATUS 输入框点开底部抽屉选（cstatus-sheet.js）。
     window.bindCstatusSheet?.(cStatusNames);
 
-    // 点渠道行（按钮、复选框、展开的详情之外）→ 去当日流水，并筛到这个渠道。
+    // 点渠道行（按钮、复选框、展开的详情之外）→ 去交易记录，并筛到这个渠道。
     bankDirectory?.addEventListener("click", (e) => {
       const copyBankBtn = e.target.closest("[data-copy-bank-id]");
       if (copyBankBtn) {

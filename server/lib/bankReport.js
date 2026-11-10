@@ -292,10 +292,11 @@ function computeBankDailyReport(db, companyId, opts = {}) {
       if (TOTAL_OUTFLOW_STATUSES.has(status)) bank.total_outflow -= amountOut + helpAmount;
     }
 
-    if (row.username) {
-      transactionCount += 1;
-      userSet.add(String(row.username).trim());
-    }
+    if (row.username) userSet.add(String(row.username).trim());
+    // TRANSACTION = 充值（DEP COUNT 那几种 status）与提现以外的所有流水笔数，带不带 USERNAME
+    // 都算（2026-11-10 用户按运营 Excel 确认：Excel 当天 TRANSACTION 22、DEP COUNT 38）。
+    // 以前是「带 USERNAME 的笔数」，于是永远 ≥ DEP COUNT，和 Excel 对不上。
+    if (status !== "deposit" && status !== "amopay" && status !== "withdraw") transactionCount += 1;
 
     // HELP TRF 列的钱同样是这笔流水的金额，只是没走我方银行账户，STATUS 汇总照常计入
     // （Excel 的 WITHDRAW 合计含 HELP TRF 那几笔）。前端 splitHelpTrf 按 status 决定它

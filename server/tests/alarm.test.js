@@ -219,6 +219,123 @@ test("thresholds are the agreed 5 / 15 minute escalation", () => {
   assert.equal(SNOOZE_MS, 20 * MINUTE);
 });
 
+// ── Per-alarm presets (2026-11-10: each kind of alarm gets its own cadence) ──
+
+const { ALARM_PRESETS } = require("../../public/js/alarm");
+
+test("presets: pending and balance fire at once, reconcile loops until OK", () => {
+  assert.equal(ALARM_PRESETS.pending.firstDelayMs, 0);
+  assert.equal(ALARM_PRESETS.pending.repeatMs, 10 * MINUTE);
+  assert.equal(ALARM_PRESETS.pending.snoozeMs, 20 * MINUTE);
+  assert.equal(ALARM_PRESETS.pending.continuous, false);
+  assert.equal(ALARM_PRESETS.balance.firstDelayMs, 0);
+  assert.equal(ALARM_PRESETS.balance.repeatMs, 10 * MINUTE);
+  assert.equal(ALARM_PRESETS.balance.continuous, false);
+  assert.equal(ALARM_PRESETS.reconcile.firstDelayMs, 0);
+  assert.equal(ALARM_PRESETS.reconcile.snoozeMs, 20 * MINUTE);
+  assert.equal(ALARM_PRESETS.reconcile.continuous, true);
+});
+
+test("app.js and cross-company-alerts.js share a key, so both must use the pending preset", () => {
+  const fs = require("node:fs");
+  const path = require("node:path");
+  const app = fs.readFileSync(path.join(__dirname, "../../public/js/app.js"), "utf8");
+  const xco = require("../../public/js/cross-company-alerts");
+  assert.match(app, /preset: "pending"/);
+  assert.equal(xco.XCO_ALARM_PRESET, "pending");
+});
+
+test("pending preset: plays once immediately, never loops, repeats every 10 min", () => {
+  const h = harness({ preset: "pending" });
+  h.alarm.update("pending");
+  assert.equal(h.player.plays.length, 1, "an order coming in sounds straight away");
+  assert.equal(h.player.plays[0].loop, false);
+  assert.equal(h.alarm.stage(), "loud");
+
+  h.clock.t += REPEAT_MS - 1000;
+  h.alarm.tick();
+  assert.equal(h.player.plays.length, 1);
+  h.clock.t += 1000;
+  h.alarm.tick();
+  assert.equal(h.player.plays.length, 2);
+});
+
+test("pending preset: rebuilding the instance (a refresh) does not re-fire", () => {
+  const h = harness({ preset: "pending" });
+  h.alarm.update("pending");
+  assert.equal(h.player.plays.length, 1);
+  const player2 = fakePlayer();
+  const fresh = createEscalatingAlarm(Object.assign({}, h.opts, { createAudio: player2.create, onStageChange: function () {} }));
+  h.clock.t += 5000;
+  fresh.update("pending");
+  assert.equal(player2.plays.length, 0);
+});
+
+test("explicit options still override a preset", () => {
+  const h = harness({ preset: "pending", firstDelayMs: 60 * 1000 });
+  h.alarm.update("pending");
+  assert.equal(h.player.plays.length, 0);
+  assert.equal(h.alarm.firstDelayMs, 60 * 1000);
+});
+
+test("reconcile preset: loops from the first moment and stops only on acknowledge", () => {
+  const h = harness({ preset: "reconcile" });
+  h.alarm.update("cimb:100");
+  assert.equal(h.player.plays.length, 1);
+  assert.equal(h.player.plays[0].loop, true, "keeps ringing for as long as it is out of balance");
+  assert.equal(h.alarm.playing(), true);
+
+  // Ticks while still looping must not restart the sound.
+  for (let i = 0; i < 80; i += 1) {
+    h.clock.t += 15 * 1000;
+    h.alarm.tick();
+  }
+  assert.equal(h.player.plays.length, 1, "a running loop is left alone, even past REPEAT_MS");
+
+  h.alarm.acknowledge();
+  assert.equal(h.alarm.playing(), false);
+  assert.equal(h.alarm.stage(), "quiet");
+
+  h.clock.t += SNOOZE_MS - 1000;
+  h.alarm.tick();
+  assert.equal(h.player.plays.length, 1, "OK silences it for 20 minutes");
+  h.clock.t += 1000;
+  h.alarm.tick();
+  assert.equal(h.player.plays.length, 2, "still out of balance after the snooze: rings again");
+  assert.equal(h.alarm.playing(), true);
+});
+
+test("reconcile preset: resolving the problem stops the loop", () => {
+  const h = harness({ preset: "reconcile" });
+  h.alarm.update("cimb:100");
+  h.alarm.update("");
+  assert.equal(h.alarm.playing(), false);
+  assert.equal(h.alarm.stage(), "quiet");
+});
+
+test("reconcile preset: a refresh while loud resumes the loop", () => {
+  const h = harness({ preset: "reconcile" });
+  h.alarm.update("cimb:100");
+  const player2 = fakePlayer();
+  const fresh = createEscalatingAlarm(Object.assign({}, h.opts, { createAudio: player2.create, onStageChange: function () {} }));
+  h.clock.t += 5000;
+  fresh.update("cimb:100");
+  assert.equal(player2.plays.length, 1, "out of balance means ringing, refresh or not");
+  assert.equal(player2.plays[0].loop, true);
+});
+
+test("reconcile preset: acknowledged in another tab, this tab stops on its next tick", () => {
+  const h = harness({ preset: "reconcile" });
+  h.alarm.update("cimb:100");
+  const other = createEscalatingAlarm(Object.assign({}, h.opts, { createAudio: fakePlayer().create, onStageChange: function () {} }));
+  other.update("cimb:100");
+  other.acknowledge();
+  h.clock.t += 15 * 1000;
+  h.alarm.tick();
+  assert.equal(h.alarm.playing(), false);
+  assert.equal(h.alarm.stage(), "quiet");
+});
+
 test("corrupt stored state is treated as a fresh problem, not a crash", () => {
   const h = harness();
   h.storage.setItem("test-alarm:co1", "{not json");

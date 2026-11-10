@@ -76,6 +76,28 @@ test("EXCHANGE 保持正数（Excel 口径），REDEP 只记笔数", () => {
   assert.strictEqual(rowOf(r, "deposit").amount, 0);
 });
 
+test("TRANSACTION = 充值（deposit / amopay）与提现以外的所有流水笔数，带不带 USERNAME 都算", () => {
+  // 2026-11-10 按运营 Excel 确认：Excel 当天 TRANSACTION 22、DEP COUNT 38，TRANSACTION 不含充值提现。
+  const db = bankDatabase();
+  const acc = addAccount(db);
+  addLedger(db, acc, 100, DAY, { status: "deposit", username: "u1" });
+  addLedger(db, acc, 50, DAY, { status: "amopay", username: "u2" });
+  addLedger(db, acc, 0, DAY, { status: "withdraw", amount_out: 30, username: "u1" });
+  addLedger(db, acc, 0, DAY, { status: "cash out", amount_out: 200 }); // 没 USERNAME 也算
+  addLedger(db, acc, 0, DAY, { status: "wrong", amount_out: 20, username: "u3" });
+  addLedger(db, acc, 0, DAY, { status: "exchange", amount_out: 537 });
+  addLedger(db, acc, 5, DAY, { status: "new", username: "u4" });
+
+  const r = reportOf(db);
+  assert.deepStrictEqual(pairOf(r, "TRANSACTION"), { value: 4, metric: true });
+  assert.strictEqual(rowOf(r, "transaction").amount, 4);
+  assert.strictEqual(r.metrics.transaction_count, 4);
+  assert.strictEqual(pairOf(r, "DEP COUNT").value, 2);
+  assert.strictEqual(pairOf(r, "W/D COUNT").value, 1);
+  // UNIQUE CUST 仍按 USERNAME 去重，不受 TRANSACTION 口径影响
+  assert.strictEqual(pairOf(r, "UNIQUE CUST").value, 4);
+});
+
 test("EXPENSES 含封禁户当天卡住的余额：金额并入、笔数不变、WIN/LOSE 不变", () => {
   const db = bankDatabase();
   const acc = addAccount(db, { lifecycle_status: "banned", active: 0 });

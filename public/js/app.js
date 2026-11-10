@@ -304,9 +304,9 @@ async function loadUser() {
     if (el) el.textContent = user.name + " (" + user.username + ")";
     const userLabel = document.querySelector(".user-label");
     if (userLabel) userLabel.textContent = user.role === "admin" ? "Admin" : "Operator";
-    // operator 只能进银行这两页（服务端 OPERATOR_PAGES 是同一份名单，这里只管藏链接）。
+    // operator 只能进银行这三页（服务端 OPERATOR_PAGES 是同一份名单，这里只管藏链接）。
     // 「流水记录」分组对 operator 可见，里面的支付设置被上面这条藏掉；其余分组整组藏。
-    const operatorPages = new Set(["bank-ledger", "bank-channels"]);
+    const operatorPages = new Set(["bank-ledger", "bank-channels", "bank-transactions"]);
     document.querySelectorAll("[data-page]").forEach((link) => {
       link.hidden = user.role === "operator" && !operatorPages.has(link.dataset.page);
     });
@@ -546,10 +546,10 @@ function updateMobileTabbarBadge(n) {
   badge.textContent = n > 99 ? "99+" : String(n);
 }
 
-// 底部标签栏：当日流水页注册了 window.bankMobileTab，就地执行；其他页面不拦，
-// <a href="/bank-ledger.html#动作"> 照常跳过去，由那边读 hash 执行。
-// 拆页后银行有两页，标签栏标出当前所在的那一页（.scratch/ui-responsive/decisions.md 增量 I）。
-const MOBILE_TAB_CURRENT = { "/bank-ledger.html": "ledger", "/bank-channels.html": "channels" };
+// 底部标签栏：交易页 / 交易记录页注册了 window.bankMobileTab，就地执行（或在两页之间跳）；
+// 其他页面不拦，<a href> 照常跳过去，由那边读 hash 执行。
+// 标签栏标出当前所在的那一页（.scratch/ui-responsive/decisions.md 增量 I）：「流水」= 交易记录页。
+const MOBILE_TAB_CURRENT = { "/bank-transactions.html": "ledger", "/bank-channels.html": "channels" };
 function setupMobileTabbar() {
   const bar = document.getElementById("mobile-tabbar");
   if (!bar) return;
@@ -575,7 +575,7 @@ function setupMobileTabbar() {
   });
 }
 
-// 侧边栏「流水记录」分组：标题是链接（进当日流水），右侧箭头只展开 / 收起，不跳页。
+// 侧边栏「流水记录」分组：标题是链接（进交易页），右侧箭头只展开 / 收起，不跳页。
 // 不用 <details>：summary 里放链接点下去会同时切换展开（server/index.js 的 pageLayout）。
 function setupNavGroupToggle() {
   document.querySelectorAll(".nav-group-link .nav-group-toggle").forEach(function (btn) {
@@ -598,8 +598,10 @@ function updateBankPendingBadge(total) {
 
 // Unapproved platform transactions used to loop a siren until somebody clicked
 // it away, and the acknowledgement lived in memory only -- so a refresh started
-// the siren again. It now runs through the shared escalating alarm: silent for
-// the first few minutes, then one play, repeating on a slow cadence.
+// the siren again. It now runs through the shared escalating alarm with the
+// "pending" preset (alarm.js): one play as soon as an order comes in, repeating
+// on a slow cadence. cross-company-alerts.js shares the same storage key, so it
+// must use the same preset.
 let platformPendingAlarm = null;
 
 // 升级到「响」时，手机底栏角标变急（侧边栏角标已取消）。
@@ -612,6 +614,7 @@ function getPlatformPendingAlarm() {
   if (platformPendingAlarm) return platformPendingAlarm;
   if (typeof window.createEscalatingAlarm !== "function") return null;
   platformPendingAlarm = window.createEscalatingAlarm({
+    preset: "pending",
     soundSrc: "/sounds/platform-pending.mp3",
     keyPrefix: "bank-pending-alarm",
     scope: function () { return activeCompanyId || "__current__"; },
@@ -645,6 +648,10 @@ function startBankPendingWatcher() {
         const total = Number((d && d.total) || 0);
         updateBankPendingBadge(total);
         updatePlatformPendingSound(platformCount);
+        // 余额超上限的网页报警（balance-alerts.js）吃同一份数据，不另起轮询。
+        try {
+          window.dispatchEvent(new CustomEvent("bank-pending-counts", { detail: d || {} }));
+        } catch (_) {}
       })
       .catch(function () {});
   };
@@ -984,18 +991,35 @@ function getDesktopSidebarCollapsed() {
   }
 }
 
+// 2026-11-10 起没有侧栏外那颗悬浮的「>」：收起时点 logo（#sidebar-expand-btn）展开，
+// 展开时点栏内右上角的「<」（#sidebar-collapse-btn）收起。logo 只在收起时是按钮，
+// 展开时退出 Tab 顺序，免得读屏念出一个点了没反应的「展开导航」。
+function syncSidebarButtons(collapsed) {
+  const desktop = window.innerWidth > 768;
+  const expandBtn = document.getElementById("sidebar-expand-btn");
+  if (expandBtn) {
+    const active = desktop && collapsed;
+    expandBtn.tabIndex = active ? 0 : -1;
+    expandBtn.setAttribute("aria-disabled", active ? "false" : "true");
+    expandBtn.setAttribute("aria-expanded", active ? "false" : "true");
+  }
+  const collapseBtn = document.getElementById("sidebar-collapse-btn");
+  if (collapseBtn) {
+    // 平板 / 手机上侧栏是抽屉，同一颗「<」就是关闭抽屉。
+    const label = desktop ? "收起导航" : "关闭导航";
+    collapseBtn.setAttribute("aria-label", label);
+    collapseBtn.setAttribute("title", label);
+  }
+}
+
 function setDesktopSidebarCollapsed(collapsed, persist) {
-  if (window.innerWidth <= 768) return;
+  if (window.innerWidth <= 768) {
+    syncSidebarButtons(false);
+    return;
+  }
   const value = Boolean(collapsed);
   document.documentElement.setAttribute("data-sidebar", value ? "collapsed" : "expanded");
-  const btn = document.getElementById("sidebar-collapse-btn");
-  if (btn) {
-    const label = value ? "展开导航" : "收起导航";
-    btn.setAttribute("aria-expanded", value ? "false" : "true");
-    btn.setAttribute("aria-label", label);
-    btn.setAttribute("title", label);
-    btn.setAttribute("data-sidebar-state", value ? "collapsed" : "expanded");
-  }
+  syncSidebarButtons(value);
   if (persist) {
     try {
       localStorage.setItem(SIDEBAR_COLLAPSED_STORAGE_KEY, value ? "1" : "0");
@@ -1016,18 +1040,27 @@ function setupSidebarTooltips() {
 
 function setupDesktopSidebar() {
   const sidebar = document.getElementById("sidebar");
-  const toggle = document.getElementById("sidebar-collapse-btn");
-  if (!sidebar || !toggle) return;
+  const expandBtn = document.getElementById("sidebar-expand-btn");
+  const collapseBtn = document.getElementById("sidebar-collapse-btn");
+  if (!sidebar || !expandBtn || !collapseBtn) return;
 
   function applyStoredState() {
-    if (window.innerWidth > 768) setDesktopSidebarCollapsed(getDesktopSidebarCollapsed(), false);
+    setDesktopSidebarCollapsed(getDesktopSidebarCollapsed(), false);
   }
 
   applyStoredState();
   setupSidebarTooltips();
-  toggle.addEventListener("click", function () {
-    const collapsed = document.documentElement.getAttribute("data-sidebar") === "collapsed";
-    setDesktopSidebarCollapsed(!collapsed, true);
+  expandBtn.addEventListener("click", function () {
+    if (window.innerWidth <= 768) return;
+    if (document.documentElement.getAttribute("data-sidebar") !== "collapsed") return;
+    setDesktopSidebarCollapsed(false, true);
+    collapseBtn.focus(); // logo 展开后退出 Tab 顺序，焦点交给「<」
+  });
+  // 平板 / 手机由 setupMobileNav 接管（关抽屉）。
+  collapseBtn.addEventListener("click", function () {
+    if (window.innerWidth <= 768) return;
+    setDesktopSidebarCollapsed(true, true);
+    expandBtn.focus();
   });
 
   const compactCompany = document.getElementById("company-compact-btn");
@@ -1080,6 +1113,13 @@ function setupMobileNav() {
     else openSidebar();
   });
   if (backdrop) backdrop.addEventListener("click", closeSidebar);
+  // 抽屉里右上角的「<」：平板 / 手机上就是关闭（桌面上由 setupDesktopSidebar 负责收起）。
+  const collapseBtn = document.getElementById("sidebar-collapse-btn");
+  if (collapseBtn) {
+    collapseBtn.addEventListener("click", function () {
+      if (window.innerWidth <= 768 && sidebar.classList.contains("open")) closeSidebar();
+    });
+  }
   sidebar.querySelectorAll("nav a").forEach(function (a) {
     a.addEventListener("click", closeSidebar);
   });

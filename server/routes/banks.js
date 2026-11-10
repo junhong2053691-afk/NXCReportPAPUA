@@ -2,7 +2,8 @@ const express = require("express");
 const router = express.Router();
 const { getDb } = require("../db/init");
 const { computeBankDailyReport, balanceFromLedger, refreshBankBalance, bankBranchOf } = require("../lib/bankReport");
-const { evaluateBalanceAlert, clearFired } = require("../lib/bankAlerts");
+const { evaluateBalanceAlert, clearFired, overLimitAccounts } = require("../lib/bankAlerts");
+const { attachLedgerOperators } = require("../lib/ledgerOperators");
 const {
   LIFECYCLE,
   SQL_OPERATING,
@@ -309,8 +310,20 @@ router.get("/daily-report", (req, res) => {
   }
 });
 
+// app.js 每 8 秒轮询一次。over_limit 喂网页余额报警（balance-alerts.js），只看当前公司，
+// 和接单区同一份轮询，不另起一个。
 router.get("/pending-counts", (req, res) => {
-  res.json(pendingCounts(getDb(), companyId(req)));
+  const db = getDb();
+  const cid = companyId(req);
+  const counts = pendingCounts(db, cid);
+  let overLimit = [];
+  try {
+    overLimit = overLimitAccounts(db, cid);
+  } catch (e) {
+    // 余额报警算不出来不能连累待审批角标和来单报警。
+    console.warn("[banks] over-limit:", e.message);
+  }
+  res.json({ ...counts, over_limit: overLimit });
 });
 
 // 跨公司来单提醒（public/js/cross-company-alerts.js）。这是 /api/banks 里唯一跨公司读的端点：
@@ -741,6 +754,7 @@ router.get("/ledger", (req, res) => {
     )
     .all(...params, limit, offset);
   const total = db.prepare(`SELECT COUNT(*) AS n FROM bank_ledger WHERE ${countWhere}`).get(...params).n;
+  attachLedgerOperators(db, cid, rows);
   res.json({ rows, total, statuses: listStatusOptions(db, cid).filter((s) => s.active).map((s) => s.value) });
 });
 

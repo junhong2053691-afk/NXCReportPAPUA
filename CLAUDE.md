@@ -156,6 +156,9 @@ $env:TUNNEL_EDGE_IP_VERSION="4"
   **紧随其后的页头**（`.page-toolbar` / `.page-header`）右侧。新页面 body 的第一个元素应当是页头、H1 与侧栏页名一字不差——
   不是页头时开关会单独占一行（操作历史曾因外层包了一层 div，整页被挤进左列）；
   标题下只留讲「数字怎么算」的口径说明
+- **侧栏开合没有悬浮按钮、没有汉堡**（2026-11-10）：桌面收起时点侧栏顶上的 logo（`#sidebar-expand-btn`）展开，展开时用同一行右边的
+  「<」（`#sidebar-collapse-btn`）收起；平板 701–768 左上角浮的也是 logo（`#mobile-menu-btn`），抽屉里那颗「<」就是关闭。
+  logo 只在桌面收起时可点，展开时 `tabIndex=-1`。测试 `server/tests/sidebar-toggle.test.js`
 - 全局 `api(url, opts)` 在 `public/js/app.js`，**只接受 2 个参数** `(url, opts)`；后台轮询用 `{ bg: true }`
 - Modal 显示用 `classList.add("show")`，不是 `open`
 - 页面 HTML 大量在 `server/index.js` 字符串拼接（Unicode `\uXXXX`），改 UI 时注意编码
@@ -170,19 +173,28 @@ $env:TUNNEL_EDGE_IP_VERSION="4"
 
 ### 声音报警 (`public/js/alarm.js`)
 
-全站唯一的报警状态机，由 `server/index.js` 在 `app.js` **之前**注入。两个用户：
-`app.js` 的平台待审批、`bank-ledger.js` 的 C STATUS 未对平。
+全站唯一的报警状态机，由 `server/index.js` 在 `app.js` **之前**注入。四个用户：
+`app.js` 的平台待审批、`cross-company-alerts.js` 的别家来单、`bank-ledger.js` 的 C STATUS 未对平、
+`balance-alerts.js` 的余额超上限。
 
-**铁律：永不 `loop`。** 这个模块存在的理由就是替掉「一出问题立刻响、且响到你点掉为止」。
-分级是：问题出现后静默 `FIRST_DELAY_MS`（5 分钟，只有视觉提示）→ 响**一遍** →
-之后每 `REPEAT_MS`（10 分钟）响一遍 → 手动 ack 后静默 `SNOOZE_MS`（20 分钟）。
-阈值只有 `alarm.js` 顶部那一份，改它就是改两套报警。
+**各用各的节奏（2026-11-10 用户要求）**：调用方传 `preset`，节奏只在 `alarm.js` 顶部 `ALARM_PRESETS` 一份。
+
+| preset | 用户 | 节奏 |
+|---|---|---|
+| `pending` | 当前公司来单 + 别家来单（**共用 key，必须同一个 preset**） | 来单立刻响一遍 → 每 10 分钟再响 → ack 后静默 20 分钟 |
+| `reconcile` | C STATUS 未对平 | 立刻响且**一直响（`continuous`，`audio.loop`）**，按 OK 停 20 分钟，到期仍不平接着响 |
+| `balance` | 余额超上限 | 立刻响 + 弹通知卡 → 每 10 分钟再响 → 关通知静默 20 分钟 |
+
+不传 preset 是旧默认（静默 5 分钟 → 响一遍 → 每 10 分钟 → ack 静默 20 分钟），只剩测试在用。
+**只有 `reconcile` 准许 loop**，那是用户明确要的；别的报警别加 `continuous`——旧实现「一出问题就响到你点掉为止」
+正是这个模块要替掉的东西。continuous 的声音跟着阶段走：刷新 / 重建实例时仍是 loud 就接着放，
+别的标签页 ack 了下一次 tick 就停。
 
 - **状态必须持久化到 localStorage**（`{ sig, firstSeenAt, quietUntil, firedAt, acked }`，每 scope 一个键）。
   旧实现把 ack 存在内存里，于是**刷新页面就重新开响**——那是「吵」的主要来源，别改回去。
 - **`scope` 用函数传**（`() => activeCompanyId` / `reconcileScope`），公司与日期各自独立计时。
-- **自带 15s tick**，不依赖调用方的渲染频率：`renderReconcileAlertV2` 只挂在 5 分钟一轮的
-  `loadDailyReport` 上，靠它驱动升级会差出好几分钟。
+- **自带 15s tick**，不依赖调用方的渲染频率：`renderReconcileAlertV2` 只挂在 1 分钟一轮
+  （2026-11-10 前是 5 分钟）的 `loadDailyReport` 上，靠它驱动升级会差出一截。
 - **signature 决定「是不是同一个问题」**。待审批故意**不把笔数写进 signature**：清掉 2 笔还剩 1 笔
   不该重置静默期，而 0→1 该重置。未对平则用 `reconcileSignature()`（含差额），差额一变就是新问题。
 - `onStageChange` 回调会重入调用方的渲染函数（`bank-ledger.js` 有 `reconcileRendering` 守门），
@@ -193,8 +205,16 @@ $env:TUNNEL_EDGE_IP_VERSION="4"
   数据源 `GET /api/banks/pending-tx/all-companies`（`lib/crossCompanyPending.js`）是 `/api/banks` 里**唯一跨公司读**
   的端点：公司范围每次按 `user_companies` 复核，admin / 只授权一家返回 `enabled=false`，不带客户真名。
   产品规则（一笔一条、5 条上限、已看过按 id 记）见 `CONTEXT.md`「跨公司来单提醒」。
+- **第四个用户：余额超上限**（`public/js/balance-alerts.js`，在 `app.js` 之后注入）。全站、只管当前公司，
+  不另起轮询：`app.js` 每轮 `/api/banks/pending-counts` 之后派发 `bank-pending-counts` 事件，响应里的
+  `over_limit` 来自 `bankAlerts.overLimitAccounts`（纯读，与 Telegram 报警同口径）。signature 用每户的
+  `alertedBalance`（= 已报警时的 `alert_fired_balance`），所以「余额涨过上次报警值就重响、同一桶钱来回动不响」
+  直接跟着 Telegram 的状态走，前端不另记高点。**有户退出（钱转走）不算新问题**（`balNextSignature` 沿用上一轮
+  sig），否则处理掉一户反而把剩下的又吵一遍；新户超标才换 sig。通知卡只有一张合并卡，只在 loud 阶段显示，关掉 = ack。
+  声音 `/sounds/transfer-pending.mp3`，三类报警各一个音。测试 `balance-alerts.test.js`、`over-limit-accounts.test.js`。
 - 测试 `server/tests/alarm.test.js`：注入假 `now` 与假播放器，**「静默期内一次都不播」和
-  「重建实例不重响」两条断言是守着上面两段的**，别为了让新行为通过就删。
+  「重建实例不重响」两条断言守着默认节奏与持久化**（pending 预设另有一条「重建实例不重响」），
+  别为了让新行为通过就删。continuous 的几条（ack 才停、刷新接着响、别的标签页 ack 后停）守着 reconcile。
 
 ### 中英切换 (`public/js/i18n.js`)
 
@@ -237,18 +257,34 @@ $env:TUNNEL_EDGE_IP_VERSION="4"
 | `/` | `home.js` | 首页看板 |
 | `/transactions.html` | `transactions.js` | 实时交易 |
 | `/customers.html` | `customers.js` | 客户列表 + 分群 |
-| `/bank-ledger.html` | `bank-ledger.js` | 当日流水：运营中银行列表（点行筛流水、逐行勾实时收款）+ KPI + 接单区（平台单审批 / 已跳过）+ 调钱 + 今日报表 / C STATUS + 流水表格 |
+| `/bank-ledger.html` | `bank-ledger.js` | 交易（原「当日流水」）：运营中渠道列表（勾实时收款、余额/上限进度条，点行去交易记录）+ 列表底部 TOTAL BALANCE + 右侧今日报表（REPORT 上 / C STATUS 下，含 TOTAL WIN/LOSE）+ 接单区（平台单审批 / 已跳过）+ 调钱 |
 | `/bank-channels.html` | `bank-channels.js` | 支付渠道：全部渠道汇总 + 运营中 / 封禁中 / 已归档 + 渠道编辑 / 转出余额 |
+| `/bank-transactions.html` | `bank-ledger.js`（`data-view="records"`） | 交易记录：流水表（渠道 / STATUS / 搜索筛选、编辑、最近删除、OPERATOR 列） |
 | `/company-settings.html` | `company-settings.js` | 公司/API + 各公司 Telegram Bot（admin） |
 | `/telegram-settings.html` | `telegram-settings.js` | 总控 Bot、总开关、运行参数、推送状态（admin） |
 
-> 2026-11 拆页：原 `/bank-accounts.html`（`bank-accounts.js`）拆成侧边栏「流水记录」分组下的当日流水与支付渠道，旧地址 302 到当日流水（`#channels` 再转去支付渠道）。两页共用的格式化、STATUS 词表与余额口径在 `bank-common.js`。operator 只能进这两页（`server/index.js` 的 `OPERATOR_PAGES` 与 `app.js` 的 `loadUser` 是同一份名单）。接单区常驻当日流水页：后台刷新只做增量，员工动过的行（`data-dirty`）绝不重画，被别人处理掉的只标灰；刷新时切页签必须带 `{ silent: true }`，否则会把平台待审批报警顺手 ack 掉。
+> 2026-11 拆页：原 `/bank-accounts.html`（`bank-accounts.js`）拆成侧边栏「流水记录」分组下的当日流水与支付渠道，旧地址 302 到当日流水（`#channels` 再转去支付渠道）。两页共用的格式化、STATUS 词表与余额口径在 `bank-common.js`。operator 只能进这两页（11-10 起加上交易记录共三页；`server/index.js` 的 `OPERATOR_PAGES` 与 `app.js` 的 `loadUser` 是同一份名单）。接单区常驻当日流水页：后台刷新只做增量，员工动过的行（`data-dirty`）绝不重画，被别人处理掉的只标灰；刷新时切页签必须带 `{ silent: true }`，否则会把平台待审批报警顺手 ack 掉。
 
-> 2026-11-09 当日流水重排：顶上是**运营中银行列表**（`renderBankList`，点行与工具栏 `#sheet-bank-filter` 是同一个筛选
-> `selectBankFilter`），下面才是 4 个 KPI；「当前公司 / 流水日期 / 同步状态」那一行删了。**银行列表、接单区与今日报表都不折叠**
+> 2026-11-09 当日流水重排（11-10 已被下一段部分取代：点行不再筛流水）：顶上是**运营中银行列表**（`renderBankList`），下面才是 4 个 KPI；「当前公司 / 流水日期 / 同步状态」那一行删了。**银行列表、接单区与今日报表都不折叠**
 > （银行列表当天加过整块收起又去掉了，启动时清掉旧的 `localStorage["bk-banklist-collapsed"]`）；支付渠道页每行详情**默认收起**，点行尾 ▸ 才展开、才拉（`bkdExpanded`，换公司清空），展开过的靠 `bkdDetailCache` 按签名复用，别改回每次重画都重拉。
 
-> **实时收款银行**（`bank_accounts.live_receiving`，`lib/bankLiveReceiving.js`）：在当日流水**银行列表的每一行**勾，最多 3 个「现在正在收款的户」
+> 2026-11-10 再拆：「当日流水」改名**交易**（地址、`data-page="bank-ledger"`、脚本名都不变），流水表搬到新页**交易记录**
+> `/bank-transactions.html`（侧栏在支付渠道下面，进 `OPERATOR_PAGES`）。两页共用 `bank-ledger.js` 与同一份 `BANK_LEDGER_SCRIPTS`，
+> 按 `.bkv2[data-view]` 分流（`IS_RECORDS`）：交易页 KPI 永远全部渠道、不读 `?bank=`，点渠道行 / 对平告警点名字都**跳去交易记录**
+> （`?bank=` / `?q=`）；交易记录页不跑接单区轮询（`refreshPendingBadge` 直接返回，角标与报警声靠 app.js）。
+> 交易页的渠道列表一行四格：实时收款勾 | 标签 + BANK BRANCH / NAME | **余额 / 上限**（上限 = `alert_threshold`，余额用
+> `bankDisplayBalance` 与报警同口径，`BC.limitLevel` 分 <70 / 70–90 / ≥90 三档色，阈值 0 显示「未设上限」）| BALANCE / COUNT / OUTFLOW。
+> 银行资料与 Copy info 只留在支付渠道页。**OPERATOR 列**的名字来自审计表（`lib/ledgerOperators.js`，`GET /ledger` 批量补
+> `created_by` / `created_by_system` / `updated_by`）：引用该 ledger id 的最早事件是录入 / 审批人，最新 `ledger.updated` 是最后修改人，
+> 审计上线前的老流水显示「—」。`bank_ledger` 刻意不加操作人列。测试 `ledger-operators.test.js`、`bank-split-pages.test.js`。
+> 同日按运营 Excel 对了一遍今日报表：REPORT 最底下加 **TOTAL WIN/LOSE**（= DEPOSIT + WITHDRAW，用后端现成的 `totals.win_loss`）；
+> **TRANSACTION 改成「deposit / amopay / withdraw 以外的流水笔数」**（以前是带 USERNAME 的笔数，永远 ≥ DEP COUNT，和 Excel 对不上）。
+> 顶上原来的四个 KPI 卡片（全部 BALANCE / 入账 IN / 出账 OUT / HELP TRF）**删掉**：IN / OUT / HELP TRF 只是当天流水三列的合计，
+> 和交易记录页表格的 TOTAL 行重复，还常被拿去和累计余额相减。总余额照 Excel 挪到渠道列表底部一行 **TOTAL BALANCE**
+> （`totalBalance()` → 后端 `total_balance`，口径不变）；交易页因此不再调 `loadSheet`（开头 `if (!IS_RECORDS) return`）。
+> 口径表见 `CONTEXT.md`。Excel 左边的勾（它的 TOTAL BALANCE 只合计勾上的户）**用户明确说不跟**，后台的勾仍是实时收款、总余额仍算全部运营中非 PG 户。
+
+> **实时收款银行**（`bank_accounts.live_receiving`，`lib/bankLiveReceiving.js`）：在交易页**渠道列表每行最左的勾**，最多 3 个「现在正在收款的户」
 > （2026-11-09 起取代「使用中」：不用的户直接封禁，只要求运营中），
 > 充值单的 BANK 下拉只列它们，**恰好勾 1 户时预选它、勾 2～3 户不预选**（2026-11-09 用户要求），末尾「其他渠道…」展开完整列表；一个没勾就是完整列表（不预选）；提现不受影响。
 > 只能经 `PUT /api/banks/live-receiving` 整组替换（注册在 `PUT /:id` 之前），**不进 PUT 白名单**——逐户开关时两人同时勾

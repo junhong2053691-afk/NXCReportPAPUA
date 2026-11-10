@@ -141,11 +141,12 @@ app.use("/api/audit", require("./routes/audit"));
 // 那一页里的四个动作而不是页面；「菜单」打开侧栏，对所有角色显示——≤700 没有汉堡按钮了，
 // operator 切换公司、退出登录、切主题都靠它。
 // 用 <a href> 而不是 button：在别的页点了照常跳到 /bank-ledger.html#<动作>，由
-// bank-ledger.js 读 hash 执行；在当日流水页本页则由 app.js 拦下直接执行。「渠道」直接进支付渠道页。
+// bank-ledger.js 读 hash 执行；在交易页 / 交易记录页则由 app.js 拦下直接执行。「渠道」直接进支付渠道页，
+// 「流水」直接进交易记录页（2026-11-10 流水表搬过去了）。
 // 顺序 2026-11-09 用户定：菜单 / 流水 / 待处理 / 调钱 / 渠道（最常点的「待处理」放正中）。
 const MOBILE_TABBAR = `<nav class="mobile-tabbar" id="mobile-tabbar" aria-label="快捷操作">
 <button type="button" data-tab-action="menu" aria-controls="sidebar"><i data-lucide="menu"></i><span>菜单</span></button>
-<a href="/bank-ledger.html#ledger" data-tab-action="ledger"><i data-lucide="list"></i><span>流水</span></a>
+<a href="/bank-transactions.html" data-tab-action="ledger"><i data-lucide="list"></i><span>流水</span></a>
 <a href="/bank-ledger.html#pending" data-tab-action="pending"><i data-lucide="clipboard-check"></i><span>待处理</span><b class="mobile-tabbar-badge" id="mobile-tabbar-badge" hidden></b></a>
 <a href="/bank-ledger.html#transfer" data-tab-action="transfer"><i data-lucide="arrow-left-right"></i><span>调钱</span></a>
 <a href="/bank-channels.html" data-tab-action="channels"><i data-lucide="landmark"></i><span>渠道</span></a>
@@ -158,12 +159,14 @@ function pageLayout(title, active, body, script) {
     ["transactions", "/transactions.html", "\u5b9e\u65f6\u4ea4\u6613", "arrow-left-right"],
     ["customers", "/customers.html", "\u987e\u5ba2\u5217\u8868", "users"],
   ];
-  // 流水记录分组（总览正下方）：标题本身链到当日流水，右侧箭头只负责展开 / 收起，
+  // 2026-11-10：「当日流水」改名「交易」（地址不变），流水表单独成「交易记录」页。
+  // 流水记录分组（总览正下方）：标题本身链到交易页，右侧箭头只负责展开 / 收起，
   // 不能用 <details><summary>——summary 里放链接点下去会同时切换展开。operator 只能进
   // 当日流水与支付渠道（requirePageAccess），支付设置由 app.js 的 loadUser 按角色藏掉。
   const bankNav = [
-    ["bank-ledger", "/bank-ledger.html", "\u5f53\u65e5\u6d41\u6c34", "list"],
+    ["bank-ledger", "/bank-ledger.html", "\u4ea4\u6613", "list"],
     ["bank-channels", "/bank-channels.html", "\u652f\u4ed8\u6e20\u9053", "landmark"],
+    ["bank-transactions", "/bank-transactions.html", "\u4ea4\u6613\u8bb0\u5f55", "receipt-text"],
     ["bank-settings", "/bank-settings.html", "\u652f\u4ed8\u8bbe\u7f6e", "sliders-horizontal"],
   ];
   const insightNav = [
@@ -211,8 +214,12 @@ function pageLayout(title, active, body, script) {
     .filter(Boolean)
     .map((src) => `<script src="${src}"></script>`)
     .join("");
-  return `<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="color-scheme" content="light dark"><title>${title} - NXC Report</title><link rel="icon" href="/favicon.ico" sizes="any"><link rel="icon" type="image/png" href="/brand/favicon-32.png"><link rel="apple-touch-icon" href="/brand/apple-touch-icon.png"><link rel="stylesheet" href="/css/style.css?v=20260812transferfix1"></head><body><a class="skip-link" href="#main-content">\u8df3\u5230\u4e3b\u5185\u5bb9</a><div class="ambient-field" aria-hidden="true"><span></span><span></span></div><div class="sidebar-backdrop" id="sidebar-backdrop"></div><button type="button" class="mobile-menu-btn icon-btn" id="mobile-menu-btn" aria-label="\u6253\u5f00\u5bfc\u822a" aria-controls="sidebar" aria-expanded="false"><i data-lucide="menu"></i><span class="icon-fallback" aria-hidden="true">Menu</span></button><div class="layout"><aside class="sidebar" id="sidebar" aria-label="\u4e3b\u5bfc\u822a"><div class="brand-mark"><img class="brand-symbol" src="/brand/nxc-icon.png" alt="" width="38" height="38"><div><h2>NXC</h2><p>Report</p></div></div><div class="company-bar glass-control" id="company-bar"><label for="company-select">\u5f53\u524d\u516c\u53f8</label><select id="company-select" aria-describedby="company-sync"></select><span id="company-sync" class="company-sync-hint" aria-live="polite">\u6b63\u5728\u8bfb\u53d6...</span></div><nav class="nav-stack" aria-label="\u5de5\u4f5c\u533a"><div class="nav-section nav-primary">${homeLink}</div>${bankGroup}<div class="nav-section nav-primary">${primaryLinks}</div><details class="nav-group"${insightOpen}><summary><span class="nav-summary-label"><i data-lucide="sparkles"></i><span>\u6d1e\u5bdf</span></span><i data-lucide="chevron-down" class="nav-chevron"></i></summary><div class="nav-children">${insightLinks}</div></details><details class="nav-group" id="nav-monthly-group"${monthlyOpen} hidden><summary><span class="nav-summary-label"><i data-lucide="calendar-range"></i><span>MONTHLY REPORT</span></span><i data-lucide="chevron-down" class="nav-chevron"></i></summary><div class="nav-children">${monthlyLinks}</div></details><details class="nav-group" id="nav-settings-group"${settingsOpen} hidden><summary><span class="nav-summary-label"><i data-lucide="sliders-horizontal"></i><span>\u8bbe\u7f6e</span></span><i data-lucide="chevron-down" class="nav-chevron"></i></summary><div class="nav-children">${settingsLinks}</div></details></nav><div class="sidebar-footer"><div class="user-info"><div class="user-avatar" aria-hidden="true">OP</div><div class="user-copy"><span class="user-label">Operator</span><strong id="current-user" translate="no">-</strong></div><button type="button" class="sidebar-theme-btn icon-btn" aria-label="切换主题" title="切换主题"><i data-lucide="moon"></i></button><button type="button" class="logout-btn icon-btn" id="logout-btn" aria-label="\u9000\u51fa\u767b\u5f55" title="\u9000\u51fa\u767b\u5f55"><i data-lucide="log-out"></i></button></div></div></aside><main class="main" id="main-content" tabindex="-1"><section class="page-shell"><div class="page-actions"><div class="sync-state" id="global-sync-state" data-state="loading"><span class="sync-indicator" aria-hidden="true"></span><span class="sync-copy" role="status" aria-live="polite"><strong id="global-sync-text">\u6b63\u5728\u8bfb\u53d6\u540c\u6b65\u72b6\u6001</strong><small id="global-sync-time"></small></span></div><button type="button" class="lang-toggle" id="lang-toggle" translate="no" aria-label="\u5207\u6362\u8bed\u8a00" title="\u5207\u6362\u8bed\u8a00"><span data-lang-choice="zh">中</span><span data-lang-choice="en">EN</span></button><button type="button" class="theme-toggle icon-btn" id="theme-toggle" aria-label="\u5207\u6362\u4e3b\u9898" title="\u5207\u6362\u4e3b\u9898"><i data-lucide="moon"></i></button></div>${body}</section></main></div>${MOBILE_TABBAR}<script src="/vendor/lucide-1.65.0.min.js"></script><script src="/vendor/gsap-3.12.5.min.js"></script><script src="/js/alarm.js?v=20260930alarm1"></script><script src="/js/modal-guard.js?v=20261106drill1"></script><script src="/js/app.js?v=20260802platformsound3"></script><script src="/js/cross-company-alerts.js?v=20261109mob1"></script><script src="/js/mobile-table-drawer.js?v=20261109mtd2"></script><script src="/js/customer-detail.js?v=20260731bankfix4"></script>${extra}</body></html>`;
+  return `<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="color-scheme" content="light dark"><title>${title} - NXC Report</title><link rel="icon" href="/favicon.ico" sizes="any"><link rel="icon" type="image/png" href="/brand/favicon-32.png"><link rel="apple-touch-icon" href="/brand/apple-touch-icon.png"><link rel="stylesheet" href="/css/style.css?v=20260812transferfix1"></head><body><a class="skip-link" href="#main-content">\u8df3\u5230\u4e3b\u5185\u5bb9</a><div class="ambient-field" aria-hidden="true"><span></span><span></span></div><div class="sidebar-backdrop" id="sidebar-backdrop"></div><button type="button" class="mobile-menu-btn" id="mobile-menu-btn" aria-label="\u6253\u5f00\u5bfc\u822a" title="\u6253\u5f00\u5bfc\u822a" aria-controls="sidebar" aria-expanded="false"><img class="brand-symbol" src="/brand/nxc-icon.png" alt="" width="38" height="38"></button><div class="layout"><aside class="sidebar" id="sidebar" aria-label="\u4e3b\u5bfc\u822a"><div class="brand-mark"><button type="button" class="brand-toggle" id="sidebar-expand-btn" aria-controls="sidebar" aria-label="\u5c55\u5f00\u5bfc\u822a" title="\u5c55\u5f00\u5bfc\u822a"><img class="brand-symbol" src="/brand/nxc-icon.png" alt="" width="38" height="38"></button><div class="brand-copy"><h2>NXC</h2><p>Report</p></div><button type="button" class="sidebar-collapse-btn icon-btn" id="sidebar-collapse-btn" aria-controls="sidebar" aria-label="\u6536\u8d77\u5bfc\u822a" title="\u6536\u8d77\u5bfc\u822a"><i data-lucide="chevron-left"></i><span class="icon-fallback" aria-hidden="true">\u2039</span></button></div><div class="company-bar glass-control" id="company-bar"><label for="company-select">\u5f53\u524d\u516c\u53f8</label><select id="company-select" aria-describedby="company-sync"></select><span id="company-sync" class="company-sync-hint" aria-live="polite">\u6b63\u5728\u8bfb\u53d6...</span></div><nav class="nav-stack" aria-label="\u5de5\u4f5c\u533a"><div class="nav-section nav-primary">${homeLink}</div>${bankGroup}<div class="nav-section nav-primary">${primaryLinks}</div><details class="nav-group"${insightOpen}><summary><span class="nav-summary-label"><i data-lucide="sparkles"></i><span>\u6d1e\u5bdf</span></span><i data-lucide="chevron-down" class="nav-chevron"></i></summary><div class="nav-children">${insightLinks}</div></details><details class="nav-group" id="nav-monthly-group"${monthlyOpen} hidden><summary><span class="nav-summary-label"><i data-lucide="calendar-range"></i><span>MONTHLY REPORT</span></span><i data-lucide="chevron-down" class="nav-chevron"></i></summary><div class="nav-children">${monthlyLinks}</div></details><details class="nav-group" id="nav-settings-group"${settingsOpen} hidden><summary><span class="nav-summary-label"><i data-lucide="sliders-horizontal"></i><span>\u8bbe\u7f6e</span></span><i data-lucide="chevron-down" class="nav-chevron"></i></summary><div class="nav-children">${settingsLinks}</div></details></nav><div class="sidebar-footer"><div class="user-info"><div class="user-avatar" aria-hidden="true">OP</div><div class="user-copy"><span class="user-label">Operator</span><strong id="current-user" translate="no">-</strong></div><button type="button" class="sidebar-theme-btn icon-btn" aria-label="切换主题" title="切换主题"><i data-lucide="moon"></i></button><button type="button" class="logout-btn icon-btn" id="logout-btn" aria-label="\u9000\u51fa\u767b\u5f55" title="\u9000\u51fa\u767b\u5f55"><i data-lucide="log-out"></i></button></div></div></aside><main class="main" id="main-content" tabindex="-1"><section class="page-shell"><div class="page-actions"><div class="sync-state" id="global-sync-state" data-state="loading"><span class="sync-indicator" aria-hidden="true"></span><span class="sync-copy" role="status" aria-live="polite"><strong id="global-sync-text">\u6b63\u5728\u8bfb\u53d6\u540c\u6b65\u72b6\u6001</strong><small id="global-sync-time"></small></span></div><button type="button" class="lang-toggle" id="lang-toggle" translate="no" aria-label="\u5207\u6362\u8bed\u8a00" title="\u5207\u6362\u8bed\u8a00"><span data-lang-choice="zh">中</span><span data-lang-choice="en">EN</span></button><button type="button" class="theme-toggle icon-btn" id="theme-toggle" aria-label="\u5207\u6362\u4e3b\u9898" title="\u5207\u6362\u4e3b\u9898"><i data-lucide="moon"></i></button></div>${body}</section></main></div>${MOBILE_TABBAR}<script src="/vendor/lucide-1.65.0.min.js"></script><script src="/vendor/gsap-3.12.5.min.js"></script><script src="/js/alarm.js?v=20261110alarm2"></script><script src="/js/modal-guard.js?v=20261106drill1"></script><script src="/js/app.js?v=20260802platformsound3"></script><script src="/js/cross-company-alerts.js?v=20261110alarm1"></script><script src="/js/balance-alerts.js?v=20261110alarm1"></script><script src="/js/mobile-table-drawer.js?v=20261109mtd2"></script><script src="/js/customer-detail.js?v=20260731bankfix4"></script>${extra}</body></html>`;
 }
+
+// 交易页（/bank-ledger.html）与交易记录页（/bank-transactions.html）共用同一份 bank-ledger.js，
+// 按 .bkv2 的 data-view 分流（2026-11-10 拆页）。两页的版本号必须一起换。
+const BANK_LEDGER_SCRIPTS = ["/js/ledger-bank-pick.js?v=20261106drill3", "/js/operation-target.js?v=20261106drill1", "/js/render-gate.js?v=20261106drill1", "/js/pending-filter.js?v=20261106drill1", "/js/display-format.js?v=20261106drill2", "/js/cstatus-sheet.js?v=20261106sheet1", "/js/bank-common.js?v=20261110trade1", "/js/bank-ledger.js?v=20261110alarm1"];
 
 const pageRoutes = {
   "/": pageLayout(
@@ -349,7 +356,7 @@ const pageRoutes = {
   "/bank-settings.html": pageLayout(
     "\u652f\u4ed8\u8bbe\u7f6e",
     "bank-settings",
-    `<div class="page-toolbar"><h1>\u652f\u4ed8\u8bbe\u7f6e</h1><a class="btn btn-outline btn-sm" href="/bank-ledger.html">\u8fd4\u56de\u5f53\u65e5\u6d41\u6c34</a></div>
+    `<div class="page-toolbar"><h1>\u652f\u4ed8\u8bbe\u7f6e</h1><a class="btn btn-outline btn-sm" href="/bank-ledger.html">\u8fd4\u56de\u4ea4\u6613</a></div>
 <div class="settings-grid bank-settings-grid">
 <section class="data-panel">
 <h2>STATUS</h2>
@@ -411,33 +418,41 @@ const pageRoutes = {
     "/js/telegram-settings.js?v=20260924tgadmin2"
   ),
   "/bank-ledger.html": pageLayout(
-    "\u5f53\u65e5\u6d41\u6c34",
+    "\u4ea4\u6613",
     "bank-ledger",
-    `<div class="page-toolbar"><h1>当日流水</h1></div>
-<div class="sheet-app bkv2">
+    `<div class="page-toolbar"><h1>交易</h1></div>
+<div class="sheet-app bkv2" data-view="workspace">
 <div class="bk-toolbar">
 <div class="bk-tools">
-<input type="date" id="sheet-date" class="sheet-date">
-<select id="sheet-bank-filter" class="sheet-filter sheet-bank-filter" aria-label="按渠道筛选流水"><option value="all">全部渠道</option></select>
-<select id="sheet-status-filter" class="sheet-filter"><option value="">ALL</option></select>
-<input type="text" id="sheet-search" class="sheet-search" placeholder="搜索 STATUS / TRANS ID / USERNAME / NAME">
+<input type="date" id="sheet-date" class="sheet-date" aria-label="日期">
 </div>
 <div class="bk-actions">
+<a class="btn btn-outline btn-sm" href="/bank-transactions.html"><i data-lucide="receipt-text"></i>交易记录</a>
 <details class="bk-more-menu">
 <summary class="btn btn-outline btn-sm"><i data-lucide="ellipsis"></i>更多</summary>
 <div class="bk-more-popover">
-<button class="bk-more-item" id="sheet-deleted-btn" type="button"><i data-lucide="rotate-ccw"></i>最近删除</button>
 <a class="bk-more-item" href="/bank-settings.html"><i data-lucide="sliders-horizontal"></i>\u652f\u4ed8\u8bbe\u7f6e</a>
 </div>
 </details>
 </div>
 </div>
+<div class="bk-top">
 <section class="bk-banklist" id="bk-banklist" aria-label="运营中渠道"></section>
-<div class="bk-kpis">
-<div class="bk-kpi"><em>全部 BALANCE</em><strong id="sum-balance">0.00</strong></div>
-<div class="bk-kpi bk-kpi-in"><em>入账 IN</em><strong id="sum-in">0.00</strong></div>
-<div class="bk-kpi bk-kpi-out"><em>出账 OUT</em><strong id="sum-out">0.00</strong></div>
-<div class="bk-kpi bk-kpi-help"><em>HELP TRF</em><strong id="sum-help">0.00</strong></div>
+<div class="bk-report-wrap" id="sheet-upper-wrap">
+<div class="bk-report-head"><h2 class="bk-report-title">今日报表</h2><button type="button" class="cstatus-drawer-btn" id="cstatus-drawer-btn" aria-haspopup="dialog" aria-controls="cstatus-drawer">C STATUS<b class="cstatus-drawer-badge" id="cstatus-drawer-badge" translate="no" hidden></b></button></div>
+<div class="bk-report-grid" id="sheet-upper">
+<section class="sheet-panel sheet-report-panel">
+<h3 class="sheet-panel-title">REPORT</h3>
+<table class="sheet-info-table sheet-report-table"><tbody id="sheet-report-rows"></tbody></table>
+</section>
+<section class="sheet-panel sheet-cstatus-panel">
+<h3 class="sheet-panel-title">C STATUS <span class="sheet-panel-sub">Help In / Out</span>
+</h3>
+<table class="sheet-info-table cstatus-summary-table" aria-label="C STATUS Help In / Out"><colgroup><col class="cstatus-col-name"><col class="cstatus-col-num"><col class="cstatus-col-num"><col class="cstatus-col-num"></colgroup><thead><tr><th>NAME</th><th class="num-col">IN</th><th class="num-col">OUT</th><th class="num-col">Total</th></tr></thead>
+<tbody id="sheet-cstatus-rows"></tbody></table>
+</section>
+</div>
+</div>
 </div>
 <div class="reconcile-alert" id="reconcile-alert" hidden role="status" aria-live="polite"></div>
 <section class="bk-intake" id="bk-intake" aria-labelledby="bk-intake-title">
@@ -452,27 +467,6 @@ const pageRoutes = {
 <div id="pending-skipped-panel" hidden><div class="table-wrap data-surface"><table class="bank-table"><thead><tr><th>TYPE</th><th>TIME</th><th>TRANS ID</th><th>USER</th><th>AMT</th><th>SKIPPED AT</th><th>BY</th><th></th></tr></thead><tbody id="pending-skipped-rows"></tbody></table></div></div>
 </div>
 </section>
-<div class="bk-report-wrap" id="sheet-upper-wrap">
-<h2 class="bk-report-title">今日报表</h2>
-<div class="bk-report-grid" id="sheet-upper">
-<section class="sheet-panel sheet-report-panel">
-<h3 class="sheet-panel-title">REPORT</h3>
-<table class="sheet-info-table sheet-report-table"><tbody id="sheet-report-rows"></tbody></table>
-</section>
-<section class="sheet-panel sheet-cstatus-panel">
-<h3 class="sheet-panel-title">C STATUS <span class="sheet-panel-sub">Help In / Out</span>
-</h3>
-<table class="sheet-info-table cstatus-summary-table" aria-label="C STATUS Help In / Out"><colgroup><col class="cstatus-col-name"><col class="cstatus-col-num"><col class="cstatus-col-num"><col class="cstatus-col-num"></colgroup><thead><tr><th>NAME</th><th class="num-col">IN</th><th class="num-col">OUT</th><th class="num-col">Total</th></tr></thead>
-<tbody id="sheet-cstatus-rows"></tbody></table>
-</section>
-</div>
-</div>
-<div class="bk-grid-head"><span class="bk-grid-title" id="bk-grid-title">流水 · ALL</span><button type="button" class="cstatus-drawer-btn" id="cstatus-drawer-btn" aria-haspopup="dialog" aria-controls="cstatus-drawer">C STATUS<b class="cstatus-drawer-badge" id="cstatus-drawer-badge" translate="no" hidden></b></button><span class="sheet-grid-hint">快捷键 · <kbd translate="no">Tab</kbd> 下一格 · <kbd translate="no">Enter</kbd>×2 保存 · <kbd translate="no">Esc</kbd> 取消 · <kbd translate="no">Ctrl+;</kbd> 当前时间 · <kbd translate="no">1</kbd>–<kbd translate="no">9</kbd> 状态</span></div>
-<div class="sheet-table-wrap"><table class="sheet-table">
-<thead><tr><th class="col-no">NO</th><th class="col-time">TIME</th><th class="col-id">TRANS ID</th><th class="col-status">STATUS</th><th class="col-num">IN</th><th class="col-num">OUT</th><th class="col-num">HELP TRF</th><th class="col-bank">BANK ACC</th><th class="col-user">USERNAME</th><th class="col-name">NAME</th><th class="col-cstatus">C STATUS</th><th class="col-other">OTHER</th><th class="col-remark">REMARK</th><th class="col-act"></th></tr></thead>
-<tbody id="sheet-grid"></tbody>
-<tfoot><tr class="sheet-total-row"><td colspan="4" class="total-label">TOTAL</td><td class="col-num" id="total-in">0.00</td><td class="col-num" id="total-out">0.00</td><td class="col-num" id="total-help-trf">0.00</td><td colspan="7"></td></tr></tfoot>
-</table></div>
 <datalist id="status-datalist"></datalist>
 <datalist id="cstatus-datalist"></datalist>
 </div>
@@ -483,13 +477,6 @@ const pageRoutes = {
 <table class="sheet-info-table cstatus-summary-table" aria-label="C STATUS Help In / Out"><colgroup><col class="cstatus-col-name"><col class="cstatus-col-num"><col class="cstatus-col-num"><col class="cstatus-col-num"></colgroup><thead><tr><th>NAME</th><th class="num-col">IN</th><th class="num-col">OUT</th><th class="num-col">Total</th></tr></thead>
 <tbody id="cstatus-drawer-rows"></tbody></table>
 </section>
-</div></div>
-
-<div class="modal-overlay" id="deleted-ledger-modal"><div class="modal modal-lg">
-<h2>最近删除流水</h2>
-<p class="modal-note">误删的流水会先进入这里，点恢复后会回到账单流水并自动重算余额。</p>
-<div class="table-wrap data-surface"><table class="bank-table m-cards m-deleted"><thead><tr><th>删除时间</th><th>TIME</th><th>STATUS</th><th>TRANS ID</th><th>IN</th><th>OUT</th><th>HELP/TRF</th><th>BANK</th><th>USER / NAME</th><th></th></tr></thead><tbody id="deleted-ledger-rows"></tbody></table></div>
-<div class="actions"><button class="btn btn-outline btn-sm" id="deleted-ledger-close">关闭</button></div>
 </div></div>
 
 <div class="modal-overlay" id="transfer-modal"><div class="modal transfer-modal">
@@ -526,7 +513,65 @@ const pageRoutes = {
 <p id="reason-modal-error" class="form-error" role="alert" aria-live="polite"></p>
 <div class="actions"><button class="btn btn-outline btn-sm" id="reason-modal-cancel" type="button">取消</button><button class="btn btn-danger btn-sm" id="reason-modal-confirm" type="button">确认</button></div>
 </div></div>`,
-    ["/js/ledger-bank-pick.js?v=20261106drill3", "/js/operation-target.js?v=20261106drill1", "/js/render-gate.js?v=20261106drill1", "/js/pending-filter.js?v=20261106drill1", "/js/display-format.js?v=20261106drill2", "/js/cstatus-sheet.js?v=20261106sheet1", "/js/bank-common.js?v=20261109banklist1", "/js/bank-ledger.js?v=20261109blnofold1"]
+    BANK_LEDGER_SCRIPTS
+  ),
+  "/bank-transactions.html": pageLayout(
+    "\u4ea4\u6613\u8bb0\u5f55",
+    "bank-transactions",
+    `<div class="page-toolbar"><h1>交易记录</h1></div>
+<div class="sheet-app bkv2" data-view="records">
+<div class="bk-toolbar">
+<div class="bk-tools">
+<input type="date" id="sheet-date" class="sheet-date" aria-label="日期">
+<select id="sheet-bank-filter" class="sheet-filter sheet-bank-filter" aria-label="按渠道筛选流水"><option value="all">全部渠道</option></select>
+<select id="sheet-status-filter" class="sheet-filter"><option value="">ALL</option></select>
+<input type="text" id="sheet-search" class="sheet-search" placeholder="搜索 STATUS / TRANS ID / USERNAME / NAME">
+</div>
+<div class="bk-actions">
+<details class="bk-more-menu">
+<summary class="btn btn-outline btn-sm"><i data-lucide="ellipsis"></i>更多</summary>
+<div class="bk-more-popover">
+<button class="bk-more-item" id="sheet-deleted-btn" type="button"><i data-lucide="rotate-ccw"></i>最近删除</button>
+<a class="bk-more-item" href="/bank-settings.html"><i data-lucide="sliders-horizontal"></i>\u652f\u4ed8\u8bbe\u7f6e</a>
+</div>
+</details>
+</div>
+</div>
+<div class="bk-grid-head"><span class="bk-grid-title" id="bk-grid-title">流水 · 全部渠道</span><button type="button" class="cstatus-drawer-btn" id="cstatus-drawer-btn" aria-haspopup="dialog" aria-controls="cstatus-drawer">C STATUS<b class="cstatus-drawer-badge" id="cstatus-drawer-badge" translate="no" hidden></b></button><span class="sheet-grid-hint">快捷键 · <kbd translate="no">Tab</kbd> 下一格 · <kbd translate="no">Enter</kbd>×2 保存 · <kbd translate="no">Esc</kbd> 取消 · <kbd translate="no">Ctrl+;</kbd> 当前时间 · <kbd translate="no">1</kbd>–<kbd translate="no">9</kbd> 状态</span></div>
+<div class="sheet-table-wrap"><table class="sheet-table">
+<thead><tr><th class="col-no">NO</th><th class="col-time">TIME</th><th class="col-id">TRANS ID</th><th class="col-status">STATUS</th><th class="col-num">IN</th><th class="col-num">OUT</th><th class="col-num">HELP TRF</th><th class="col-bank">BANK ACC</th><th class="col-user">USERNAME</th><th class="col-name">NAME</th><th class="col-cstatus">C STATUS</th><th class="col-other">OTHER</th><th class="col-remark">REMARK</th><th class="col-operator">OPERATOR</th><th class="col-act"></th></tr></thead>
+<tbody id="sheet-grid"></tbody>
+<tfoot><tr class="sheet-total-row"><td colspan="4" class="total-label">TOTAL</td><td class="col-num" id="total-in">0.00</td><td class="col-num" id="total-out">0.00</td><td class="col-num" id="total-help-trf">0.00</td><td colspan="8"></td></tr></tfoot>
+</table></div>
+<datalist id="status-datalist"></datalist>
+<datalist id="cstatus-datalist"></datalist>
+</div>
+
+<div class="modal-overlay" id="cstatus-drawer"><div class="modal cstatus-drawer">
+<h2>C STATUS <span class="sheet-panel-sub">Help In / Out</span></h2>
+<section class="sheet-panel sheet-cstatus-panel">
+<table class="sheet-info-table cstatus-summary-table" aria-label="C STATUS Help In / Out"><colgroup><col class="cstatus-col-name"><col class="cstatus-col-num"><col class="cstatus-col-num"><col class="cstatus-col-num"></colgroup><thead><tr><th>NAME</th><th class="num-col">IN</th><th class="num-col">OUT</th><th class="num-col">Total</th></tr></thead>
+<tbody id="cstatus-drawer-rows"></tbody></table>
+</section>
+</div></div>
+
+<div class="modal-overlay" id="deleted-ledger-modal"><div class="modal modal-lg">
+<h2>最近删除流水</h2>
+<p class="modal-note">误删的流水会先进入这里，点恢复后会回到账单流水并自动重算余额。</p>
+<div class="table-wrap data-surface"><table class="bank-table m-cards m-deleted"><thead><tr><th>删除时间</th><th>TIME</th><th>STATUS</th><th>TRANS ID</th><th>IN</th><th>OUT</th><th>HELP/TRF</th><th>BANK</th><th>USER / NAME</th><th></th></tr></thead><tbody id="deleted-ledger-rows"></tbody></table></div>
+<div class="actions"><button class="btn btn-outline btn-sm" id="deleted-ledger-close">关闭</button></div>
+</div></div>
+
+<div class="modal-overlay" id="reason-modal" role="dialog" aria-modal="true" aria-labelledby="reason-modal-title">
+<div class="modal reason-modal">
+<h2 id="reason-modal-title">填写操作原因</h2>
+<p class="modal-note" id="reason-modal-description">此操作会写入永久审计记录。</p>
+<div class="reason-target"><div id="reason-modal-target"></div><div class="reason-target-detail" id="reason-modal-detail" translate="no" hidden></div></div>
+<div class="form-group"><label for="reason-modal-input">操作原因 <span aria-hidden="true">*</span></label><textarea id="reason-modal-input" rows="4" maxlength="500" placeholder="请说明为什么执行此操作" aria-describedby="reason-modal-count reason-modal-error"></textarea><small id="reason-modal-count" class="form-hint">0 / 500</small></div>
+<p id="reason-modal-error" class="form-error" role="alert" aria-live="polite"></p>
+<div class="actions"><button class="btn btn-outline btn-sm" id="reason-modal-cancel" type="button">取消</button><button class="btn btn-danger btn-sm" id="reason-modal-confirm" type="button">确认</button></div>
+</div></div>`,
+    BANK_LEDGER_SCRIPTS
   ),
   "/bank-channels.html": pageLayout(
     "\u652f\u4ed8\u6e20\u9053",
@@ -584,7 +629,7 @@ const pageRoutes = {
 <p id="drain-err" class="form-error" role="alert" aria-live="polite"></p>
 <div class="actions"><button class="btn btn-outline btn-sm" id="drain-cancel" type="button">取消</button><button class="btn btn-success btn-sm" id="drain-submit" type="button">确认转出</button></div>
 </div></div>`,
-    ["/js/ledger-bank-pick.js?v=20261106drill3", "/js/operation-target.js?v=20261106drill1", "/js/render-gate.js?v=20261106drill1", "/js/display-format.js?v=20261106drill2", "/js/appeal-csv.js?v=20261106drill1", "/js/cstatus-sheet.js?v=20261106sheet1", "/js/bank-common.js?v=20261109banklist1", "/js/bank-channels.js?v=20261109chfold1"]
+    ["/js/ledger-bank-pick.js?v=20261106drill3", "/js/operation-target.js?v=20261106drill1", "/js/render-gate.js?v=20261106drill1", "/js/display-format.js?v=20261106drill2", "/js/appeal-csv.js?v=20261106drill1", "/js/cstatus-sheet.js?v=20261106sheet1", "/js/bank-common.js?v=20261110trade1", "/js/bank-channels.js?v=20261110trade1"]
   ),
   "/audit-history.html": pageLayout(
     "\u64cd\u4f5c\u5386\u53f2",
@@ -688,13 +733,12 @@ const pageRoutes = {
 };
 pageRoutes["/index.html"] = pageRoutes["/"];
 
-const desktopSidebarToggleHtml = '<button type="button" class="sidebar-collapse-btn icon-btn" id="sidebar-collapse-btn" aria-label="展开导航" aria-controls="sidebar" aria-expanded="false" title="展开导航"><i data-lucide="chevron-right"></i><span class="icon-fallback" aria-hidden="true">›</span></button>';
 const companyCompactEntryHtml = '<button type="button" class="company-compact-btn icon-btn" id="company-compact-btn" aria-label="切换公司" title="切换公司"><i data-lucide="building-2"></i><span class="icon-fallback" aria-hidden="true">公司</span></button>';
 const globalFeedbackHtml = '<div class="app-toast-stack" id="app-toast-stack" aria-live="polite" aria-relevant="additions"></div><div class="modal-overlay app-dialog-overlay" id="app-dialog-overlay" aria-hidden="true"><div class="modal app-dialog" data-tone="info"><h2 id="app-dialog-title">确认操作</h2><p class="app-dialog-message" id="app-dialog-message"></p><div class="app-dialog-prompt" id="app-dialog-prompt" hidden><label for="app-dialog-input" id="app-dialog-label">请输入</label><input id="app-dialog-input" autocomplete="off"><small class="form-hint" id="app-dialog-hint"></small></div><p class="form-error" id="app-dialog-error" role="alert" aria-live="polite"></p><div class="actions"><button class="btn btn-outline btn-sm" id="app-dialog-cancel" type="button" data-modal-dismiss>取消</button><button class="btn btn-primary btn-sm" id="app-dialog-confirm" type="button">确认</button></div></div></div>';
 // i18n.js holds the dictionary + translation engine. It is injected into <head> (ahead of the
 // render-blocking stylesheet) so the first paint is already in the saved language, instead of
 // painting Chinese and rewriting it after the two vendored scripts at the end of <body> load.
-const i18nHeadHtml = '<script src="/js/i18n.js?v=20261109uifix1"></script>';
+const i18nHeadHtml = '<script src="/js/i18n.js?v=20261110alarm1"></script>';
 // One full translation pass at the end of <body>, where the whole document
 // exists but the two vendored scripts below have not been fetched yet. Anything
 // painted while they load is already in the right language. Must come after
@@ -703,14 +747,13 @@ const i18nBootHtml = '<script src="/js/i18n-boot.js"></script>';
 
 for (const route of Object.keys(pageRoutes)) {
   pageRoutes[route] = pageRoutes[route]
-    .replace('<div class="layout">', desktopSidebarToggleHtml + '<div class="layout">')
     .replace('<link rel="stylesheet" href="/css/style.css?v=20260812transferfix1">', i18nHeadHtml + '<link rel="stylesheet" href="/css/style.css?v=20260812transferfix1">')
     .replace('<div class="company-bar glass-control" id="company-bar">', '<div class="company-bar glass-control" id="company-bar">' + companyCompactEntryHtml)
     .replace('<script src="/vendor/lucide-1.65.0.min.js"></script>', globalFeedbackHtml + i18nBootHtml + '<script src="/vendor/lucide-1.65.0.min.js"></script>')
-    .replace('/css/style.css?v=20260812transferfix1', '/css/style.css?v=20261109uifix1')
+    .replace('/css/style.css?v=20260812transferfix1', '/css/style.css?v=20261110trade8')
     .replace('/js/customer-detail.js?v=20260731bankfix4', '/js/customer-detail.js?v=20261109mtd1')
     .replace('/css/style.css?v=20260802topbarflow1', '/css/style.css?v=20261001archive1')
-    .replace('/js/app.js?v=20260802platformsound3', '/js/app.js?v=20261109uifix1');
+    .replace('/js/app.js?v=20260802platformsound3', '/js/app.js?v=20261110alarm1');
 }
 
 function requireAdminPage(req, res, next) {
@@ -720,8 +763,8 @@ function requireAdminPage(req, res, next) {
   });
 }
 
-// operator 只能进银行这两页（支付设置在 ADMIN_ONLY_PAGES）。app.js 的 loadUser 有同一份名单。
-const OPERATOR_PAGES = new Set(["/bank-ledger.html", "/bank-channels.html"]);
+// operator 只能进银行这三页（支付设置在 ADMIN_ONLY_PAGES）。app.js 的 loadUser 有同一份名单。
+const OPERATOR_PAGES = new Set(["/bank-ledger.html", "/bank-channels.html", "/bank-transactions.html"]);
 
 function requirePageAccess(req, res, next) {
   return requireLogin(req, res, function () {

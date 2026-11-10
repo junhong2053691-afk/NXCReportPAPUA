@@ -20,9 +20,10 @@ const XCO_MAX_VISIBLE = 5;
 // 与 style.css 的手机断点一致。
 const XCO_MOBILE_QUERY = "(max-width: 700px)";
 const XCO_POLL_MS = 8000;
-// 必须与 app.js getPlatformPendingAlarm 的 keyPrefix / soundSrc 一致：共用时间线（Q14）。
+// 必须与 app.js getPlatformPendingAlarm 的 keyPrefix / soundSrc / preset 一致：共用时间线（Q14）。
 const XCO_ALARM_PREFIX = "bank-pending-alarm";
 const XCO_ALARM_SOUND = "/sounds/platform-pending.mp3";
+const XCO_ALARM_PRESET = "pending";
 
 function xcoReadSeen(storage) {
   try {
@@ -400,6 +401,7 @@ function startCrossCompanyAlerts() {
     fetchSnapshot: function () { return api("/api/banks/pending-tx/all-companies", { bg: true }); },
     createAlarm: function (companyId) {
       return window.createEscalatingAlarm({
+        preset: XCO_ALARM_PRESET,
         soundSrc: XCO_ALARM_SOUND,
         keyPrefix: XCO_ALARM_PREFIX,
         scope: companyId,
@@ -443,5 +445,6 @@ if (typeof module !== "undefined" && module.exports) {
     XCO_SEEN_KEY: XCO_SEEN_KEY,
     XCO_MAX_VISIBLE: XCO_MAX_VISIBLE,
     XCO_ALARM_PREFIX: XCO_ALARM_PREFIX,
+    XCO_ALARM_PRESET: XCO_ALARM_PRESET,
   };
 }

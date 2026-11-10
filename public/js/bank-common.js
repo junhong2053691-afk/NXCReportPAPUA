@@ -1,4 +1,4 @@
-// 当日流水（bank-ledger.js）与支付渠道（bank-channels.js）两页共用的格式化与口径。
+// 交易 / 交易记录（bank-ledger.js）与支付渠道（bank-channels.js）共用的格式化与口径。
 // 2026-11 拆页时从 bank-accounts.js 抽出来，函数体原样搬运。
 //
 // 只提供函数，不持有页面数据：bankRows / dailyReport 由各页自己保存、调用时传进来。
@@ -195,7 +195,18 @@
     return Math.round(bankDisplayBalance(b, report) * 100) >= Math.round(threshold * 100);
   }
 
-  // 银行资料（BSB / ACCOUNT / PAYID）的展示与复制。当日流水的银行列表与支付渠道页共用。
+  // 交易页渠道列表「余额 / 上限」进度条的颜色档（上限 = 报警阈值 alert_threshold）。
+  // 没设阈值返回 ""（不画条）；<70% ok、70%–<90% warn、≥90% danger。按分比较，避免浮点在边界上抖。
+  function limitLevel(balance, threshold) {
+    const cap = Math.round(Number(threshold || 0) * 100);
+    if (!(cap > 0)) return "";
+    const bal = Math.round(Number(balance || 0) * 100);
+    if (bal * 10 >= cap * 9) return "danger";
+    if (bal * 10 >= cap * 7) return "warn";
+    return "ok";
+  }
+
+  // 银行资料（BSB / ACCOUNT / PAYID）的展示与复制。支付渠道页用（交易页的渠道列表 2026-11-10 起不再显示）。
   function bankInfoFields(b) {
     return [
       ["BSB", b?.bsb],
@@ -246,6 +257,6 @@
     tr, esc, plainDisplayText, ledgerNameText, fmt, fmtMetric, parseNum,
     statusList, loadStatusOptions, parseStatus, statusLabel, statusClass, statusStyleAttr,
     bankBranchOf, tabLabel, bankPickerLabel, usableBanks, isBalanceExcluded, totalBalance,
-    bankDisplayBalance, cStatusNames, alertThresholdReached, bankInfoHtml, bankCopyText, copyBankInfo,
+    bankDisplayBalance, cStatusNames, alertThresholdReached, limitLevel, bankInfoHtml, bankCopyText, copyBankInfo,
   };
 })();

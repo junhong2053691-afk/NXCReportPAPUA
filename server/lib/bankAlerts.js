@@ -241,8 +241,44 @@ function evaluateBalanceAlert(db, bankAccountId, opts = {}) {
   return { bankAccountId, companyId: account.company_id, balance, threshold, text };
 }
 
+/**
+ * 当前超上限的账户，喂网页余额报警（public/js/balance-alerts.js，经 GET /pending-counts）。
+ *
+ * **纯读**：不写 alert_fired_* 也不入队。判定口径与 evaluateBalanceAlert 完全一致
+ * （thresholdOf / isAlertEligible / displayBalanceForAccount / 按分比较）。
+ *
+ * alertedBalance 是网页报警的 signature 基准：已报警时取 alert_fired_balance（只在余额涨过
+ * 上次报警值时才变），所以网页「涨过上次就重响」直接跟着 Telegram 走，同一桶钱来回动不重响。
+ * 还没报过（例如报警判定此刻还没跑到它）就退回当前余额。
+ */
+function overLimitAccounts(db, companyId, dateKey = todayKey()) {
+  if (!companyId) return [];
+  const rows = db
+    .prepare(
+      "SELECT * FROM bank_accounts WHERE company_id = ? AND alert_threshold > 0 ORDER BY sort_order ASC, id ASC"
+    )
+    .all(companyId);
+  const out = [];
+  for (const account of rows) {
+    const threshold = thresholdOf(account);
+    if (!threshold || !isAlertEligible(account)) continue;
+    const balance = displayBalanceForAccount(db, account, dateKey);
+    if (cents(balance) < cents(threshold)) continue;
+    const alerted = isFired(account, dateKey) ? money(account.alert_fired_balance) : balance;
+    out.push({
+      id: account.id,
+      label: accountLabel(account),
+      balance,
+      threshold,
+      alertedBalance: alerted,
+    });
+  }
+  return out;
+}
+
 module.exports = {
   evaluateBalanceAlert,
+  overLimitAccounts,
   // 导出给 routes/banks.js：阈值被改时也要复位。复位要清哪几列只有这一份，
   // 调用方自己抄一遍 UPDATE 早晚会漏掉新加的列。
   clearFired,

@@ -116,8 +116,9 @@ $env:TUNNEL_EDGE_IP_VERSION="4"
 | `/` | `home.js` | 首页看板 |
 | `/transactions.html` | `transactions.js` | 实时交易 |
 | `/customers.html` | `customers.js` | 客户列表 + 分群 |
-| `/bank-ledger.html` | `bank-ledger.js` | 当日流水：运营中银行列表（点行筛流水、逐行勾实时收款）+ KPI + 接单区 + 调钱 + 今日报表 / C STATUS + 流水表格 |
+| `/bank-ledger.html` | `bank-ledger.js` | 交易（原「当日流水」）：运营中渠道列表（勾实时收款、余额/上限进度条，点行去交易记录）+ 列表底部 TOTAL BALANCE + 右侧今日报表 + 接单区 + 调钱 |
 | `/bank-channels.html` | `bank-channels.js` | 支付渠道：全部渠道汇总 + 运营中 / 封禁中 / 已归档 + 渠道编辑 / 转出余额 |
+| `/bank-transactions.html` | `bank-ledger.js`（`data-view="records"`） | 交易记录：流水表（筛选 / 编辑 / 最近删除 / OPERATOR 列） |
 | `/company-settings.html` | `company-settings.js` | 公司/API 配置（admin） |
 
 ## 支付渠道 & 账单流水 (`/api/banks`)
