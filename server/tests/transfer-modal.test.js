@@ -38,6 +38,13 @@ test("其它 STATUS：不带「到」，照旧带 C STATUS", () => {
   assert.equal("to_bank_account_id" in body, false);
 });
 
+test("REDEP：不绑银行，即使员工先选过 BANK 也发 null", () => {
+  const body = loadBuildTransferBody()(out, form({ status: "redeposit" }));
+  assert.equal(body.status, "redeposit");
+  assert.equal(body.bank_account_id, null);
+  assert.equal("to_bank_account_id" in body, false);
+});
+
 test("没选 BANK 时 bank_account_id 是 null", () => {
   const body = loadBuildTransferBody()(out, form({ status: "cash out", bankId: "" }));
   assert.equal(body.bank_account_id, null);

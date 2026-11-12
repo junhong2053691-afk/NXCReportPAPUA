@@ -142,8 +142,9 @@ function helpWithdrawFields(amount) {
 
 // Keep manual IN/OUT status validation in sync with the dropdown options.
 // 没有 bank transfer：它只作为两户互转的另一半由系统写（CONTEXT.md「两户互转」）。
+// redeposit 两个方向都有，且永远不绑银行（CONTEXT.md「REDEP」）。
 const TRANSFER_IN_STATUSES = new Set(["deposit", "cash in", "new", "unclaim", "redeposit", "amopay", "test in"]);
-const TRANSFER_OUT_STATUSES = new Set(["withdraw", "wrong", "cash out", "give back", "expenses", "exchange", "bank trf", "test out"]);
+const TRANSFER_OUT_STATUSES = new Set(["withdraw", "wrong", "cash out", "give back", "expenses", "exchange", "bank trf", "redeposit", "test out"]);
 
 function assertTransferStatus(direction, status) {
   const dir = String(direction || "").toLowerCase() === "in" ? "in" : "out";
@@ -936,7 +937,9 @@ function submitTransfer(db, fromCompanyId, body, actor) {
   if (!amount) throw Object.assign(new Error("金额无效"), { status: 400 });
   assertNotSelfCStatus(db, fromCompanyId, submittedCStatus);
 
-  const bankId = body.bank_account_id ? Number(body.bank_account_id) : 0;
+  // REDEP 不绑银行、不动余额，与审批 / 手录 / 编辑一致（CONTEXT.md「REDEP」）：前端藏了 BANK 框，
+  // 员工先选过的户口这里也一并忽略。
+  const bankId = status !== "redeposit" && body.bank_account_id ? Number(body.bank_account_id) : 0;
   let bank = null;
   if (bankId) {
     bank = db

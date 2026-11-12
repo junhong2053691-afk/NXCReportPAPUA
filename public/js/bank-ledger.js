@@ -77,7 +77,8 @@
   // order aligned with the status settings so the dropdown is predictable.
   // 调钱入账没有 bank transfer：它只作为两户互转的另一半由系统写（CONTEXT.md「两户互转」）。
   const IN_HELP_STATUSES = ["deposit", "cash in", "new", "unclaim", "redeposit", "amopay", "test in"];
-  const OUT_HELP_STATUSES = ["withdraw", "wrong", "cash out", "give back", "expenses", "exchange", "bank trf", "test out"];
+  // redeposit 两个方向都有，且不绑银行（CONTEXT.md「REDEP」）。
+  const OUT_HELP_STATUSES = ["withdraw", "wrong", "cash out", "give back", "expenses", "exchange", "bank trf", "redeposit", "test out"];
   const PICKER_CLOSE = "__close__";
   const PICKER_CLOSE_LABEL = "— 关闭 —";
   const PICKER_BLANK = "__blank__";
@@ -1919,14 +1920,16 @@
 
   // 调钱弹窗的提交数据。bank trf = 两户互转：BANK 框是「从」、另带「到」，C STATUS 一律清空
   // （框藏起来了，但员工可能先填过）。测试 transfer-modal.test.js 把这个函数抠出去跑。
+  // REDEP 不绑银行：BANK 框藏起来，先选过的户口也不发。
   function buildTransferBody(parsed, form) {
     const internal = form.status === "bank trf";
+    const redeposit = form.status === "redeposit";
     const body = {
       direction: parsed.direction,
       status: form.status,
       c_status: internal ? "" : String(form.cStatus || "").trim(),
       amount: parsed.magnitudeText,
-      bank_account_id: Number(form.bankId || 0) || null,
+      bank_account_id: redeposit ? null : (Number(form.bankId || 0) || null),
       entry_time: form.entryTime,
       name: String(form.name || "").trim(),
       remark: String(form.remark || "").trim(),
@@ -2019,8 +2022,12 @@
   }
 
   // STATUS 选 bank trf = 两户互转：BANK 框变「从」，出现「到」，C STATUS 藏起来。
+  // 选 redeposit：BANK 框整组藏起来（REDEP 不绑银行、不动余额）。
   function syncTransferInternalMode() {
-    const internal = document.getElementById("trf-status")?.value === INTERNAL_TRANSFER_STATUS;
+    const status = document.getElementById("trf-status")?.value;
+    const bankGroup = document.getElementById("trf-bank-group");
+    if (bankGroup) bankGroup.hidden = status === "redeposit";
+    const internal = status === INTERNAL_TRANSFER_STATUS;
     const label = document.getElementById("trf-bank-label");
     if (label) label.textContent = internal ? "从（转出户口）" : "关联 BANK";
     const toGroup = document.getElementById("trf-to-group");

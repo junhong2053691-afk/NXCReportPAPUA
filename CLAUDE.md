@@ -325,7 +325,8 @@ $env:TUNNEL_EDGE_IP_VERSION="4"
 **STATUS 分组：**
 
 - 入账: deposit, cash in, new, unclaim, redeposit（调钱入账没有 bank transfer，它只作为两户互转的另一半自动产生）
-- 出账: withdraw, wrong, cash out, give back, expenses, exchange, bank trf
+- 出账: withdraw, wrong, cash out, give back, expenses, exchange, bank trf, redeposit（只在调钱弹窗）
+- **redeposit 任何入口都不绑银行、不动余额**（`submitTransfer` 忽略 BANK，见 `CONTEXT.md`「REDEP」）
 
 **HELP TRF 保存逻辑：**
 
