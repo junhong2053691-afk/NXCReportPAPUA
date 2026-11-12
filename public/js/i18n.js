@@ -1292,7 +1292,7 @@ Object.assign(I18N.zh, {
   "别家待审批": "别家待审批",
   "收款户口": "收款户口",
   "C STATUS（对方公司）": "C STATUS（对方公司）",
-  "本公司户口：记两笔，封禁户 BANK TRF 出、收款户 BANK TRANSFER 入，C STATUS 留空。别家公司：只记封禁户一笔 BANK TRF 出，C STATUS 填对方，对方自己记入账。户口保持封禁；钱拿回后户口还要用的，请用「解封」。": "本公司户口：记两笔，封禁户 BANK TRF 出、收款户 BANK TRANSFER 入，C STATUS 留空。别家公司：只记封禁户一笔 BANK TRF 出，C STATUS 填对方，对方自己记入账。户口保持封禁；钱拿回后户口还要用的，请用「解封」。",
+  "本公司户口：记两笔，封禁户 BANK TRF 出、收款户 BANK TRANSFER 入，C STATUS 留空。别家公司：只记封禁户一笔 CASH OUT 出，C STATUS 填对方，对方自己记入账。户口保持封禁；钱拿回后户口还要用的，请用「解封」。": "本公司户口：记两笔，封禁户 BANK TRF 出、收款户 BANK TRANSFER 入，C STATUS 留空。别家公司：只记封禁户一笔 CASH OUT 出，C STATUS 填对方，对方自己记入账。户口保持封禁；钱拿回后户口还要用的，请用「解封」。",
   "确认转出": "确认转出",
   "请输入转出金额": "请输入转出金额",
   "请选择收款户口": "请选择收款户口",
@@ -1422,7 +1422,7 @@ Object.assign(I18N.en, {
   "别家待审批": "Pending at other companies",
   "收款户口": "Receiving account",
   "C STATUS（对方公司）": "C STATUS (counterparty)",
-  "本公司户口：记两笔，封禁户 BANK TRF 出、收款户 BANK TRANSFER 入，C STATUS 留空。别家公司：只记封禁户一笔 BANK TRF 出，C STATUS 填对方，对方自己记入账。户口保持封禁；钱拿回后户口还要用的，请用「解封」。": "Our account: two rows, BANK TRF out of the banned account and BANK TRANSFER into the receiving account, C STATUS blank. Another company: one BANK TRF out of the banned account with the counterparty as C STATUS; they record their own incoming side. The account stays banned; if it will be used again once the money is back, use Unban.",
+  "本公司户口：记两笔，封禁户 BANK TRF 出、收款户 BANK TRANSFER 入，C STATUS 留空。别家公司：只记封禁户一笔 CASH OUT 出，C STATUS 填对方，对方自己记入账。户口保持封禁；钱拿回后户口还要用的，请用「解封」。": "Our account: two rows, BANK TRF out of the banned account and BANK TRANSFER into the receiving account, C STATUS blank. Another company: one CASH OUT out of the banned account with the counterparty as C STATUS; they record their own incoming side. The account stays banned; if it will be used again once the money is back, use Unban.",
   "确认转出": "Confirm transfer",
   "请输入转出金额": "Enter the amount to transfer",
   "请选择收款户口": "Choose the receiving account",
@@ -2157,6 +2157,28 @@ Object.assign(I18N.en, {
   "搜索或输入新名称": "Search or type a new name",
   "+ 使用": "+ Use",
   "没有匹配的 C STATUS": "No matching C STATUS",
+});
+
+// batch K: 调钱弹窗的两户互转（CONTEXT.md「两户互转」）
+Object.assign(I18N.zh, {
+  "从（转出户口）": "从（转出户口）",
+  "到（收款户口）": "到（收款户口）",
+  "— 请选择 —": "— 请选择 —",
+  "请选择转出户口（从）": "请选择转出户口（从）",
+  "请选择收款户口（到）": "请选择收款户口（到）",
+  "请选择转出的户口（从）": "请选择转出的户口（从）",
+  "请选择本公司另一个运营中的收款户口（到）": "请选择本公司另一个运营中的收款户口（到）",
+  "BANK TRF 是本公司两户互转，不填 C STATUS": "BANK TRF 是本公司两户互转，不填 C STATUS",
+});
+Object.assign(I18N.en, {
+  "从（转出户口）": "From (paying account)",
+  "到（收款户口）": "To (receiving account)",
+  "— 请选择 —": "— Select —",
+  "请选择转出户口（从）": "Choose the paying account (From)",
+  "请选择收款户口（到）": "Choose the receiving account (To)",
+  "请选择转出的户口（从）": "Choose the paying account (From)",
+  "请选择本公司另一个运营中的收款户口（到）": "Choose another operating account of this company to receive (To)",
+  "BANK TRF 是本公司两户互转，不填 C STATUS": "BANK TRF is a transfer between this company's own accounts; leave C STATUS empty",
 });
 
 // ---------------------------------------------------------------------------

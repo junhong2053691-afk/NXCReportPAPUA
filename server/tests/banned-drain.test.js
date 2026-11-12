@@ -4,7 +4,8 @@
 // 员工只能「解封 → 记两笔 → 再封禁」，解封期间户口又出现在审批下拉里，还把 C STATUS 填成了
 // 本公司。与用户确认的记法（Excel）：
 //   转到本公司另一个户口：封禁户 BANK TRF 出 + 收款户 BANK TRANSFER 入，金额相同，C STATUS 留空
-//   转给别家公司：      封禁户 BANK TRF 出，C STATUS 填对方（对方自己记入账）
+//   转给别家公司：      封禁户 CASH OUT 出，C STATUS 填对方（对方自己记入账）
+//                       （2026-11-12 前记 BANK TRF；之后 bank trf 只表示本公司两户互转）
 // 钱能拿回、户口还要用的，照旧走「解封」；这里不解封，户口一直是封禁状态。
 const test = require("node:test");
 const assert = require("node:assert/strict");
@@ -48,14 +49,16 @@ test("转到本公司户口：封禁户 BANK TRF 出、收款户 BANK TRANSFER �
   assert.equal(statusOf(db, banned), "banned", "不解封");
 });
 
-test("转给别家：只记封禁户一笔 BANK TRF 出，C STATUS 填对方，和调钱弹窗录 BANK TRF 同口径", () => {
+// 2026-11-12 起 bank trf 只表示本公司两户互转（CONTEXT.md），转给别家改记 CASH OUT。
+test("转给别家：只记封禁户一笔 CASH OUT 出，C STATUS 填对方", () => {
   const { db, banned } = setup();
   drainBannedAccount(db, "alpha", banned, { amount: 500, c_status: "RX66" }, actor);
 
   const rows = ledgerOf(db);
   assert.equal(rows.length, 1);
   assert.equal(rows[0].bank_account_id, banned);
-  assert.equal(rows[0].status, "bank trf");
+  assert.equal(rows[0].status, "cash out");
+  assert.equal(Number(rows[0].amount_out), 500, "落 OUT 列，不再落 HELP TRF");
   assert.equal(rows[0].c_status, "RX66");
   assert.equal(round2(balanceFromLedger(db, banned)), 445.83);
   const day = rows[0].entry_time.slice(0, 10);

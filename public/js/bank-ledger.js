@@ -75,7 +75,8 @@
   const OUT_STATUSES = new Set(["withdraw", "wrong", "cash out", "give back", "expenses", "exchange", "bank trf", "test out"]);
   // Manual IN/OUT must expose the complete directional status sets. Keep the
   // order aligned with the status settings so the dropdown is predictable.
-  const IN_HELP_STATUSES = ["deposit", "cash in", "new", "bank transfer", "unclaim", "redeposit", "amopay", "test in"];
+  // 调钱入账没有 bank transfer：它只作为两户互转的另一半由系统写（CONTEXT.md「两户互转」）。
+  const IN_HELP_STATUSES = ["deposit", "cash in", "new", "unclaim", "redeposit", "amopay", "test in"];
   const OUT_HELP_STATUSES = ["withdraw", "wrong", "cash out", "give back", "expenses", "exchange", "bank trf", "test out"];
   const PICKER_CLOSE = "__close__";
   const PICKER_CLOSE_LABEL = "— 关闭 —";
@@ -1903,7 +1904,27 @@
     return valid;
   }
 
-  const TRANSFER_DEFAULT_STATUS = { in: "bank transfer", out: "bank trf" };
+  // 2026-11-12 前默认 bank transfer / bank trf；之后那一对只表示两户互转，要员工自己选。
+  const TRANSFER_DEFAULT_STATUS = { in: "cash in", out: "cash out" };
+  const INTERNAL_TRANSFER_STATUS = "bank trf";
+
+  // 调钱弹窗的提交数据。bank trf = 两户互转：BANK 框是「从」、另带「到」，C STATUS 一律清空
+  // （框藏起来了，但员工可能先填过）。测试 transfer-modal.test.js 把这个函数抠出去跑。
+  function buildTransferBody(parsed, form) {
+    const internal = form.status === "bank trf";
+    const body = {
+      direction: parsed.direction,
+      status: form.status,
+      c_status: internal ? "" : String(form.cStatus || "").trim(),
+      amount: parsed.magnitudeText,
+      bank_account_id: Number(form.bankId || 0) || null,
+      entry_time: form.entryTime,
+      name: String(form.name || "").trim(),
+      remark: String(form.remark || "").trim(),
+    };
+    if (internal) body.to_bank_account_id = Number(form.toBankId || 0) || null;
+    return body;
+  }
 
   function parseTransferAmount(value) {
     const text = String(value ?? "").replace(/,/g, "").trim();
@@ -1973,6 +1994,33 @@
     if (title) title.textContent = "HELP TRF";
   }
 
+  // 「到」只列本公司运营中的户、不含「从」那户；编号沿用完整列表的，和渠道列表对得上。
+  // 不预选（2026-11-12 需求访谈：免得员工没看清就转进错的户）。
+  function fillTransferToBank() {
+    const sel = document.getElementById("trf-to-bank");
+    if (!sel) return;
+    const fromId = String(document.getElementById("trf-bank")?.value || "");
+    const keep = sel.value;
+    const options = usableBanks()
+      .map((b, i) => ({ id: String(b.id), label: bankPickerLabel(b, i) }))
+      .filter((o) => o.id !== fromId);
+    sel.innerHTML = '<option value="">— 请选择 —</option>'
+      + options.map((o) => `<option value="${o.id}" translate="no">${esc(o.label)}</option>`).join("");
+    sel.value = options.some((o) => o.id === keep) ? keep : "";
+  }
+
+  // STATUS 选 bank trf = 两户互转：BANK 框变「从」，出现「到」，C STATUS 藏起来。
+  function syncTransferInternalMode() {
+    const internal = document.getElementById("trf-status")?.value === INTERNAL_TRANSFER_STATUS;
+    const label = document.getElementById("trf-bank-label");
+    if (label) label.textContent = internal ? "从（转出户口）" : "关联 BANK";
+    const toGroup = document.getElementById("trf-to-group");
+    if (toGroup) toGroup.hidden = !internal;
+    const csGroup = document.getElementById("trf-cstatus-group");
+    if (csGroup) csGroup.hidden = internal;
+    if (internal) fillTransferToBank();
+  }
+
   function syncTransferFormForAmount() {
     const parsed = parseTransferAmount(document.getElementById("trf-amount")?.value);
     if (parsed.state === "valid") {
@@ -1984,6 +2032,7 @@
       resetTransferStatus();
     }
     renderTransferPreview(parsed);
+    syncTransferInternalMode();
     return parsed;
   }
 
@@ -2001,6 +2050,8 @@
     setVal("trf-name", "");
     setVal("trf-remark", "");
     setVal("trf-cstatus", "");
+    const toSel = document.getElementById("trf-to-bank");
+    if (toSel) toSel.innerHTML = "";
     const err = document.getElementById("trf-err");
     if (err) err.textContent = "";
     syncTransferFormForAmount();
@@ -2354,7 +2405,9 @@
     document.getElementById("trf-status")?.addEventListener("change", () => {
       const parsed = parseTransferAmount(document.getElementById("trf-amount")?.value);
       if (parsed.state === "valid") renderTransferPreview(parsed);
+      syncTransferInternalMode();
     });
+    document.getElementById("trf-bank")?.addEventListener("change", syncTransferInternalMode);
     document.querySelectorAll(".pending-tab").forEach((btn) => {
       btn.addEventListener("click", () => switchPendingTab(btn.dataset.tab));
     });
@@ -2487,16 +2540,20 @@
         return;
       }
       syncTransferFormForAmount();
-      const body = {
-        direction: parsed.direction,
+      const body = buildTransferBody(parsed, {
         status: g("trf-status")?.value || "",
-        c_status: (g("trf-cstatus")?.value || "").trim(),
-        amount: parsed.magnitudeText,
-        bank_account_id: Number(g("trf-bank")?.value || 0) || null,
-        entry_time: entryDateTime(g("trf-time")?.value || nowTime()),
-        name: (g("trf-name")?.value || "").trim(),
-        remark: (g("trf-remark")?.value || "").trim(),
-      };
+        cStatus: g("trf-cstatus")?.value || "",
+        bankId: g("trf-bank")?.value || "",
+        toBankId: g("trf-to-bank")?.value || "",
+        entryTime: entryDateTime(g("trf-time")?.value || nowTime()),
+        name: g("trf-name")?.value || "",
+        remark: g("trf-remark")?.value || "",
+      });
+      if ("to_bank_account_id" in body && (!body.bank_account_id || !body.to_bank_account_id)) {
+        if (err) err.textContent = body.bank_account_id ? "请选择收款户口（到）" : "请选择转出户口（从）";
+        (body.bank_account_id ? g("trf-to-bank") : g("trf-bank"))?.focus();
+        return;
+      }
       transferSubmitting = true;
       const submit = g("trf-submit");
       const cancel = g("trf-cancel");

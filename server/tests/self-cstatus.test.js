@@ -55,7 +55,7 @@ test("调钱填本公司 C STATUS：拒绝，不落流水", () => {
   const db = setup();
   const acc = addAccount(db);
   assert.throws(
-    () => submitTransfer(db, "alpha", { direction: "out", status: "bank trf", amount: 10, bank_account_id: acc, c_status: "EZ68" }, actor),
+    () => submitTransfer(db, "alpha", { direction: "out", status: "cash out", amount: 10, bank_account_id: acc, c_status: "EZ68" }, actor),
     (e) => e.status === 400
   );
   assert.equal(db.prepare("SELECT COUNT(*) n FROM bank_ledger").get().n, 0);

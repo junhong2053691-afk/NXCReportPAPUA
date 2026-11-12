@@ -141,7 +141,8 @@ function helpWithdrawFields(amount) {
 }
 
 // Keep manual IN/OUT status validation in sync with the dropdown options.
-const TRANSFER_IN_STATUSES = new Set(["deposit", "cash in", "new", "bank transfer", "unclaim", "redeposit", "amopay", "test in"]);
+// 没有 bank transfer：它只作为两户互转的另一半由系统写（CONTEXT.md「两户互转」）。
+const TRANSFER_IN_STATUSES = new Set(["deposit", "cash in", "new", "unclaim", "redeposit", "amopay", "test in"]);
 const TRANSFER_OUT_STATUSES = new Set(["withdraw", "wrong", "cash out", "give back", "expenses", "exchange", "bank trf", "test out"]);
 
 function assertTransferStatus(direction, status) {
@@ -795,6 +796,52 @@ function restoreConflictForDeleted(db, deleted) {
   });
 }
 
+// 两户互转（CONTEXT.md）的一对：人工录入（auto_generated = 0）、同组、status 是 bank trf / bank transfer。
+// 审批生成的组（auto_generated = 1）照旧整组删。带组号的单条老 bank trf（11-12 前的跨公司调钱）
+// 组里只有它自己，所以还是只删它。
+const INTERNAL_PAIR_SQL = "auto_generated = 0 AND LOWER(TRIM(status)) IN ('bank trf', 'bank transfer')";
+function isInternalPairRow(row) {
+  const st = String(row?.status || "").trim().toLowerCase();
+  return Boolean(row?.transfer_group_id) && !Number(row.auto_generated)
+    && (st === "bank trf" || st === "bank transfer");
+}
+
+// 删除一条流水时要一起删的行（含它自己）。
+function ledgerRowsToDelete(db, companyId, row) {
+  if (Number(row.auto_generated) && row.transfer_group_id) {
+    return db
+      .prepare(
+        `SELECT * FROM bank_ledger
+         WHERE company_id = ? AND transfer_group_id = ? AND auto_generated = 1
+         ORDER BY id ASC`
+      )
+      .all(companyId, row.transfer_group_id);
+  }
+  if (isInternalPairRow(row)) {
+    return db
+      .prepare(
+        `SELECT * FROM bank_ledger
+         WHERE company_id = ? AND transfer_group_id = ? AND ${INTERNAL_PAIR_SQL}
+         ORDER BY id ASC`
+      )
+      .all(companyId, row.transfer_group_id);
+  }
+  return [row];
+}
+
+// 从最近删除恢复一条时要一起恢复的已删行（含它自己）。只有两户互转成对恢复；
+// 审批组仍是一行一行恢复（那条路有平台单打回 / 冲突闸门，另有规则）。
+function deletedRowsToRestore(db, companyId, deleted) {
+  if (!isInternalPairRow(deleted)) return [deleted];
+  return db
+    .prepare(
+      `SELECT * FROM bank_ledger_deleted
+       WHERE company_id = ? AND transfer_group_id = ? AND ${INTERNAL_PAIR_SQL}
+       ORDER BY id ASC`
+    )
+    .all(companyId, deleted.transfer_group_id);
+}
+
 // opts.excludeLedgerId / excludeGroupId 只给恢复路径用：那时被恢复的行已经插回去了，
 // 它自己和同组兄弟不算「还在账上的别的行」。
 function reopenPendingForLedger(db, row, opts = {}) {
@@ -849,11 +896,35 @@ function makeTransferGroupId() {
   return `trf_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 }
 
+// 两户互转（CONTEXT.md）写账的唯一一份：「从」户 bank trf 出 + 「到」户 bank transfer 入，金额相同、
+// C STATUS 空、同一组。调钱弹窗和「转出封禁户余额 → 本公司户口」共用。调用方在事务里调用、自己写审计，
+// 审计 refs 用 internalPairRefs，两条都登记（交易记录页 OPERATOR 列靠它找人）。
+function insertInternalTransferPair(db, companyId, { from, to, amount, entryTime, name = "", remark = "" }) {
+  const groupId = makeTransferGroupId();
+  const common = { company_id: companyId, entry_time: entryTime, name, c_status: "", remark, auto_generated: 0, transfer_group_id: groupId };
+  const out = insertLedger(db, {
+    ...common,
+    bank_account_id: from.id,
+    ...mapAmountFields("out", "bank trf", amount),
+    bank_acc: bankAccLabel(from),
+  });
+  const inbound = insertLedger(db, {
+    ...common,
+    bank_account_id: to.id,
+    ...mapAmountFields("in", "bank transfer", amount),
+    bank_acc: bankAccLabel(to),
+  });
+  return { out, inbound, groupId };
+}
+function internalPairRefs(pair) {
+  return [...ledgerRefs(pair.out), ...ledgerRefs(pair.inbound)];
+}
+
 function submitTransfer(db, fromCompanyId, body, actor) {
   const toCompanyId = String(body.to_company_id || "").trim();
   const submittedCStatus = String(body.c_status || "").trim();
   const direction = String(body.direction || "out").toLowerCase() === "in" ? "in" : "out";
-  const status = assertTransferStatus(direction, String(body.status || (direction === "out" ? "bank trf" : "bank transfer")));
+  const status = assertTransferStatus(direction, String(body.status || (direction === "out" ? "cash out" : "cash in")));
   const amountText = String(body.amount ?? "").replace(/,/g, "").trim();
   const amountNumber = Number(amountText);
   const amount = Number.isFinite(amountNumber) ? Math.abs(amountNumber) : 0;
@@ -877,6 +948,25 @@ function submitTransfer(db, fromCompanyId, body, actor) {
     throw Object.assign(new Error("test in/out 请选择本司银行"), { status: 400 });
   }
 
+  // 两户互转（CONTEXT.md）：bank trf 只表示本公司自己两户之间挪钱，一次写两条。
+  // 校验必须在下面存 C STATUS 选项之前——那一步不在事务里，拒绝了也会留下新选项。
+  const toBankId = Number(body.to_bank_account_id || 0);
+  let toBank = null;
+  if (status === "bank trf") {
+    if (submittedCStatus || toCompanyId) {
+      throw Object.assign(new Error("BANK TRF 是本公司两户互转，不填 C STATUS"), { status: 400 });
+    }
+    if (!bank) throw Object.assign(new Error("请选择转出的户口（从）"), { status: 400 });
+    toBank = toBankId
+      ? db
+        .prepare(`SELECT * FROM bank_accounts WHERE id = ? AND company_id = ? AND ${SQL_OPERATING}`)
+        .get(toBankId, fromCompanyId)
+      : null;
+    if (!toBank || toBank.id === bank.id) {
+      throw Object.assign(new Error("请选择本公司另一个运营中的收款户口（到）"), { status: 400 });
+    }
+  }
+
   // Prefer the existing C STATUS association. The form does not need to repeat it.
   let targetCompany = toCompanyId || linkedCompanyForCStatus(db, fromCompanyId, submittedCStatus);
   if (targetCompany && targetCompany === fromCompanyId) {
@@ -891,6 +981,22 @@ function submitTransfer(db, fromCompanyId, body, actor) {
   const amounts = mapAmountFields(direction, status, amount);
 
   return runAtomic(db, () => {
+    if (toBank) {
+      const pair = insertInternalTransferPair(db, fromCompanyId, { from: bank, to: toBank, amount, entryTime, name, remark });
+      appendAuditEvent(db, {
+        companyId: fromCompanyId,
+        action: "transfer.created",
+        source: "user",
+        actor: auditActorValue(actor),
+        summary: `两户互转 #${pair.out.id} → #${pair.inbound.id}`,
+        reason: String(body.reason || "").trim(),
+        after: pickFields(pair.out, LEDGER_FIELDS),
+        metadata: { direction, internal: true, from_bank_account_id: bank.id, to_bank_account_id: toBank.id },
+        refs: internalPairRefs(pair),
+      });
+      return { ledger: pair.out, inbound: pair.inbound, transfer_group_id: pair.groupId, counterparty_required: false };
+    }
+
     const ledger = insertLedger(db, {
       bank_account_id: bankId,
       company_id: fromCompanyId,
@@ -927,9 +1033,10 @@ function submitTransfer(db, fromCompanyId, body, actor) {
 // 封禁户「转出余额」。所有记账入口都只认运营中的户口，以前员工只能「解封 → 记两笔 → 再封禁」，
 // 解封期间户口又出现在审批下拉里（2026-11-06 员工演练）。记法与用户确认（Excel）：
 //   转到本公司另一个户口：封禁户 BANK TRF 出 + 收款户 BANK TRANSFER 入，金额相同，C STATUS 留空
-//   转给别家公司：      封禁户 BANK TRF 出，C STATUS 填对方（对方自己记入账）
-// 落列与调钱弹窗录 BANK TRF / BANK TRANSFER 完全一样（mapAmountFields），所以 C STATUS 表
-// 的方向也一样。户口不解封；钱能拿回、户口还要用的照旧走「解封」。
+//   转给别家公司：      封禁户 CASH OUT 出，C STATUS 填对方（对方自己记入账）
+// 转到本公司户口就是调钱弹窗的「两户互转」，落列完全一样（mapAmountFields）。转给别家
+// 2026-11-12 前记 BANK TRF，之后 bank trf 只表示本公司两户互转（CONTEXT.md）。
+// 户口不解封；钱能拿回、户口还要用的照旧走「解封」。
 function drainBannedAccount(db, companyId, bankId, body, actor) {
   const from = db
     .prepare("SELECT * FROM bank_accounts WHERE id = ? AND company_id = ?")
@@ -970,30 +1077,24 @@ function drainBannedAccount(db, companyId, bankId, body, actor) {
 
   const entryTime = nowSql();
   const remark = String(body?.remark || "").trim();
-  const groupId = makeTransferGroupId();
   return runAtomic(db, () => {
     if (cStatus) upsertCStatusOptions(db, companyId, cStatus, targetCompany || null);
-    const out = insertLedger(db, {
-      bank_account_id: from.id,
-      company_id: companyId,
-      entry_time: entryTime,
-      ...mapAmountFields("out", "bank trf", amount),
-      bank_acc: bankAccLabel(from),
-      c_status: cStatus,
-      remark,
-      transfer_group_id: groupId,
-    });
-    const inbound = to
-      ? insertLedger(db, {
-        bank_account_id: to.id,
+    // 转回本公司就是两户互转；转给别家记 cash out——bank trf 永远不带 C STATUS。
+    const pair = to ? insertInternalTransferPair(db, companyId, { from, to, amount, entryTime, remark }) : null;
+    const out = pair
+      ? pair.out
+      : insertLedger(db, {
+        bank_account_id: from.id,
         company_id: companyId,
         entry_time: entryTime,
-        ...mapAmountFields("in", "bank transfer", amount),
-        bank_acc: bankAccLabel(to),
+        ...mapAmountFields("out", "cash out", amount),
+        bank_acc: bankAccLabel(from),
+        c_status: cStatus,
         remark,
-        transfer_group_id: groupId,
-      })
-      : null;
+        transfer_group_id: makeTransferGroupId(),
+      });
+    const inbound = pair ? pair.inbound : null;
+    const groupId = out.transfer_group_id;
     appendAuditEvent(db, {
       companyId,
       action: "transfer.created",
@@ -1009,7 +1110,7 @@ function drainBannedAccount(db, companyId, bankId, body, actor) {
         target_company_id: targetCompany || "",
         counterparty_required: Boolean(targetCompany),
       },
-      refs: ledgerRefs(out),
+      refs: pair ? internalPairRefs(pair) : ledgerRefs(out),
     });
     return { ledger: out, inbound, transfer_group_id: groupId, counterparty_required: Boolean(targetCompany) };
   });
@@ -1063,6 +1164,8 @@ module.exports = {
   platformTxTypeForLedger,
   reopenPendingForLedger,
   restoreConflictForDeleted,
+  ledgerRowsToDelete,
+  deletedRowsToRestore,
   nowSql,
   normalizeSqlDateTime,
 };

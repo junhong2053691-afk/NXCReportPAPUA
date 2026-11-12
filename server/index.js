@@ -219,7 +219,7 @@ function pageLayout(title, active, body, script) {
 
 // 交易页（/bank-ledger.html）与交易记录页（/bank-transactions.html）共用同一份 bank-ledger.js，
 // 按 .bkv2 的 data-view 分流（2026-11-10 拆页）。两页的版本号必须一起换。
-const BANK_LEDGER_SCRIPTS = ["/js/ledger-bank-pick.js?v=20261106drill3", "/js/operation-target.js?v=20261106drill1", "/js/render-gate.js?v=20261106drill1", "/js/pending-filter.js?v=20261106drill1", "/js/display-format.js?v=20261106drill2", "/js/cstatus-sheet.js?v=20261106sheet1", "/js/bank-common.js?v=20261110trade1", "/js/bank-ledger.js?v=20261110alarm1"];
+const BANK_LEDGER_SCRIPTS = ["/js/ledger-bank-pick.js?v=20261106drill3", "/js/operation-target.js?v=20261106drill1", "/js/render-gate.js?v=20261106drill1", "/js/pending-filter.js?v=20261106drill1", "/js/display-format.js?v=20261106drill2", "/js/cstatus-sheet.js?v=20261106sheet1", "/js/bank-common.js?v=20261110trade1", "/js/bank-ledger.js?v=20261112internal1"];
 
 const pageRoutes = {
   "/": pageLayout(
@@ -485,9 +485,10 @@ const pageRoutes = {
 <div class="form-group"><label>TIME (24h)</label><input id="trf-time" type="time" step="60"></div>
 <div class="form-group"><label for="trf-amount">金额</label><input id="trf-amount" inputmode="text" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="例如 100 或 -100" aria-describedby="trf-amount-hint"><small id="trf-amount-hint" class="form-hint">正数或不带符号 = IN，负数 = OUT</small></div>
 <div class="form-group"><label for="trf-status">STATUS</label><select id="trf-status" disabled aria-describedby="trf-status-hint"><option value="">请先输入金额</option></select><small id="trf-status-hint" class="form-hint">根据金额正负显示可用状态</small></div>
-<div class="form-group"><label>关联 BANK</label><select id="trf-bank"><option value="">— 不关联渠道 —</option></select></div>
+<div class="form-group"><label for="trf-bank" id="trf-bank-label">关联 BANK</label><select id="trf-bank"><option value="">— 不关联渠道 —</option></select></div>
+<div class="form-group" id="trf-to-group" hidden><label for="trf-to-bank">到（收款户口）</label><select id="trf-to-bank"></select></div>
 <div class="form-group"><label>NAME</label><input id="trf-name" autocomplete="off"></div>
-<div class="form-group"><label>C STATUS (可选)</label>
+<div class="form-group" id="trf-cstatus-group"><label>C STATUS (可选)</label>
 <input id="trf-cstatus" list="cstatus-datalist" data-cstatus-pick autocomplete="off" placeholder="使用已关联的 C STATUS"></div>
 <p class="modal-note">提现代付双方分别录入：客户所在公司在「待处理」里对这张提现单选「调钱」（记 WITHDRAW，放 HELP TRF），协助公司在这里录 CASH OUT；例如 EZ 帮 RX 付，RX 审批选调钱、C STATUS 填 EZ68，EZ 在这里录 CASH OUT、C STATUS 填 RX66。</p>
 <div class="form-group"><label>REMARK</label><input id="trf-remark"></div>
@@ -625,7 +626,7 @@ const pageRoutes = {
 <div class="form-group" id="drain-cstatus-group" hidden><label for="drain-cstatus">C STATUS（对方公司）</label><input id="drain-cstatus" list="cstatus-datalist" data-cstatus-pick autocomplete="off"></div>
 <div class="form-group"><label for="drain-amount">金额</label><input id="drain-amount" inputmode="decimal" autocomplete="off" aria-describedby="drain-amount-hint"><small class="form-hint" id="drain-amount-hint" translate="no"></small></div>
 <div class="form-group"><label for="drain-remark">REMARK</label><input id="drain-remark" autocomplete="off"></div>
-<p class="modal-note">本公司户口：记两笔，封禁户 BANK TRF 出、收款户 BANK TRANSFER 入，C STATUS 留空。别家公司：只记封禁户一笔 BANK TRF 出，C STATUS 填对方，对方自己记入账。户口保持封禁；钱拿回后户口还要用的，请用「解封」。</p>
+<p class="modal-note">本公司户口：记两笔，封禁户 BANK TRF 出、收款户 BANK TRANSFER 入，C STATUS 留空。别家公司：只记封禁户一笔 CASH OUT 出，C STATUS 填对方，对方自己记入账。户口保持封禁；钱拿回后户口还要用的，请用「解封」。</p>
 <p id="drain-err" class="form-error" role="alert" aria-live="polite"></p>
 <div class="actions"><button class="btn btn-outline btn-sm" id="drain-cancel" type="button">取消</button><button class="btn btn-success btn-sm" id="drain-submit" type="button">确认转出</button></div>
 </div></div>`,
@@ -738,7 +739,7 @@ const globalFeedbackHtml = '<div class="app-toast-stack" id="app-toast-stack" ar
 // i18n.js holds the dictionary + translation engine. It is injected into <head> (ahead of the
 // render-blocking stylesheet) so the first paint is already in the saved language, instead of
 // painting Chinese and rewriting it after the two vendored scripts at the end of <body> load.
-const i18nHeadHtml = '<script src="/js/i18n.js?v=20261110alarm1"></script>';
+const i18nHeadHtml = '<script src="/js/i18n.js?v=20261112internal1"></script>';
 // One full translation pass at the end of <body>, where the whole document
 // exists but the two vendored scripts below have not been fetched yet. Anything
 // painted while they load is already in the right language. Must come after

@@ -150,14 +150,15 @@ $env:TUNNEL_EDGE_IP_VERSION="4"
 
 **STATUS 分组：**
 
-- 入账: deposit, cash in, new, bank transfer, unclaim, redeposit
+- 入账: deposit, cash in, new, unclaim, redeposit（调钱入账没有 bank transfer，它只作为两户互转的另一半自动产生）
 - 出账: withdraw, wrong, cash out, give back, expenses, exchange, bank trf
 
 **HELP TRF 保存逻辑：**
 
 - 入账 → `trf_amount`，status = `bank transfer`
 - 出账 → `help_amount`，status = `bank trf`
-- 跨公司代操作：BANK ACC 可留空，C STATUS 填对方公司
+- 2026-11-12 起 `bank trf` / `bank transfer` **只表示本公司两户互转**：一次写两条（「从」户出、「到」户入），
+  永远不带 C STATUS，删除 / 恢复两条一起。规矩见 `CONTEXT.md`「两户互转」，代码说明见 `CLAUDE.md` 同名一节
 
 ## 开发原则（给 AI）
 

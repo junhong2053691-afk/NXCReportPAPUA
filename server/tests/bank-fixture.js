@@ -114,6 +114,8 @@ function bankDatabase() {
       amount_out REAL NOT NULL DEFAULT 0,
       help_amount REAL NOT NULL DEFAULT 0,
       trf_amount REAL NOT NULL DEFAULT 0,
+      auto_generated INTEGER NOT NULL DEFAULT 0,
+      transfer_group_id TEXT NOT NULL DEFAULT '',
       deleted_at TEXT NOT NULL DEFAULT (datetime('now')),
       deleted_by TEXT NOT NULL DEFAULT ''
     );

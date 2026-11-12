@@ -34,6 +34,8 @@ const {
   platformTxTypeForLedger,
   reopenPendingForLedger,
   restoreConflictForDeleted,
+  ledgerRowsToDelete,
+  deletedRowsToRestore,
 } = require("../lib/bankApply");
 const {
   isValidStatusValue,
@@ -965,13 +967,16 @@ router.post("/ledger/deleted/:deletedId/restore", (req, res) => {
   const db = getDb();
   const deleted = db.prepare("SELECT * FROM bank_ledger_deleted WHERE id = ? AND company_id = ?").get(deletedId, cid);
   if (!deleted) return res.status(404).json({ error: "Deleted ledger not found" });
+  // 两户互转成对恢复，只恢复一条两户余额就对不上（bankApply.deletedRowsToRestore，有测试）。
+  const restoreRows = deletedRowsToRestore(db, cid, deleted);
 
   // 恢复流水会刷新目标账户余额。对已归档的账户做这件事，会让它在所有视图之外悄悄带上
   // 余额——归档闸门（bankLifecycle.archiveBlockReason）挡住的正是这条路，这里是另一半。
-  if (deleted.bank_account_id) {
+  for (const row of restoreRows) {
+    if (!row.bank_account_id) continue;
     const target = db
       .prepare("SELECT * FROM bank_accounts WHERE id = ? AND company_id = ?")
-      .get(deleted.bank_account_id, cid);
+      .get(row.bank_account_id, cid);
     if (target && isArchived(target)) {
       return res.status(409).json({ error: "该渠道已归档，请先取消归档再恢复流水" });
     }
@@ -990,35 +995,62 @@ router.post("/ledger/deleted/:deletedId/restore", (req, res) => {
   let restoredId = 0;
   let restoredPlatformOrder = false;
   runAtomic(db, () => {
-    const exists = db.prepare("SELECT 1 FROM bank_ledger WHERE id = ?").get(deleted.original_id);
-    const columns = exists
-      ? `(bank_account_id, company_id, entry_time, tx_id, status, amount_in, amount_out,
-          help_amount, trf_amount, bank_acc, username, name, c_status, other_info, remark,
-          auto_generated, transfer_group_id, created_at, updated_at)`
-      : `(id, bank_account_id, company_id, entry_time, tx_id, status, amount_in, amount_out,
-          help_amount, trf_amount, bank_acc, username, name, c_status, other_info, remark,
-          auto_generated, transfer_group_id, created_at, updated_at)`;
-    const values = exists
-      ? `?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?`
-      : `?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?`;
-    const params = exists
-      ? [
-          deleted.bank_account_id, deleted.company_id, deleted.entry_time, deleted.tx_id, deleted.status,
-          deleted.amount_in, deleted.amount_out, deleted.help_amount, deleted.trf_amount,
-          deleted.bank_acc, deleted.username, deleted.name, deleted.c_status, deleted.other_info,
-          deleted.remark, deleted.auto_generated, deleted.transfer_group_id || "",
-          deleted.created_at || "", deleted.updated_at || "",
-        ]
-      : [
-          deleted.original_id, deleted.bank_account_id, deleted.company_id, deleted.entry_time, deleted.tx_id,
-          deleted.status, deleted.amount_in, deleted.amount_out, deleted.help_amount, deleted.trf_amount,
-          deleted.bank_acc, deleted.username, deleted.name, deleted.c_status, deleted.other_info,
-          deleted.remark, deleted.auto_generated, deleted.transfer_group_id || "",
-          deleted.created_at || "", deleted.updated_at || "",
-        ];
-    const result = db.prepare(`INSERT INTO bank_ledger ${columns} VALUES (${values})`).run(...params);
-    restoredId = exists ? result.lastInsertRowid : deleted.original_id;
-    db.prepare("DELETE FROM bank_ledger_deleted WHERE id = ? AND company_id = ?").run(deletedId, cid);
+    // 把一条已删行塞回 bank_ledger（原 id 还空着就用原 id），并从最近删除里拿掉。
+    const insertBack = (deleted) => {
+      const exists = db.prepare("SELECT 1 FROM bank_ledger WHERE id = ?").get(deleted.original_id);
+      const columns = exists
+        ? `(bank_account_id, company_id, entry_time, tx_id, status, amount_in, amount_out,
+            help_amount, trf_amount, bank_acc, username, name, c_status, other_info, remark,
+            auto_generated, transfer_group_id, created_at, updated_at)`
+        : `(id, bank_account_id, company_id, entry_time, tx_id, status, amount_in, amount_out,
+            help_amount, trf_amount, bank_acc, username, name, c_status, other_info, remark,
+            auto_generated, transfer_group_id, created_at, updated_at)`;
+      const values = exists
+        ? `?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?`
+        : `?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?`;
+      const params = exists
+        ? [
+            deleted.bank_account_id, deleted.company_id, deleted.entry_time, deleted.tx_id, deleted.status,
+            deleted.amount_in, deleted.amount_out, deleted.help_amount, deleted.trf_amount,
+            deleted.bank_acc, deleted.username, deleted.name, deleted.c_status, deleted.other_info,
+            deleted.remark, deleted.auto_generated, deleted.transfer_group_id || "",
+            deleted.created_at || "", deleted.updated_at || "",
+          ]
+        : [
+            deleted.original_id, deleted.bank_account_id, deleted.company_id, deleted.entry_time, deleted.tx_id,
+            deleted.status, deleted.amount_in, deleted.amount_out, deleted.help_amount, deleted.trf_amount,
+            deleted.bank_acc, deleted.username, deleted.name, deleted.c_status, deleted.other_info,
+            deleted.remark, deleted.auto_generated, deleted.transfer_group_id || "",
+            deleted.created_at || "", deleted.updated_at || "",
+          ];
+      const result = db.prepare(`INSERT INTO bank_ledger ${columns} VALUES (${values})`).run(...params);
+      db.prepare("DELETE FROM bank_ledger_deleted WHERE id = ? AND company_id = ?").run(deleted.id, cid);
+      return exists ? result.lastInsertRowid : deleted.original_id;
+    };
+    const auditRestored = (deleted, id, metadata) => {
+      const restored = db.prepare("SELECT * FROM bank_ledger WHERE id = ?").get(id);
+      refreshBankBalance(db, deleted.bank_account_id);
+      appendAuditEvent(db, {
+        companyId: cid,
+        action: "ledger.restored",
+        source: "user",
+        actor: actorFromRequest(req),
+        summary: `恢复账单流水 #${id}`,
+        reason,
+        before: pickFields({ ...deleted, id: deleted.original_id }, LEDGER_FIELDS),
+        after: pickFields(restored, LEDGER_FIELDS),
+        metadata: { deleted_archive_id: deleted.id, ...metadata },
+        refs: ledgerRefs(restored),
+      });
+    };
+
+    // 两户互转的另一条（没有平台单，不走下面的打回逻辑）。
+    for (const sibling of restoreRows) {
+      if (sibling.id === deleted.id) continue;
+      auditRestored(sibling, insertBack(sibling), { restored_with_archive_id: deleted.id });
+    }
+
+    restoredId = insertBack(deleted);
 
     const txType = platformTxTypeForLedger(db, deleted);
     const hasDeletedSibling = deleted.transfer_group_id
@@ -1065,23 +1097,7 @@ router.post("/ledger/deleted/:deletedId/restore", (req, res) => {
       ).run(bankId, deleted.tx_id, Number(pending?.amount || deleted.amount_in || deleted.amount_out || 0));
       restoredPlatformOrder = true;
     }
-    const restored = db.prepare("SELECT * FROM bank_ledger WHERE id = ?").get(restoredId);
-    refreshBankBalance(db, deleted.bank_account_id);
-    appendAuditEvent(db, {
-      companyId: cid,
-      action: "ledger.restored",
-      source: "user",
-      actor: actorFromRequest(req),
-      summary: `恢复账单流水 #${restoredId}`,
-      reason,
-      before: pickFields({ ...deleted, id: deleted.original_id }, LEDGER_FIELDS),
-      after: pickFields(restored, LEDGER_FIELDS),
-      metadata: {
-        deleted_archive_id: deletedId,
-        restored_platform_order: restoredPlatformOrder,
-      },
-      refs: ledgerRefs(restored),
-    });
+    auditRestored(deleted, restoredId, { restored_platform_order: restoredPlatformOrder });
   });
 
   const row = db.prepare("SELECT * FROM bank_ledger WHERE id = ?").get(restoredId);
@@ -1096,15 +1112,8 @@ router.delete("/ledger/:id", (req, res) => {
   const db = getDb();
   const existing = db.prepare("SELECT * FROM bank_ledger WHERE id = ? AND company_id = ?").get(id, cid);
   if (!existing) return res.status(404).json({ error: "Not found" });
-  const rowsToDelete = existing.auto_generated && existing.transfer_group_id
-    ? db
-        .prepare(
-          `SELECT * FROM bank_ledger
-           WHERE company_id = ? AND transfer_group_id = ? AND auto_generated = 1
-           ORDER BY id ASC`
-        )
-        .all(cid, existing.transfer_group_id)
-    : [existing];
+  // 审批组整组删、两户互转两条一起删，规则在 bankApply.ledgerRowsToDelete（有测试）。
+  const rowsToDelete = ledgerRowsToDelete(db, cid, existing);
   const result = runAtomic(db, () => {
     const archivedIds = rowsToDelete.map((row) => archiveDeletedLedger(db, row, actor(req)));
     const deleteStmt = db.prepare("DELETE FROM bank_ledger WHERE id = ? AND company_id = ?");
@@ -1117,7 +1126,7 @@ router.delete("/ledger/:id", (req, res) => {
       source: "user",
       actor: actorFromRequest(req),
       summary: rowsToDelete.length > 1
-        ? `删除拆分流水组 ${existing.transfer_group_id}（${rowsToDelete.length} 条）`
+        ? `删除流水组 ${existing.transfer_group_id}（${rowsToDelete.length} 条）`
         : `删除账单流水 #${existing.id}`,
       reason,
       before: rowsToDelete.map((row) => pickFields(row, LEDGER_FIELDS)),

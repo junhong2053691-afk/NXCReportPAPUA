@@ -324,16 +324,31 @@ $env:TUNNEL_EDGE_IP_VERSION="4"
 
 **STATUS 分组：**
 
-- 入账: deposit, cash in, new, bank transfer, unclaim, redeposit
+- 入账: deposit, cash in, new, unclaim, redeposit（调钱入账没有 bank transfer，它只作为两户互转的另一半自动产生）
 - 出账: withdraw, wrong, cash out, give back, expenses, exchange, bank trf
 
 **HELP TRF 保存逻辑：**
 
 - 入账 → `trf_amount`，status = `bank transfer`
 - 出账 → `help_amount`，status = `bank trf`
-- 跨公司代操作：BANK ACC 可留空，C STATUS 填对方公司
+- ~~跨公司代操作：BANK ACC 可留空，C STATUS 填对方公司~~ 2026-11-12 起 `bank trf` / `bank transfer`
+  **只表示本公司两户互转、永远不带 C STATUS**，见下文「两户互转」与 `CONTEXT.md`
 - 落哪个字段由 **status** 决定（`bank-ledger.js` 的 `splitHelpTrf` + `OUT_STATUSES`），
   不看金额正负。所以 status = `withdraw` 时 HELP TRF 列的钱一定进 `help_amount`
+
+### 两户互转（bank trf / bank transfer）
+
+规矩见 `CONTEXT.md`「两户互转」（2026-11-12）。代码上要知道的：
+
+- **写账只有一份**：`bankApply.insertInternalTransferPair`（「从」bank trf 出 + 「到」bank transfer 入，同组、
+  C STATUS 空），调钱弹窗的 `submitTransfer` 与 `drainBannedAccount`（转回本公司户口）共用。审计 refs 用
+  `internalPairRefs`，两条都登记，否则交易记录页 OPERATOR 列「到」那条显示「—」。
+- **校验在 `upsertCStatusOptions` 之前**：那一步不在事务里，拒绝的请求也会留下新选项。
+- **删除 / 恢复成对**：`ledgerRowsToDelete` / `deletedRowsToRestore` 决定一起删、一起恢复的行；
+  审批组（`auto_generated = 1`）仍整组删、逐行恢复。带组号的单条老 bank trf 只删它自己。
+- 调钱入账不再有 `bank transfer`（`TRANSFER_IN_STATUSES`、前端 `IN_HELP_STATUSES`）；默认 STATUS 是
+  `cash out` / `cash in`；转出封禁户余额给别家记 `cash out`。`POST /api/banks/ledger` 没拦，页面上没有入口。
+- 测试 `bank-internal-transfer.test.js`（服务端）、`transfer-modal.test.js`（弹窗提交数据）。
 
 ### C STATUS 表的方向（与银行余额相反，别改平）
 
