@@ -122,46 +122,6 @@ test("公司隔离、c_status 前后空白归同一列、合计按分累加无�
   assert.deepEqual(report.total, [0.3, 0, 0, 0]);
 });
 
-/** 日报 REPORT 里某天的 EXCHANGE 金额。 */
-function dailyExchange(db, date) {
-  return computeBankDailyReport(db, "alpha", { date }).reportRows.find((r) => r.key === "exchange").amount;
-}
-
-test("EXCHANGE 列：status = exchange 的流水按日报 REPORT 口径记正数，不看 C STATUS，不进 columns", () => {
-  const { db, acc } = setup();
-  addLedger(db, acc, 0, "2026-11-03", { status: "exchange", amount_out: 1000 });
-  addLedger(db, acc, 0, "2026-11-03", { status: " Exchange ", amount_out: -800.1 });
-  addLedger(db, acc, 0, "2026-11-03", { status: "exchange", amount_out: 50, c_status: "EZ68" });
-  addLedger(db, acc, 0, "2026-11-03", { status: "cash out", amount_out: 7, c_status: "EZ68" });
-
-  const report = computeCompanyExpenses(db, "alpha", NOV);
-  assert.deepEqual(report.columns, ["EZ68", "PK7", "RX66", "LH"]);
-  const day = report.days.find((d) => d.date === "2026-11-03");
-  assert.equal(day.exchange, 1850.1);
-  assert.equal(day.exchange, dailyExchange(db, "2026-11-03"));
-  // 填了 C STATUS 的 exchange 照常进往来方列（往来账口径不变）
-  assert.equal(cell(report, "2026-11-03", "EZ68"), -57);
-  assert.equal(report.days.find((d) => d.date === "2026-11-04").exchange, 0);
-  assert.equal(report.exchange_total, 1850.1);
-});
-
-test("EXCHANGE 列：公司隔离，年视图月行 = 当月合计", () => {
-  const { db, acc } = setup();
-  const other = addAccount(db, { company_id: "beta" });
-  addLedger(db, acc, 0, "2026-02-10", { status: "exchange", amount_out: 0.1 });
-  addLedger(db, acc, 0, "2026-02-11", { status: "exchange", amount_out: 0.2 });
-  addLedger(db, acc, 0, "2026-11-03", { status: "exchange", amount_out: 5 });
-  addLedger(db, other, 0, "2026-11-03", { status: "exchange", amount_out: 999 });
-  addLedger(db, acc, 0, "2025-12-31", { status: "exchange", amount_out: 999 });
-
-  const year = computeCompanyExpensesYear(db, "alpha", { year: "2026", today: "2026-11-04" });
-  assert.equal(year.months[1].exchange, 0.3);
-  assert.equal(year.months[10].exchange, 5);
-  assert.equal(year.months[0].exchange, 0);
-  assert.equal(year.exchange_total, 5.3);
-  assert.equal(computeCompanyExpenses(db, "alpha", NOV).exchange_total, 5);
-});
-
 test("非法月份参数回落到当月", () => {
   const { db } = setup();
   assert.equal(computeCompanyExpenses(db, "alpha", { month: "2026-13", today: "2026-11-04" }).month, "2026-11");

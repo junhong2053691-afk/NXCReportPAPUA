@@ -11,13 +11,14 @@ const MR_COLS = [
   { key: "unclaim", kind: "money" },
   { key: "wrong", kind: "money" },
   { key: "expenses", kind: "money" },
+  { key: "exchange", kind: "money" },
   { key: "depCount", kind: "int" },
   { key: "wdCount", kind: "int" },
   { key: "totalCount", kind: "int" },
   { key: "uniqueCust", kind: "int" },
 ];
 // 导出表头刻意全英文：粘到 Google Sheet 后不随页面语言变化，公式引用列名也稳定。
-const MR_EXPORT_HEADERS = ["DEP", "WD", "WIN/LOSE", "WIN RATE", "UNCLAIM", "WRONG", "EXPENSES", "DEP COUNT", "WD COUNT", "TOTAL COUNT", "UNIQUE CUST"];
+const MR_EXPORT_HEADERS = ["DEP", "WD", "WIN/LOSE", "WIN RATE", "UNCLAIM", "WRONG", "EXPENSES", "EXCHANGE", "DEP COUNT", "WD COUNT", "TOTAL COUNT", "UNIQUE CUST"];
 
 const mrState = { view: "month", month: todaySydney().slice(0, 7), year: todaySydney().slice(0, 4), data: null };
 

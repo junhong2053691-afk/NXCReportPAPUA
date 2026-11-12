@@ -12,7 +12,7 @@ const DEP_STATUSES = ["deposit", "new", "amopay"];
 const MONTH_RE = /^(\d{4})-(0[1-9]|1[0-2])$/;
 const YEAR_RE = /^\d{4}$/;
 
-const SUM_KEYS = ["dep", "wd", "unclaim", "wrong", "expenses", "blocked", "depCount", "wdCount", "uniqueCust"];
+const SUM_KEYS = ["dep", "wd", "unclaim", "wrong", "expenses", "blocked", "exchange", "depCount", "wdCount", "uniqueCust"];
 
 // 金额全部按「分」整数累加，避免 0.1 + 0.2 这类浮点残差出现在合计行里。
 const cents = (v) => Math.round(Number(v || 0) * 100);
@@ -38,6 +38,8 @@ function dailyRows(db, companyId, from, toExclusive) {
          COALESCE(SUM(CASE WHEN ${STATUS_EXPR} = 'unclaim' THEN ${IN_EXPR} ELSE 0 END), 0) AS unclaim,
          COALESCE(SUM(CASE WHEN ${STATUS_EXPR} = 'wrong' THEN ${OUT_EXPR} ELSE 0 END), 0) AS wrong,
          COALESCE(SUM(CASE WHEN ${STATUS_EXPR} = 'expenses' THEN ${OUT_EXPR} ELSE 0 END), 0) AS expenses,
+         -- EXCHANGE 与日报 REPORT 同口径：入 + 出，正数（换钱总额）。
+         COALESCE(SUM(CASE WHEN ${STATUS_EXPR} = 'exchange' THEN ${IN_EXPR} + ${OUT_EXPR} ELSE 0 END), 0) AS exchange,
          COUNT(DISTINCT CASE WHEN ${IS_DEP} AND ${IN_EXPR} > 0 AND TRIM(username) != ''
            THEN TRIM(username) END) AS uniqueCust
        FROM bank_ledger
@@ -54,6 +56,7 @@ function dailyRows(db, companyId, from, toExclusive) {
       wrong: cents(r.wrong),
       expenses: cents(r.expenses),
       blocked: 0,
+      exchange: cents(r.exchange),
       depCount: r.depCount,
       wdCount: r.wdCount,
       uniqueCust: r.uniqueCust,
@@ -93,6 +96,7 @@ function finish(acc) {
     expenses: acc.expenses / 100,
     // EXPENSES 里属于封禁户余额变动的那一份（已含在 expenses 内）。
     blockedExpense: acc.blocked / 100,
+    exchange: acc.exchange / 100,
     depCount: acc.depCount,
     wdCount: acc.wdCount,
     totalCount: acc.depCount + acc.wdCount,

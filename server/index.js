@@ -686,8 +686,8 @@ const pageRoutes = {
 <button type="button" class="btn btn-outline btn-sm" id="mr-csv"><i data-lucide="download"></i>下载 CSV</button>
 </div>
 <p class="panel-note page-hint" id="mr-hint" hidden>点击月份查看当月每日明细</p>
-<div class="table-wrap data-surface"><table class="monthly-table" id="mr-table" data-m="title:1 metric:2,4 native:tr[data-month]"><thead><tr><th id="mr-first-col">日期</th><th>DEP</th><th>WD</th><th>WIN/LOSE</th><th>WIN RATE</th><th>UNCLAIM</th><th>WRONG</th><th>EXPENSES</th><th>DEP单</th><th>WD单</th><th>总单</th><th>UNIQUE CUST</th></tr></thead><tbody id="mr-rows"></tbody><tfoot id="mr-total"></tfoot></table></div>`,
-    "/js/monthly-report.js?v=20261104expenses1"
+<div class="table-wrap data-surface"><table class="monthly-table" id="mr-table" data-m="title:1 metric:2,4 native:tr[data-month]"><thead><tr><th id="mr-first-col">日期</th><th>DEP</th><th>WD</th><th>WIN/LOSE</th><th>WIN RATE</th><th>UNCLAIM</th><th>WRONG</th><th>EXPENSES</th><th>EXCHANGE</th><th>DEP单</th><th>WD单</th><th>总单</th><th>UNIQUE CUST</th></tr></thead><tbody id="mr-rows"></tbody><tfoot id="mr-total"></tfoot></table></div>`,
+    "/js/monthly-report.js?v=20261112exchange1"
   ),
   "/company-expenses.html": pageLayout(
     "COMPANY EXPENSES",
@@ -704,7 +704,7 @@ const pageRoutes = {
 </div>
 <p class="panel-note page-hint" id="ce-hint" hidden>点击月份查看当月每日明细</p>
 <div class="table-wrap data-surface"><table class="monthly-table" id="ce-table" data-m="title:1 metric:2,3,4,5,6,7 native:tr[data-month]"><thead id="ce-head"></thead><tbody id="ce-rows"></tbody><tfoot id="ce-total"></tfoot></table></div>`,
-    "/js/company-expenses.js?v=20261112exchange1"
+    "/js/company-expenses.js?v=20261112noexchange"
   ),
   "/top-referral.html": pageLayout(
     "TOP REFERRAL",

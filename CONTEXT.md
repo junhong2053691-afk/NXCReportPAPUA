@@ -16,6 +16,7 @@
 | **UNCLAIM** | 状态 `unclaim` 的入账金额，单列，不进 DEP |
 | **WRONG** | 状态 `wrong` 的出账金额（转账 / 操作失误亏损），正数显示 |
 | **EXPENSES** | 状态 `expenses` 的出账金额（开销）**+ 当天的封禁户余额变动**（见下文「封禁户余额」），正数显示；从封禁户收回钱的日子可能是负数 |
+| **EXCHANGE** | 状态 `exchange` 的入 + 出金额（换钱总额，**正数**），与日报 REPORT 的 EXCHANGE 同口径、逐分相等（2026-11-12 用户要求）。不看 C STATUS，**不进** WIN/LOSE 或任何别的列 |
 | **DEP单 / WD单** | 上面 DEP 那组状态 / `withdraw` 中金额 > 0 的笔数 |
 | **总单** | DEP单 + WD单 |
 | **UNIQUE CUST** | 当天有 DEP 流水的不同 `username` 数（当天充值顾客数）。按 `TRIM` 后原样比较，区分大小写，与日报一致 |
@@ -74,7 +75,6 @@
 | **IN / OUT / NET** | 与「支付渠道」日报的 C STATUS 表**逐格同口径**：IN = `amount_in + |help_amount|`，OUT = `|amount_out| + |trf_amount|`，NET = IN − OUT（HELP TRF 与余额方向对调，见 `CLAUDE.md`） |
 | **正负号** | NET **正 = 我方欠对方**，负 = 对方欠我方 |
 | **列** | **C STATUS 是什么就是什么**，与「支付渠道」C STATUS 表同一份名单：选项按 `sort_order`，再补上流水里出现过但不在选项里的名字。不做任何隐藏，整列为 0 也照样显示（列位固定，粘到 Sheet 对得齐）；不想要的列去 C STATUS 设置里删。新往来方第一次被「调钱」用到时会自动存成选项，从此出现 |
-| **EXCHANGE 列** | 固定排在往来方列之后（2026-11-12 用户要求）。**不是往来方、不是 NET**：`status = exchange` 的流水换钱总额（入 + 出，**正数**），与日报 REPORT 的 EXCHANGE 逐分相等；**不看 C STATUS**（exchange 一般不填）。填了 C STATUS 的 exchange 照常也进那个往来方列。接口字段 `exchange` / `exchange_total`，不在 `columns` 里 |
 | **合计行** | 每日 NET 相加；只给本期合计，**不给累计**（上线切换清过账本，切换前的欠款不在库里） |
 
 月视图每天一行（当月所有日子），年视图每月一行，末行 TOTAL。导出表头用往来方原名。

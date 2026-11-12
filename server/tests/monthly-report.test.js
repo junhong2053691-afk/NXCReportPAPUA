@@ -3,6 +3,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const { bankDatabase, addAccount, addLedger, addAccountEvent } = require("./bank-fixture");
 const { computeMonthlyReport, computeYearlyReport } = require("../lib/monthlyReport");
+const { computeBankDailyReport } = require("../lib/bankReport");
 
 function setup() {
   const db = bankDatabase();
@@ -185,6 +186,40 @@ test("年视图：12 行每月一行，月行 = 当月合计，末行年合计",
 
   const feb2026 = computeMonthlyReport(db, "alpha", { month: "2026-02", today: "2026-11-04" }).total;
   assert.deepEqual({ ...feb, month: undefined, future: undefined }, { ...feb2026, month: undefined, future: undefined });
+});
+
+test("EXCHANGE = status exchange 的入 + 出（正数），与日报 REPORT 的 EXCHANGE 逐分相等；不影响其他列", () => {
+  const { db, acc } = setup();
+  addLedger(db, acc, 0, "2026-11-03", { status: "exchange", amount_out: 1000 });
+  addLedger(db, acc, 0, "2026-11-03", { status: " Exchange ", amount_out: -800.1 });
+  addLedger(db, acc, 0, "2026-11-03", { status: "exchange", amount_out: 50, c_status: "EZ68" });
+  addLedger(db, acc, 100, "2026-11-03", { status: "deposit" });
+
+  const report = computeMonthlyReport(db, "alpha", { month: "2026-11", today: "2026-11-04" });
+  const d = day(report, "2026-11-03");
+  assert.equal(d.exchange, 1850.1);
+  const daily = computeBankDailyReport(db, "alpha", { date: "2026-11-03" }).reportRows.find((r) => r.key === "exchange");
+  assert.equal(d.exchange, daily.amount);
+  assert.equal(d.dep, 100);
+  assert.equal(d.wd, 0);
+  assert.equal(d.expenses, 0);
+  assert.equal(d.winLose, 100);
+  assert.equal(day(report, "2026-11-04").exchange, 0);
+  assert.equal(report.total.exchange, 1850.1);
+});
+
+test("EXCHANGE：公司隔离，年视图月行 = 当月合计", () => {
+  const { db, acc } = setup();
+  const other = addAccount(db, { company_id: "beta" });
+  addLedger(db, acc, 0, "2026-02-10", { status: "exchange", amount_out: 0.1 });
+  addLedger(db, acc, 0, "2026-02-11", { status: "exchange", amount_out: 0.2 });
+  addLedger(db, acc, 0, "2026-11-03", { status: "exchange", amount_out: 5 });
+  addLedger(db, other, 0, "2026-11-03", { status: "exchange", amount_out: 999 });
+
+  const year = computeYearlyReport(db, "alpha", { year: "2026", today: "2026-11-04" });
+  assert.equal(year.months[1].exchange, 0.3);
+  assert.equal(year.months[10].exchange, 5);
+  assert.equal(year.total.exchange, 5.3);
 });
 
 test("EXPENSES 含封禁户余额（正数），WIN/LOSE 不扣", () => {
