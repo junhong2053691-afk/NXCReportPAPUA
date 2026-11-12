@@ -137,7 +137,26 @@ async function repairDayTypes(db, types, helpers, opts = {}) {
       .map(mapTransaction)
       .filter((t) => t && t.id)
       .map((t) => ({ ...t, company_id: companyId }));
+    // 补进来的单要和快车道看到的一样进待审批队列，否则「实时交易」看得到、接单区永远看不到。
+    // 典型是 23:55 下单、过午夜才完成的单：快车道只拉「今天」，它只能靠昨日对账补进来
+    // （2026-11-13 ezspin68 17269528700）。只送**这次新插入**的行：已在库里的单当初就入过队，
+    // 再送一遍会把被人删掉的待审批行（测试重置脚本）又翻出来。
+    const known = new Set();
+    if (isMoneyType(type)) {
+      const findTx = db.prepare("SELECT 1 FROM transactions WHERE company_id = ? AND id = ?");
+      for (const t of mapped) if (findTx.get(companyId, t.id)) known.add(t.id);
+    }
     saved += upsertTransactions(db, mapped);
+    const fresh = isMoneyType(type) ? mapped.filter((t) => !known.has(t.id)) : [];
+    if (fresh.length) {
+      try {
+        const enqueue = helpers.enqueuePendingTx || require("./bankApply").enqueuePendingTx;
+        const queued = enqueue(db, companyId, fresh);
+        console.log("[sync-integrity] repaired", date, type, "queued for approval:", queued);
+      } catch (e) {
+        console.warn("[bank] enqueue pending (integrity repair):", e.message);
+      }
+    }
     for (const t of mapped) {
       if (t.customer_id) customerIds.add(t.customer_id);
     }
