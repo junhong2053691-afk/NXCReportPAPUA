@@ -219,7 +219,7 @@ function pageLayout(title, active, body, script) {
 
 // 交易页（/bank-ledger.html）与交易记录页（/bank-transactions.html）共用同一份 bank-ledger.js，
 // 按 .bkv2 的 data-view 分流（2026-11-10 拆页）。两页的版本号必须一起换。
-const BANK_LEDGER_SCRIPTS = ["/js/ledger-bank-pick.js?v=20261106drill3", "/js/operation-target.js?v=20261106drill1", "/js/render-gate.js?v=20261106drill1", "/js/pending-filter.js?v=20261106drill1", "/js/display-format.js?v=20261106drill2", "/js/cstatus-sheet.js?v=20261106sheet1", "/js/bank-common.js?v=20261110trade1", "/js/bank-ledger.js?v=20261112internal1"];
+const BANK_LEDGER_SCRIPTS = ["/js/ledger-bank-pick.js?v=20261106drill3", "/js/operation-target.js?v=20261106drill1", "/js/render-gate.js?v=20261106drill1", "/js/pending-filter.js?v=20261106drill1", "/js/display-format.js?v=20261106drill2", "/js/cstatus-sheet.js?v=20261106sheet1", "/js/bank-common.js?v=20261110trade1", "/js/bank-ledger.js?v=20261112steady1"];
 
 const pageRoutes = {
   "/": pageLayout(

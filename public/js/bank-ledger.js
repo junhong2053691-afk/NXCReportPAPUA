@@ -1314,8 +1314,12 @@
     // bank_ledger.status, so they must never be translated.
     if (sel) {
       sel.setAttribute("translate", "no");
+      // 重建选项时保留员工选好的筛选，否则选了 cash out 一刷新又回 ALL。值已不在列表里才回 ALL。
+      const cur = sel.value;
+      const list = BC.statusList();
       sel.innerHTML = '<option value="">ALL</option>' +
-        BC.statusList().map((s) => `<option value="${esc(s.value)}">${esc(s.label)}</option>`).join("");
+        list.map((s) => `<option value="${esc(s.value)}">${esc(s.label)}</option>`).join("");
+      sel.value = cur && list.some((s) => s.value === cur) ? cur : "";
     }
     if (dl) {
       dl.setAttribute("translate", "no");
@@ -1485,9 +1489,14 @@
   }
   // 实时名单变了：没动过的充值行就地换下拉；员工动过的行（data-dirty）与已展开完整列表的
   // 不碰——正在选的东西不能在手里被换掉。
+  // 正拿在手里（聚焦、下拉可能开着）的那个也不碰；选项没变就不写，免得下拉被无谓关掉。
   function refreshDepositBankSelects() {
+    const html = depositBankOptionsHtml();
     document.querySelectorAll('#pending-tx-rows tr[data-txid]:not([data-dirty="1"]) select.pend-bank-deposit:not([data-expanded])')
-      .forEach((sel) => { sel.innerHTML = depositBankOptionsHtml(); });
+      .forEach((sel) => {
+        if (sel === document.activeElement || sel.innerHTML === html) return;
+        sel.innerHTML = html;
+      });
   }
   function saveLiveReceiving(ids) {
     if (liveSaving) return Promise.resolve();
@@ -2186,8 +2195,11 @@
     window.bankMobileTab = runMobileTab;
     reloadAll().then(runMobileTabFromHash, runMobileTabFromHash);
 
+    // 同步每轮 fast lane（约 6 秒）都会改 sync-status 的 at，这里若走 reloadAll 就是每 8 秒整页重载：
+    // STATUS 筛选被打回 ALL、整表重画、滚动跳（2026-11-12 员工对账反馈）。同步不碰流水与渠道，
+    // 走带渲染闸门的后台刷新就够了；reloadAll 只留给首次加载和换公司。
     if (typeof startSyncWatcher === "function") {
-      startSyncWatcher(() => reloadAll());
+      startSyncWatcher(() => refreshSharedWorkspace());
     }
     if (typeof bindCompanySwitch === "function") {
       bindCompanySwitch(() => {
