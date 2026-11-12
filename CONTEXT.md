@@ -74,6 +74,7 @@
 | **IN / OUT / NET** | 与「支付渠道」日报的 C STATUS 表**逐格同口径**：IN = `amount_in + |help_amount|`，OUT = `|amount_out| + |trf_amount|`，NET = IN − OUT（HELP TRF 与余额方向对调，见 `CLAUDE.md`） |
 | **正负号** | NET **正 = 我方欠对方**，负 = 对方欠我方 |
 | **列** | **C STATUS 是什么就是什么**，与「支付渠道」C STATUS 表同一份名单：选项按 `sort_order`，再补上流水里出现过但不在选项里的名字。不做任何隐藏，整列为 0 也照样显示（列位固定，粘到 Sheet 对得齐）；不想要的列去 C STATUS 设置里删。新往来方第一次被「调钱」用到时会自动存成选项，从此出现 |
+| **EXCHANGE 列** | 固定排在往来方列之后（2026-11-12 用户要求）。**不是往来方、不是 NET**：`status = exchange` 的流水换钱总额（入 + 出，**正数**），与日报 REPORT 的 EXCHANGE 逐分相等；**不看 C STATUS**（exchange 一般不填）。填了 C STATUS 的 exchange 照常也进那个往来方列。接口字段 `exchange` / `exchange_total`，不在 `columns` 里 |
 | **合计行** | 每日 NET 相加；只给本期合计，**不给累计**（上线切换清过账本，切换前的欠款不在库里） |
 
 月视图每天一行（当月所有日子），年视图每月一行，末行 TOTAL。导出表头用往来方原名。

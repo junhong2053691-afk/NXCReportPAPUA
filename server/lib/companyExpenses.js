@@ -4,6 +4,10 @@
 // 「欠来欠去」的账。IN / OUT 与「支付渠道」日报 C STATUS 表（bankReport 的 companyMap /
 // cStatusTotalsForCompany）逐格同口径——HELP TRF 与余额方向对调，理由见那边的注释。
 // NET 正 = 我方欠对方，负 = 对方欠我方。只读本公司，不做对平。
+//
+// 末尾的 EXCHANGE 列不是往来方、也不是 NET：它是 status = exchange 流水的换钱总额（入 + 出，正数），
+// 与日报 REPORT 的 EXCHANGE（bankReport 里 inTotal + outTotal）同口径，不看 C STATUS。
+// 所以它单独放在 exchange / exchange_total，不进 columns（columns 必须与日报 companyRows 一致）。
 const { todayKey } = require("./dates");
 const { isDemoTenant } = require("./readConfig");
 const { C_STATUS_DEFAULTS } = require("./bankReport");
@@ -37,6 +41,20 @@ function dailyNets(db, companyId, from, toExclusive) {
     )
     .all(companyId, `${from} 00:00:00`, `${toExclusive} 00:00:00`)
     .map((r) => ({ date: r.d, name: r.cs, net: cents(r.net) }));
+}
+
+/** [from, toExclusive) 区间按日期汇总的 EXCHANGE 金额（分）。口径见文件头。 */
+function dailyExchange(db, companyId, from, toExclusive) {
+  return db
+    .prepare(
+      `SELECT substr(entry_time, 1, 10) AS d,
+         COALESCE(SUM(amount_in + ABS(trf_amount) + ABS(amount_out) + ABS(help_amount)), 0) AS amount
+       FROM bank_ledger
+       WHERE company_id = ? AND entry_time >= ? AND entry_time < ? AND LOWER(TRIM(status)) = 'exchange'
+       GROUP BY d`
+    )
+    .all(companyId, `${from} 00:00:00`, `${toExclusive} 00:00:00`)
+    .map((r) => ({ date: r.d, amount: cents(r.amount) }));
 }
 
 // 列「C STATUS 是什么就是什么」，与「支付渠道」日报 companyRows 一致：选项按 sort_order
@@ -73,13 +91,21 @@ function tabulate(db, companyId, from, toExclusive, keys, bucketOf) {
   const buckets = new Map(keys.map((k) => [k, zero()]));
   for (const r of rows) buckets.get(bucketOf(r.date))[index.get(r.name)] += r.net;
 
+  const exchange = new Map(keys.map((k) => [k, 0]));
+  for (const r of dailyExchange(db, companyId, from, toExclusive)) {
+    const key = bucketOf(r.date);
+    exchange.set(key, exchange.get(key) + r.amount);
+  }
+
   const total = zero();
+  let exchangeTotal = 0;
   const lines = keys.map((key) => {
     const nets = buckets.get(key);
     nets.forEach((v, i) => (total[i] += v));
-    return { key, nets: nets.map((v) => v / 100) };
+    exchangeTotal += exchange.get(key);
+    return { key, nets: nets.map((v) => v / 100), exchange: exchange.get(key) / 100 };
   });
-  return { columns, lines, total: total.map((v) => v / 100) };
+  return { columns, lines, total: total.map((v) => v / 100), exchangeTotal: exchangeTotal / 100 };
 }
 
 function computeCompanyExpenses(db, companyId, opts = {}) {
@@ -95,8 +121,9 @@ function computeCompanyExpenses(db, companyId, opts = {}) {
     month: monthKey,
     today,
     columns: t.columns,
-    days: t.lines.map((l) => ({ date: l.key, future: l.key > today, nets: l.nets })),
+    days: t.lines.map((l) => ({ date: l.key, future: l.key > today, nets: l.nets, exchange: l.exchange })),
     total: t.total,
+    exchange_total: t.exchangeTotal,
   };
 }
 
@@ -110,8 +137,9 @@ function computeCompanyExpensesYear(db, companyId, opts = {}) {
     year: yearKey,
     today,
     columns: t.columns,
-    months: t.lines.map((l) => ({ month: l.key, future: `${l.key}-01` > today, nets: l.nets })),
+    months: t.lines.map((l) => ({ month: l.key, future: `${l.key}-01` > today, nets: l.nets, exchange: l.exchange })),
     total: t.total,
+    exchange_total: t.exchangeTotal,
   };
 }
 

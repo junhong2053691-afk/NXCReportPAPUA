@@ -45,7 +45,7 @@ function ceRender(data) {
   document.getElementById("ce-head").innerHTML =
     "<tr><th>" + (isYear ? "月份" : "日期") + "</th>" +
     data.columns.map(function (name) { return '<th translate="no">' + escHtml(name) + "</th>"; }).join("") +
-    "</tr>";
+    "<th>EXCHANGE</th></tr>";
 
   if (!data.columns.length) {
     document.getElementById("ce-total").innerHTML = "";
@@ -60,10 +60,11 @@ function ceRender(data) {
       if (isYear) cls.push("mr-clickable");
       const attrs = isYear ? ' data-month="' + escHtml(p.label) + '" tabindex="0"' : "";
       return '<tr class="' + cls.join(" ") + '"' + attrs + '><td translate="no">' + escHtml(p.label) + "</td>" +
-        p.row.nets.map(ceCell).join("") + "</tr>";
+        p.row.nets.map(ceCell).join("") + ceCell(p.row.exchange) + "</tr>";
     })
     .join("");
-  document.getElementById("ce-total").innerHTML = "<tr><td>合计</td>" + data.total.map(ceCell).join("") + "</tr>";
+  document.getElementById("ce-total").innerHTML =
+    "<tr><td>合计</td>" + data.total.map(ceCell).join("") + ceCell(data.exchange_total) + "</tr>";
 }
 
 function ceRenderControls() {
@@ -112,10 +113,10 @@ function ceSafeText(text) {
 function ceExportMatrix() {
   const data = ceState.data;
   if (!data) return null;
-  const header = [ceState.view === "year" ? "MONTH" : "DATE"].concat(data.columns.map(ceSafeText));
+  const header = [ceState.view === "year" ? "MONTH" : "DATE"].concat(data.columns.map(ceSafeText), ["EXCHANGE"]);
   const raw = function (v) { return Number(v || 0).toFixed(2); };
-  const body = cePeriodRows(data).map(function (p) { return [p.label].concat(p.row.nets.map(raw)); });
-  return [header].concat(body, [["TOTAL"].concat(data.total.map(raw))]);
+  const body = cePeriodRows(data).map(function (p) { return [p.label].concat(p.row.nets.map(raw), [raw(p.row.exchange)]); });
+  return [header].concat(body, [["TOTAL"].concat(data.total.map(raw), [raw(data.exchange_total)])]);
 }
 
 function ceCopy() {

@@ -704,7 +704,7 @@ const pageRoutes = {
 </div>
 <p class="panel-note page-hint" id="ce-hint" hidden>点击月份查看当月每日明细</p>
 <div class="table-wrap data-surface"><table class="monthly-table" id="ce-table" data-m="title:1 metric:2,3,4,5,6,7 native:tr[data-month]"><thead id="ce-head"></thead><tbody id="ce-rows"></tbody><tfoot id="ce-total"></tfoot></table></div>`,
-    "/js/company-expenses.js?v=20261104expenses2"
+    "/js/company-expenses.js?v=20261112exchange1"
   ),
   "/top-referral.html": pageLayout(
     "TOP REFERRAL",
