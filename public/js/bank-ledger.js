@@ -559,8 +559,23 @@
       : "";
     return `<td class="col-operator ro-cell">${main}${edited}</td>`;
   }
+  // 余额校正行（CONTEXT.md「余额校正（ADJUSTMENT）」）：任何人都不能编辑，只有 admin 能删
+  // （删除按钮靠 CSS .admin-only 显隐，服务端再拦）；也不进表尾 TOTAL。
+  function isAdjustmentRow(r) {
+    return String(r?.status || "").trim().toLowerCase() === "adjustment";
+  }
   function buildGridRow(r, no, isNew) {
     const id = r?.id;
+    if (!isNew && isAdjustmentRow(r)) {
+      const v = rowValues(r, false);
+      const expandedAttr = MOBILE_MQ.matches ? ` aria-expanded="${openLedgerCards.has(id) ? "true" : "false"}"` : "";
+      return `<tr class="sheet-grid-row sheet-row-ro sheet-row-adjustment${openLedgerCards.has(id) ? " m-open" : ""}" data-id="${id}"${expandedAttr}>
+        <td class="col-no">${no}</td>
+        ${GRID_FIELDS.map((f) => roCellHtml(f, v[f])).join("")}
+        ${operatorCellHtml(r)}
+        <td class="col-act"><a class="sheet-history admin-audit-link" href="/audit-history.html?ledger_id=${id}" title="查看操作历史" aria-label="查看流水操作历史">${renderIcon("history", { size: 15 })}<span class="icon-fallback">史</span></a><button type="button" class="sheet-del admin-only" data-id="${id}" title="删除余额校正" aria-label="删除余额校正">${renderIcon("trash-2", { size: 15 })}<span class="icon-fallback">删</span></button></td>
+      </tr>`;
+    }
     if (!isNew && editingRowId !== id) {
       const v = rowValues(r, false);
       // aria-expanded 只在手机卡片模式下有意义，且必须在这里渲染：每 5 秒整块重渲染会冲掉点击时设的值。
@@ -582,6 +597,7 @@
     </tr>`;
   }
   function startEditRow(id) {
+    if (isAdjustmentRow(ledgerRows.find((r) => Number(r.id) === Number(id)))) return;
     adding = false;
     editingRowId = id;
     hideGridPicker();
@@ -1068,6 +1084,7 @@
   function renderFooterTotals() {
     let tin = 0, tout = 0, thelp = 0;
     for (const r of ledgerRows) {
+      if (isAdjustmentRow(r)) continue;
       tin += Number(r.amount_in || 0);
       tout += Number(r.amount_out || 0);
       thelp += helpTrfAmount(r);
@@ -1388,7 +1405,7 @@
         <td class="num-col">${deletedHelpTrfAmount(r) ? fmt(deletedHelpTrfAmount(r)) : ""}</td>
         <td translate="no">${esc(bankName)}</td>
         <td translate="no">${esc(userName)}</td>
-        <td><button type="button" class="btn btn-success btn-xs deleted-restore" data-id="${r.id}">恢复</button></td>
+        <td><button type="button" class="btn btn-success btn-xs deleted-restore${isAdjustmentRow(r) ? " admin-only" : ""}" data-id="${r.id}">恢复</button></td>
       </tr>`;
     }).join("");
   }
@@ -1868,16 +1885,12 @@
     const targetCents = Math.round(parseNum(tr?.dataset.pendingAmount || 0) * 100);
     const selfAmountCents = Math.round(parseNum(tr?.querySelector(".pend-split-self-amount")?.value || 0) * 100);
     const selfBank = tr?.querySelector(".pend-split-self-bank");
-    const seen = new Set();
+    // 同一个 C STATUS 可以填多行（同一家分几笔替我付），后端各自落一条流水。
     let helperTotalCents = 0;
     let invalid = false;
-    let duplicate = false;
     rows.forEach((row) => {
-      const key = row.c_status.toLowerCase();
       const amountCents = Math.round(parseNum(row.amount) * 100);
       if (!row.c_status || amountCents <= 0) invalid = true;
-      if (key && seen.has(key)) duplicate = true;
-      if (key) seen.add(key);
       helperTotalCents += amountCents;
     });
     const totalCents = selfAmountCents + helperTotalCents;
@@ -1895,7 +1908,6 @@
     let error = "";
     if (selfAmountCents > 0 && !selfBank?.value) error = "请选择本户自付银行账户";
     else if (invalid) error = "请填写每个协助方和金额";
-    else if (duplicate) error = "C STATUS 不能重复";
     else if (selfAmountCents > targetCents) error = `本户自付不能超过 ${fmt(targetCents / 100)}`;
     else if (rows.length < 1) error = "请至少添加 1 个协助方";
     else if ((selfAmountCents > 0 ? 1 : 0) + rows.length < 2) error = "请至少填写 2 个分配项";
@@ -1905,7 +1917,7 @@
     const approve = tr?.querySelector(".pend-approve");
     const splitMode = tr?.querySelector(".pend-mode")?.value === "split";
     const allocationCount = (selfAmountCents > 0 ? 1 : 0) + rows.length;
-    const valid = splitMode && rows.length >= 1 && allocationCount >= 2 && !invalid && !duplicate
+    const valid = splitMode && rows.length >= 1 && allocationCount >= 2 && !invalid
       && (selfAmountCents <= 0 || !!selfBank?.value) && selfAmountCents <= targetCents && remainingCents === 0;
     if (approve && splitMode) {
       approve.disabled = !valid;

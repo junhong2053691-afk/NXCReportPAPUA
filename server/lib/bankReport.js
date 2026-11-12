@@ -27,6 +27,9 @@ const STATUS_LABELS = {
   "test out": "TEST OUT",
 };
 
+// 余额校正，只有 bankApply.adjustBankBalance 写（CONTEXT.md「余额校正（ADJUSTMENT）」）。
+const ADJUSTMENT_STATUS = "adjustment";
+
 // 日报 REPORT 的 DEPOSIT。不含 unclaim：UNCLAIM 在下面单列，含进来就算了两遍
 // （运营 Excel 口径，2026-11-06 确认；测试 daily-report-status.test.js）。
 const DEPOSIT_STATUSES = new Set(["deposit", "new"]);
@@ -279,6 +282,13 @@ function computeBankDailyReport(db, companyId, opts = {}) {
     const amountOut = outAbs(row);
     const helpAmount = Math.abs(money(row.help_amount));
     const trfAmount = Math.abs(money(row.trf_amount));
+    // 余额校正（CONTEXT.md「余额校正（ADJUSTMENT）」）只动余额：每日归零户的余额就是 day_net，
+    // 所以 day_net 照算，其余笔数与汇总一概不进。
+    if (status === ADJUSTMENT_STATUS) {
+      const bank = bankMap.get(row.bank_account_id);
+      if (bank) bank.day_net += amountIn + trfAmount - amountOut - helpAmount;
+      continue;
+    }
     totalIn += amountIn + trfAmount;
     totalOut += amountOut + helpAmount;
 
@@ -545,6 +555,7 @@ function computeBankDailyReport(db, companyId, opts = {}) {
 }
 
 module.exports = {
+  ADJUSTMENT_STATUS,
   computeBankDailyReport,
   balanceFromLedger,
   accountBalanceAsOf,

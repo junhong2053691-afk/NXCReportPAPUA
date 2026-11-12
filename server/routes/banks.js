@@ -26,6 +26,8 @@ const {
   deleteSkippedPendingTx,
   submitTransfer,
   drainBannedAccount,
+  ADJUSTMENT_STATUS,
+  adjustBankBalance,
   assertNotSelfCStatus,
   pendingCounts,
   bankAccLabel,
@@ -99,6 +101,28 @@ function companyId(req) {
 function actor(req) {
   return req.session?.user?.username || req.session?.user?.name || "";
 }
+
+function isAdminRequest(req) {
+  return req.session?.user?.role === "admin";
+}
+
+// 删除 / 恢复 adjustment 行的守门：只有 admin，且户口仍是运营中——封禁户的余额经 blockedExpense
+// 进 EXPENSES，在那里增删校正就等于改报表（CONTEXT.md「余额校正」）。返回错误响应或 null。
+function adjustmentRowsGuard(db, req, cid, rows) {
+  const adj = rows.filter((row) => String(row.status || "").trim().toLowerCase() === ADJUSTMENT_STATUS);
+  if (!adj.length) return null;
+  if (!isAdminRequest(req)) return { status: 403, error: "只有管理员可以删除或恢复余额校正" };
+  for (const row of adj) {
+    const ok = db
+      .prepare(`SELECT 1 FROM bank_accounts WHERE id = ? AND company_id = ? AND ${SQL_OPERATING}`)
+      .get(Number(row.bank_account_id || 0), cid);
+    if (!ok) return { status: 409, error: "该渠道已不在运营中，不能删除或恢复余额校正" };
+  }
+  return null;
+}
+
+// adjustment 流水只能经 POST /:id/adjust 写入（admin），通用流水接口一律不收、不改。
+const ADJUSTMENT_ONLY_VIA_ADJUST = "余额校正只能在支付渠道页用「校正余额」录入";
 
 function requestReason(req, res) {
   try {
@@ -402,6 +426,16 @@ router.post("/ledger/transfer", (req, res) => {
 router.post("/:id/drain", (req, res) => {
   try {
     const result = drainBannedAccount(getDb(), companyId(req), Number(req.params.id), req.body || {}, actorFromRequest(req));
+    res.json(result);
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+// 余额校正（CONTEXT.md「余额校正（ADJUSTMENT）」）：admin 填实际余额，写一条只动余额、不进报表的流水。
+router.post("/:id/adjust", requireAdmin, (req, res) => {
+  try {
+    const result = adjustBankBalance(getDb(), companyId(req), Number(req.params.id), req.body || {}, actorFromRequest(req));
     res.json(result);
   } catch (e) {
     res.status(e.status || 500).json({ error: e.message });
@@ -788,6 +822,7 @@ router.post("/ledger", (req, res) => {
   if (!amounts) return res.status(400).json({ error: "金额必须是有效数字" });
   const ledgerStatus = normalizeLedgerStatus(status, amounts);
   if (!isValidStatusValue(ledgerStatus)) return res.status(400).json({ error: "STATUS 格式无效" });
+  if (ledgerStatus === ADJUSTMENT_STATUS) return res.status(400).json({ error: ADJUSTMENT_ONLY_VIA_ADJUST });
   const finalBankAccountId = ledgerStatus === "redeposit" ? 0 : Number(bank_account_id);
   const finalBankAcc = ledgerStatus === "redeposit" ? "" : String(bank_acc).trim();
 
@@ -849,6 +884,9 @@ router.put("/ledger/:id", (req, res) => {
   const db = getDb();
   const existing = db.prepare("SELECT * FROM bank_ledger WHERE id = ? AND company_id = ?").get(id, cid);
   if (!existing) return res.status(404).json({ error: "Not found" });
+  if (String(existing.status || "").trim().toLowerCase() === ADJUSTMENT_STATUS) {
+    return res.status(400).json({ error: "余额校正不能修改；要改请删除后重新校正" });
+  }
   // 只在 C STATUS 被改动时校验：库里已有的自指旧行照样能改 OTHER / REMARK。
   if (req.body.c_status !== undefined
     && String(req.body.c_status || "").trim() !== String(existing.c_status || "").trim()) {
@@ -873,6 +911,7 @@ router.put("/ledger/:id", (req, res) => {
   if (req.body.status !== undefined && !isValidStatusValue(nextStatus)) {
     return res.status(400).json({ error: "STATUS 格式无效" });
   }
+  if (nextStatus === ADJUSTMENT_STATUS) return res.status(400).json({ error: ADJUSTMENT_ONLY_VIA_ADJUST });
   if (nextStatus === "redeposit") {
     req.body.status = "redeposit";
     req.body.bank_account_id = 0;
@@ -969,6 +1008,8 @@ router.post("/ledger/deleted/:deletedId/restore", (req, res) => {
   if (!deleted) return res.status(404).json({ error: "Deleted ledger not found" });
   // 两户互转成对恢复，只恢复一条两户余额就对不上（bankApply.deletedRowsToRestore，有测试）。
   const restoreRows = deletedRowsToRestore(db, cid, deleted);
+  const adjRestoreBlock = adjustmentRowsGuard(db, req, cid, restoreRows);
+  if (adjRestoreBlock) return res.status(adjRestoreBlock.status).json({ error: adjRestoreBlock.error });
 
   // 恢复流水会刷新目标账户余额。对已归档的账户做这件事，会让它在所有视图之外悄悄带上
   // 余额——归档闸门（bankLifecycle.archiveBlockReason）挡住的正是这条路，这里是另一半。
@@ -1114,6 +1155,8 @@ router.delete("/ledger/:id", (req, res) => {
   if (!existing) return res.status(404).json({ error: "Not found" });
   // 审批组整组删、两户互转两条一起删，规则在 bankApply.ledgerRowsToDelete（有测试）。
   const rowsToDelete = ledgerRowsToDelete(db, cid, existing);
+  const adjDeleteBlock = adjustmentRowsGuard(db, req, cid, rowsToDelete);
+  if (adjDeleteBlock) return res.status(adjDeleteBlock.status).json({ error: adjDeleteBlock.error });
   const result = runAtomic(db, () => {
     const archivedIds = rowsToDelete.map((row) => archiveDeletedLedger(db, row, actor(req)));
     const deleteStmt = db.prepare("DELETE FROM bank_ledger WHERE id = ? AND company_id = ?");

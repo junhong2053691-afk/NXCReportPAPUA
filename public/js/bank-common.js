@@ -127,6 +127,8 @@
     return byPartial ? byPartial.value : t.toLowerCase();
   }
   function statusLabel(status) {
+    // 余额校正刻意不进 STATUS_LIST（否则会出现在下拉里，员工能选），显示名单独给（2026-11-13 用户要求「ADJ」）。
+    if (status === "adjustment") return "ADJ";
     return STATUS_LABEL[status] || String(status || "").toUpperCase();
   }
   function statusClass(status) {

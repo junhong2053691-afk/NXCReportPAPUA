@@ -1,6 +1,12 @@
 "use strict";
 
-const { refreshBankBalance, bankBranchOf, balanceFromLedger } = require("./bankReport");
+const {
+  ADJUSTMENT_STATUS,
+  refreshBankBalance,
+  bankBranchOf,
+  balanceFromLedger,
+  displayBalanceForAccount,
+} = require("./bankReport");
 const { SQL_OPERATING, isBanned } = require("./bankLifecycle");
 const { formatWallClock, todayKey, localMidnightUtc } = require("./dates");
 const { cleanLedgerName } = require("./displayName");
@@ -12,6 +18,7 @@ const {
   ledgerRefs,
   pendingRefs,
   pickFields,
+  requireReason,
   runAtomic,
   systemActor,
 } = require("./auditLog");
@@ -446,16 +453,13 @@ function approvePendingTx(db, companyId, txId, body, actor) {
     if (!Array.isArray(body.splits) || body.splits.length < 1 || body.splits.length > 50) {
       throw Object.assign(new Error("请至少添加 1 个协助方"), { status: 400 });
     }
-    const seen = new Set();
+    // 同一个 C STATUS 可以出现多行（同一家分几笔替我付），各自落一条流水，见 CONTEXT.md「拆分调钱」。
     splitRows = body.splits.map((row) => {
       const cStatus = String(row?.c_status || "").trim();
       const amount = money(row?.amount);
-      const key = cStatus.toLowerCase();
       if (!cStatus) throw Object.assign(new Error("每个协助方都要填写 C STATUS"), { status: 400 });
       if (!amount) throw Object.assign(new Error("每个协助金额必须大于 0"), { status: 400 });
-      if (seen.has(key)) throw Object.assign(new Error("C STATUS 不能重复"), { status: 400 });
       assertNotSelfCStatus(db, companyId, cStatus);
-      seen.add(key);
       return { c_status: cStatus, amount };
     });
     const allocationCount = (splitSelfAmount > 0 ? 1 : 0) + splitRows.length;
@@ -1119,6 +1123,52 @@ function drainBannedAccount(db, companyId, bankId, body, actor) {
   });
 }
 
+// 余额校正（CONTEXT.md「余额校正（ADJUSTMENT）」，2026-11-13）。admin 填银行 App 上的实际余额，
+// 按页面显示的余额（displayBalanceForAccount，与报警同口径）算差额，写一条 adjustment 流水：
+// 动余额、不进任何报表。只限运营中的户——封禁户的余额会经 blockedExpense 进 EXPENSES。
+// 权限在路由上（requireAdmin），这里不认角色。
+
+function adjustBankBalance(db, companyId, bankId, body, actor) {
+  const bank = db
+    .prepare(`SELECT * FROM bank_accounts WHERE id = ? AND company_id = ? AND ${SQL_OPERATING}`)
+    .get(Number(bankId || 0), companyId);
+  if (!bank) throw Object.assign(new Error("只有本公司运营中的户口可以校正余额"), { status: 400 });
+  const raw = String(body?.actual_balance ?? "").replace(/,/g, "").trim();
+  const actual = raw === "" ? NaN : Number(raw);
+  if (!Number.isFinite(actual)) throw Object.assign(new Error("实际余额无效"), { status: 400 });
+  const remark = requireReason({ reason: body?.remark });
+  const before = displayBalanceForAccount(db, bank, todayKey());
+  const diffCents = Math.round(actual * 100) - Math.round(before * 100);
+  if (diffCents === 0) throw Object.assign(new Error("实际余额与当前余额相同，无需校正"), { status: 400 });
+  const diff = diffCents / 100;
+
+  return runAtomic(db, () => {
+    const ledger = insertLedger(db, {
+      bank_account_id: bank.id,
+      company_id: companyId,
+      entry_time: nowSql(),
+      status: ADJUSTMENT_STATUS,
+      amount_in: diff > 0 ? diff : 0,
+      amount_out: diff < 0 ? -diff : 0,
+      bank_acc: bankAccLabel(bank),
+      remark,
+    });
+    const after = displayBalanceForAccount(db, bank, todayKey());
+    appendAuditEvent(db, {
+      companyId,
+      action: "balance.adjusted",
+      source: "user",
+      actor: auditActorValue(actor),
+      summary: `余额校正 #${ledger.id} ${bankAccLabel(bank)} ${diff > 0 ? "+" : ""}${diff.toFixed(2)}`,
+      reason: remark,
+      after: pickFields(ledger, LEDGER_FIELDS),
+      metadata: { bank_account_id: bank.id, balance_before: before, balance_after: after, diff },
+      refs: ledgerRefs(ledger),
+    });
+    return { ledger, diff, balance_before: before, balance_after: after };
+  });
+}
+
 function pendingCounts(db, companyId) {
   const tx = db
     .prepare("SELECT COUNT(*) AS n FROM bank_tx_pending WHERE company_id = ? AND state = 'pending'")
@@ -1163,6 +1213,8 @@ module.exports = {
   deleteSkippedPendingTx,
   submitTransfer,
   drainBannedAccount,
+  ADJUSTMENT_STATUS,
+  adjustBankBalance,
   pendingCounts,
   platformTxTypeForLedger,
   reopenPendingForLedger,

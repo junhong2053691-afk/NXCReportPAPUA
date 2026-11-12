@@ -219,7 +219,7 @@ function pageLayout(title, active, body, script) {
 
 // 交易页（/bank-ledger.html）与交易记录页（/bank-transactions.html）共用同一份 bank-ledger.js，
 // 按 .bkv2 的 data-view 分流（2026-11-10 拆页）。两页的版本号必须一起换。
-const BANK_LEDGER_SCRIPTS = ["/js/ledger-bank-pick.js?v=20261106drill3", "/js/operation-target.js?v=20261106drill1", "/js/render-gate.js?v=20261106drill1", "/js/pending-filter.js?v=20261106drill1", "/js/display-format.js?v=20261106drill2", "/js/cstatus-sheet.js?v=20261106sheet1", "/js/bank-common.js?v=20261110trade1", "/js/bank-ledger.js?v=20261113redep1"];
+const BANK_LEDGER_SCRIPTS = ["/js/ledger-bank-pick.js?v=20261106drill3", "/js/operation-target.js?v=20261106drill1", "/js/render-gate.js?v=20261106drill1", "/js/pending-filter.js?v=20261106drill1", "/js/display-format.js?v=20261106drill2", "/js/cstatus-sheet.js?v=20261106sheet1", "/js/bank-common.js?v=20261113adj1", "/js/bank-ledger.js?v=20261113splitdup1"];
 
 const pageRoutes = {
   "/": pageLayout(
@@ -629,8 +629,19 @@ const pageRoutes = {
 <p class="modal-note">本公司户口：记两笔，封禁户 BANK TRF 出、收款户 BANK TRANSFER 入，C STATUS 留空。别家公司：只记封禁户一笔 CASH OUT 出，C STATUS 填对方，对方自己记入账。户口保持封禁；钱拿回后户口还要用的，请用「解封」。</p>
 <p id="drain-err" class="form-error" role="alert" aria-live="polite"></p>
 <div class="actions"><button class="btn btn-outline btn-sm" id="drain-cancel" type="button">取消</button><button class="btn btn-success btn-sm" id="drain-submit" type="button">确认转出</button></div>
+</div></div>
+
+<div class="modal-overlay" id="adjust-modal"><div class="modal adjust-modal">
+<h2>校正余额</h2>
+<div class="reason-target"><div class="reason-target-detail" id="adjust-target" translate="no"></div></div>
+<div class="adjust-summary"><div><span>当前余额</span><strong id="adjust-before" translate="no"></strong></div><div><span>差额</span><strong id="adjust-diff" translate="no">—</strong></div></div>
+<div class="form-group"><label for="adjust-actual">实际余额</label><input id="adjust-actual" inputmode="decimal" autocomplete="off" placeholder="银行 App 上看到的余额"></div>
+<div class="form-group"><label for="adjust-remark">REMARK（校正原因，必填）</label><input id="adjust-remark" autocomplete="off" maxlength="500"></div>
+<p class="modal-note">系统按差额记一条 ADJ 流水，只改余额，不算进 REPORT、TRANSACTION、月报或 C STATUS。交易记录里能看到这一行，不能修改；要撤销请由管理员删除。</p>
+<p id="adjust-err" class="form-error" role="alert" aria-live="polite"></p>
+<div class="actions"><button class="btn btn-outline btn-sm" id="adjust-cancel" type="button">取消</button><button class="btn btn-success btn-sm" id="adjust-submit" type="button">确认校正</button></div>
 </div></div>`,
-    ["/js/ledger-bank-pick.js?v=20261106drill3", "/js/operation-target.js?v=20261106drill1", "/js/render-gate.js?v=20261106drill1", "/js/display-format.js?v=20261106drill2", "/js/appeal-csv.js?v=20261106drill1", "/js/cstatus-sheet.js?v=20261106sheet1", "/js/bank-common.js?v=20261110trade1", "/js/bank-channels.js?v=20261110trade1"]
+    ["/js/ledger-bank-pick.js?v=20261106drill3", "/js/operation-target.js?v=20261106drill1", "/js/render-gate.js?v=20261106drill1", "/js/display-format.js?v=20261106drill2", "/js/appeal-csv.js?v=20261106drill1", "/js/cstatus-sheet.js?v=20261106sheet1", "/js/bank-common.js?v=20261113adj1", "/js/bank-channels.js?v=20261113adjust1"]
   ),
   "/audit-history.html": pageLayout(
     "\u64cd\u4f5c\u5386\u53f2",
@@ -664,7 +675,7 @@ const pageRoutes = {
 <div class="audit-drawer-body" id="audit-drawer-body"></div>
 </aside>
 </div>`,
-    "/js/audit-history.js?v=20260817customerhistory1"
+    "/js/audit-history.js?v=20261113adjust1"
   ),
   "/admin-users.html": pageLayout(
     "\u8d26\u53f7\u7ba1\u7406",
@@ -739,7 +750,7 @@ const globalFeedbackHtml = '<div class="app-toast-stack" id="app-toast-stack" ar
 // i18n.js holds the dictionary + translation engine. It is injected into <head> (ahead of the
 // render-blocking stylesheet) so the first paint is already in the saved language, instead of
 // painting Chinese and rewriting it after the two vendored scripts at the end of <body> load.
-const i18nHeadHtml = '<script src="/js/i18n.js?v=20261112internal1"></script>';
+const i18nHeadHtml = '<script src="/js/i18n.js?v=20261113splitdup1"></script>';
 // One full translation pass at the end of <body>, where the whole document
 // exists but the two vendored scripts below have not been fetched yet. Anything
 // painted while they load is already in the right language. Must come after
@@ -751,7 +762,7 @@ for (const route of Object.keys(pageRoutes)) {
     .replace('<link rel="stylesheet" href="/css/style.css?v=20260812transferfix1">', i18nHeadHtml + '<link rel="stylesheet" href="/css/style.css?v=20260812transferfix1">')
     .replace('<div class="company-bar glass-control" id="company-bar">', '<div class="company-bar glass-control" id="company-bar">' + companyCompactEntryHtml)
     .replace('<script src="/vendor/lucide-1.65.0.min.js"></script>', globalFeedbackHtml + i18nBootHtml + '<script src="/vendor/lucide-1.65.0.min.js"></script>')
-    .replace('/css/style.css?v=20260812transferfix1', '/css/style.css?v=20261110trade8')
+    .replace('/css/style.css?v=20260812transferfix1', '/css/style.css?v=20261113adjust2')
     .replace('/js/customer-detail.js?v=20260731bankfix4', '/js/customer-detail.js?v=20261109mtd1')
     .replace('/css/style.css?v=20260802topbarflow1', '/css/style.css?v=20261001archive1')
     .replace('/js/app.js?v=20260802platformsound3', '/js/app.js?v=20261110alarm1');

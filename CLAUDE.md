@@ -327,6 +327,9 @@ $env:TUNNEL_EDGE_IP_VERSION="4"
 - 入账: deposit, cash in, new, unclaim, redeposit（调钱入账没有 bank transfer，它只作为两户互转的另一半自动产生）
 - 出账: withdraw, wrong, cash out, give back, expenses, exchange, bank trf, redeposit（只在调钱弹窗）
 - **redeposit 任何入口都不绑银行、不动余额**（`submitTransfer` 忽略 BANK，见 `CONTEXT.md`「REDEP」）
+- **adjustment（余额校正）只动余额、不进任何报表**，只能由 admin 经 `POST /api/banks/:id/adjust` 写入，
+  通用流水接口拒收、拒改（见 `CONTEXT.md`「余额校正」）。日报靠 `bankReport.ADJUSTMENT_STATUS` 跳过它，
+  新加按「其余所有 status」计数的汇总时记得也跳过
 
 **HELP TRF 保存逻辑：**
 

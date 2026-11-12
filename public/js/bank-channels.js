@@ -136,7 +136,7 @@
 <div class="bk-col-channel"><span class="bk-field-group-label bk-channel-label">BANK BRANCH</span><div class="bk-channel-name"><strong translate="no">${esc(bankLabel)}</strong>${bankDirectoryStatusHtml(b, stats)}</div>${nameHtml}<div class="bk-channel-meta"><span class="kind-tag kind-${esc(b.account_kind || "nominee")}">${esc(KIND_LABEL[b.account_kind] || b.account_kind || "人头")}</span></div></div>
 <div class="bk-col-info"><span class="bk-field-group-label">银行资料</span>${BC.bankInfoHtml(b)}</div>
 <div class="bk-col-balance"><div class="bk-metric-grid"><div class="bk-metric bk-metric-balance"><span>BALANCE</span><strong class="bk-row-balance${stats.excluded ? " bk-balance-excluded" : ""}">${fmt(stats.displayBalance)}</strong></div><div class="bk-metric"><span>COUNT</span><strong>${fmtMetric(stats.txCount)}</strong></div><div class="bk-metric bk-metric-outflow"><span>TOTAL OUTFLOW</span><strong>${fmt(stats.outflow)}</strong></div></div>${stats.excluded ? '<span class="bk-row-flow bk-excluded-note">不计入总余额</span>' : ""}</div>
-<div class="bk-col-actions"><button type="button" class="bk-copy-btn" data-copy-bank-id="${b.id}" title="Copy complete bank information"><i data-lucide="copy"></i><span>Copy info</span></button><div class="bk-row-acts"><button type="button" class="btn btn-outline btn-xs bkd-edit-btn" data-id="${b.id}">${esc(tr("编辑"))}</button><button type="button" class="btn btn-outline btn-xs bkd-ban-btn" data-id="${b.id}">${esc(tr("封禁"))}</button>${bkdToggleHtml(b)}</div></div>
+<div class="bk-col-actions"><button type="button" class="bk-copy-btn" data-copy-bank-id="${b.id}" title="Copy complete bank information"><i data-lucide="copy"></i><span>Copy info</span></button><div class="bk-row-acts"><button type="button" class="btn btn-outline btn-xs bkd-edit-btn" data-id="${b.id}">${esc(tr("编辑"))}</button><button type="button" class="btn btn-outline btn-xs bkd-ban-btn" data-id="${b.id}">${esc(tr("封禁"))}</button><button type="button" class="btn btn-outline btn-xs bkd-adjust-btn admin-only" data-id="${b.id}">${esc(tr("校正余额"))}</button>${bkdToggleHtml(b)}</div></div>
 </article>
 <div class="bkd-item-body bk-row-body" id="bkd-body-${b.id}" ${bkdBodyAttrs(b)}</div>`;
   }
@@ -729,6 +729,70 @@
       });
   }
 
+  // 余额校正（仅 admin，按钮靠 CSS .admin-only 显隐，服务端 requireAdmin 才是真闸门）。
+  // 填银行 App 上的实际余额，差额由服务端按同一个显示余额重算（bankApply.adjustBankBalance）；
+  // 这里的差额只是给人看的预览。规矩见 CONTEXT.md「余额校正（ADJUSTMENT）」。
+  let adjustBankId = 0;
+  let adjustBefore = 0;
+  let adjustSubmitting = false;
+  function adjustDiff() {
+    const raw = String(document.getElementById("adjust-actual")?.value || "").replace(/,/g, "").trim();
+    if (!raw || !Number.isFinite(Number(raw))) return null;
+    return (Math.round(Number(raw) * 100) - Math.round(adjustBefore * 100)) / 100;
+  }
+  function syncAdjustDiff() {
+    const diff = adjustDiff();
+    const el = document.getElementById("adjust-diff");
+    if (el) {
+      el.textContent = diff == null ? "—" : `${diff > 0 ? "+" : ""}${fmt(diff)}`;
+      el.classList.toggle("pos", diff > 0);
+      el.classList.toggle("neg", diff < 0);
+    }
+    const submit = document.getElementById("adjust-submit");
+    if (submit) submit.disabled = adjustSubmitting || !diff;
+  }
+  function openAdjustModal(id) {
+    const bank = bankRows.find((b) => String(b.id) === String(id));
+    if (!bank) return;
+    adjustBankId = bank.id;
+    adjustBefore = Number(bankDisplayBalance(bank) || 0);
+    const g = (key) => document.getElementById(key);
+    g("adjust-target").textContent = bankTargetFor(bank.id);
+    g("adjust-before").textContent = fmt(adjustBefore);
+    g("adjust-actual").value = "";
+    g("adjust-remark").value = "";
+    g("adjust-err").textContent = "";
+    syncAdjustDiff();
+    g("adjust-modal").classList.add("show");
+    g("adjust-actual").focus();
+  }
+  function submitAdjust() {
+    if (adjustSubmitting || !adjustBankId) return;
+    const g = (key) => document.getElementById(key);
+    const err = g("adjust-err");
+    const diff = adjustDiff();
+    const remark = g("adjust-remark").value.trim();
+    if (diff == null) { err.textContent = tr("请输入实际余额"); return; }
+    if (!diff) { err.textContent = tr("实际余额与当前余额相同，无需校正"); return; }
+    if (!remark) { err.textContent = tr("请填写校正原因"); return; }
+    adjustSubmitting = true;
+    syncAdjustDiff();
+    api(`/api/banks/${adjustBankId}/adjust`, {
+      method: "POST",
+      body: JSON.stringify({ actual_balance: g("adjust-actual").value, remark }),
+    })
+      .then(() => {
+        g("adjust-modal").classList.remove("show");
+        showToast(tr("已校正余额"), { tone: "success" });
+        return bkdMutate(Promise.resolve());
+      })
+      .catch((e) => { err.textContent = e.message || tr("校正失败，请重试"); })
+      .finally(() => {
+        adjustSubmitting = false;
+        syncAdjustDiff();
+      });
+  }
+
   // 「运营中」页签 = 原来流水页上的渠道目录（排序、余额、复制）+ 原渠道管理里的操作按钮。
   // 不分页：整列要能拖拽排序。搜索时停用拖拽——只拖一部分会把没显示的那些顺序打乱。
   function renderOperatingPanel(panel) {
@@ -988,6 +1052,11 @@
         openDrainModal(drain.dataset.id);
         return;
       }
+      const adjust = e.target.closest(".bkd-adjust-btn");
+      if (adjust) {
+        openAdjustModal(adjust.dataset.id);
+        return;
+      }
       const unban = e.target.closest(".bkd-unban-btn");
       if (unban) {
         // 解封以前一点就生效：户口立刻回到审批和调钱的下拉里（员工演练里解封期间又被选中）。
@@ -1061,6 +1130,12 @@
       document.getElementById("drain-modal").classList.remove("show");
     });
     document.getElementById("drain-submit")?.addEventListener("click", submitDrain);
+
+    document.getElementById("adjust-actual")?.addEventListener("input", syncAdjustDiff);
+    document.getElementById("adjust-cancel")?.addEventListener("click", () => {
+      document.getElementById("adjust-modal").classList.remove("show");
+    });
+    document.getElementById("adjust-submit")?.addEventListener("click", submitAdjust);
 
   });
 })();

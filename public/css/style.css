@@ -4083,6 +4083,15 @@ body.audit-drawer-open { overflow: hidden; }
 .audit-inline-detail { margin-left: auto; font-size: var(--text-2xs); }
 .admin-audit-link { display: none; }
 body[data-user-role="admin"] .admin-audit-link { display: inline-flex; }
+/* 只给 admin 的按钮（余额校正等）。服务端仍会再拦一次，这里只是不让 operator 看见。
+   只在非 admin 时隐藏，admin 下保留元素自己的 display（.sheet-del 是 inline-grid）。 */
+body:not([data-user-role="admin"]) .admin-only { display: none !important; }
+.adjust-summary { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-lg); margin: 0 0 var(--space-xl); }
+.adjust-summary > div { display: flex; flex-direction: column; gap: var(--space-2xs); padding: var(--space-md) var(--space-lg); border: 1px solid var(--border); border-radius: var(--radius-md); }
+.adjust-summary span { font-size: var(--text-xs); color: var(--muted); }
+.adjust-summary strong { font-size: var(--text-lg); font-family: var(--font-mono); }
+.adjust-summary strong.pos { color: var(--green); }
+.adjust-summary strong.neg { color: var(--red); }
 .tx-id-cell { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-width: 180px; }
 .tx-id-cell > span { font-family: var(--font-mono); overflow-wrap: anywhere; }
 .tx-audit-link { align-items: center; gap: 4px; min-height: 32px; padding: 4px; color: var(--primary-text); font-size: var(--text-2xs); font-weight: var(--weight-bold); text-decoration: none; }

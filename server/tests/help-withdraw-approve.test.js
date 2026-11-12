@@ -103,3 +103,39 @@ test("拆分调钱：协助部分同样是 withdraw + help_amount，不进 IN �
   assert.strictEqual(round2(amountOf(r, "cash in")), 0, "拆分协助部分以前被算进 CASH IN");
   assert.strictEqual(r.totals.total_in, 0, "以前「入账 IN」被协助部分虚增");
 });
+
+// 2026-11-13：同一家对方公司可能分两笔替我付（两个户口各转一笔），员工要按笔记两行。
+// 以前「C STATUS 不能重复」拦着，那条规则从初版就在、没有业务依据：每行各自一条流水，
+// C STATUS 表按名字求和，两行和一行合计金额结果一样。
+test("拆分调钱：同一个 C STATUS 可以填多行，各自一条流水，C STATUS 表相加", () => {
+  const db = setup();
+  const a = addAccount(db, { company_id: "alpha" });
+  withdrawPending(db, "w4", 500);
+  const { ledgers, transfer_group_id } = approvePendingTx(db, "alpha", "w4", {
+    mode: "help_split", self_amount: 100, self_bank_account_id: a,
+    splits: [{ c_status: "RX66", amount: 250 }, { c_status: "RX66", amount: 150 }],
+  }, actor);
+
+  const helpers = ledgers.filter((l) => l.c_status === "RX66");
+  assert.deepStrictEqual(helpers.map((l) => round2(l.help_amount)), [250, 150]);
+  for (const l of helpers) {
+    assert.strictEqual(l.status, "withdraw");
+    assert.strictEqual(l.transfer_group_id, transfer_group_id);
+  }
+
+  const r = report(db, "alpha");
+  assert.strictEqual(round2(cRow(r, "RX66").in), 400);
+  assert.strictEqual(round2(amountOf(r, "withdraw")), -500);
+});
+
+test("拆分调钱：不带本户自付、只填同一家两行也能审批", () => {
+  const db = setup();
+  withdrawPending(db, "w5", 500);
+  const { ledgers } = approvePendingTx(db, "alpha", "w5", {
+    mode: "help_split", self_amount: 0,
+    splits: [{ c_status: "RX66", amount: 300 }, { c_status: "RX66", amount: 200 }],
+  }, actor);
+
+  assert.strictEqual(ledgers.length, 2);
+  assert.strictEqual(round2(cRow(report(db, "alpha"), "RX66").in), 500);
+});

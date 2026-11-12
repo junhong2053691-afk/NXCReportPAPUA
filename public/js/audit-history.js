@@ -15,6 +15,7 @@ const ACTION_LABELS = {
   "pending.deleted": "删除已跳过单",
   "pending.expired": "\u5df2\u8df3\u8fc7\u5355\u81ea\u52a8\u8fc7\u671f",
   "transfer.created": "创建调钱",
+  "balance.adjusted": "余额校正",
   "bank_account.created": "新增银行账户",
   "bank_account.updated": "修改银行账户",
   "bank_account.banned": "封禁银行账户",

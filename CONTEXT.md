@@ -33,7 +33,7 @@
 | DEPOSIT 金额 | `deposit + new`（**不含 `unclaim`**，UNCLAIM 单列） | `deposit + new + amopay` |
 | DEP COUNT | `deposit + amopay` | `deposit + new + amopay`（与金额同一组） |
 | UNIQUE CUST | 当天任何带 username 的流水（含提现）去重 | 只数 DEP 那组状态 |
-| TRANSACTION / 总单 | TRANSACTION = `deposit` / `amopay` / `withdraw` **以外**的所有流水笔数（带不带 username 都算；2026-11-10 按 Excel 确认） | 总单 = DEP单 + WD单（正好相反：只数充值提现） |
+| TRANSACTION / 总单 | TRANSACTION = `deposit` / `amopay` / `withdraw` **以外**的所有流水笔数（带不带 username 都算；2026-11-10 按 Excel 确认；**不含 `adjustment`**，见「余额校正」） | 总单 = DEP单 + WD单（正好相反：只数充值提现） |
 | WIN/LOSE | `TOTAL WIN/LOSE` = DEPOSIT + WITHDRAW（`totals.win_loss`，WITHDRAW 是负数），显示在 REPORT 最底下 | `DEP − WD`，DEP 含 amopay |
 
 同一天两个页面的 DEPOSIT 数字不一样是**对的**。要统一须先和运营对齐 Excel。
@@ -130,6 +130,17 @@
 | **改一条** | 删除时两条一起删，从「最近删除」恢复任一条时两条一起恢复（11-12 审查后补上，之前只删一条）；改金额 / 户口只改那一条，不联动——要改就删了重录 |
 | **老数据** | 规矩只管新录入。11-12 之前带 C STATUS 的 `bank trf` / `bank transfer` 原样保留，交易记录页照常可编辑 |
 
+## 拆分调钱（审批 withdraw 平台单选「拆分」）
+
+一张 withdraw 平台单由「本户自付」（可选）+ 若干「协助方」（别家公司替我付）凑满金额。
+实现 `bankApply.approvePendingTx` 的 `help_split`，测试 `help-withdraw-approve.test.js`。
+
+| 术语 / 规则 | 定义 |
+|---|---|
+| **一个协助方** | 一条流水：`withdraw` + `help_amount`、不绑银行、带 C STATUS（C STATUS 表记 IN）。全组同一个 `transfer_group_id` |
+| **同一家可以填多行** | 2026-11-13 用户提出后放开：同一家分几笔替我付（两个户口各转一笔）就填几行，各自一条流水，C STATUS 表按名字相加。之前的「C STATUS 不能重复」从初版就在、没有业务依据，**别再加回去** |
+| **至少 2 个分配项** | 本户自付算 1 项，每个协助方行算 1 项；合计必须等于平台单金额 |
+
 ## REDEP（redeposit）
 
 2026-11-12 用户定。REDEP = 客户拿赢的钱直接重新充值，没有真钱进出我方户口。
@@ -140,6 +151,22 @@
 | **调钱弹窗** | 调入（正数）、调出（负数）都能选 REDEP；选了之后 BANK 框藏起来，员工先选过的户口也被忽略。金额照方向落 IN / OUT，C STATUS 照常可填 |
 | **报表** | 只记 REDEP 笔数，金额不进任何汇总行（日报规则，见上文「与支付渠道日报的口径差」） |
 | **老数据** | 11-12 之前调钱弹窗写的调入 REDEP 绑过银行、动过余额，原样保留。在交易记录里改这种行会被清掉银行（编辑路径一直如此），余额随之变化 |
+
+## 余额校正（ADJUSTMENT）
+
+2026-11-13 用户定。后台余额与银行 App 实际余额对不上时，admin 把它拉平。很少用。
+实现 `bankApply.adjustBankBalance` + `POST /api/banks/:id/adjust`，测试 `bank-adjustment.test.js` / `bank-adjustment-route.test.js`。
+
+| 术语 / 规则 | 定义 |
+|---|---|
+| **一笔校正** | 一条 `status = adjustment` 的流水，绑本公司一个户口，带 BANK ACC 与 REMARK。差额为正落 IN、为负落 OUT。C STATUS、USERNAME 永远为空 |
+| **谁** | 只有 admin。入口在支付渠道页运营中渠道行的「校正余额」；operator 看不到按钮，服务端 `requireAdmin` |
+| **填什么** | 填**实际余额**，系统按页面显示的余额（`displayBalanceForAccount`，每日归零户是当日净额）算差额。差额 0 拒绝。REMARK 必填 |
+| **哪些户** | 只限运营中。封禁户的余额会经「封禁户余额」进 EXPENSES，在那里加减校正就等于改报表 |
+| **余额** | **进**所有余额：页面 BALANCE、TOTAL BALANCE、Telegram `/balance` 与超上限报警、归档闸门 |
+| **报表** | **不进**任何汇总与笔数：日报 REPORT 各行、TRANSACTION、DEP / W/D COUNT、UNIQUE CUST、渠道 COUNT、TOTAL WIN/LOSE、月报、C STATUS 表、往来账 |
+| **交易记录页** | 照常显示一行，STATUS 显示 **ADJ**（`bank-common.js` 的 `statusLabel`；状态值仍是 `adjustment`），**任何人都不能编辑**，也不进表尾 TOTAL。只有 admin 能删除 / 从最近删除恢复，且户口仍须是运营中 |
+| **唯一入口** | 通用流水接口（`POST/PUT /api/banks/ledger`）不收 `adjustment`，也不改已有的 adjustment 行 |
 
 ## 跨公司来单提醒
 
