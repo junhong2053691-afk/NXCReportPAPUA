@@ -2689,7 +2689,15 @@ input[data-cstatus-pick][data-cstatus-desktop] {
   color: var(--text);
 }
 .bkv2 .sheet-table .col-no { width: 32px; }
-.bkv2 .sheet-table .col-time { width: 50px; }
+.bkv2 .sheet-table .col-time { width: 92px; }
+/* TIME 后面跟日期「16:57 13 NOV」（2026-11-14）。≤1500 时列收回 56px，日期折到时间下面一行，1366 仍一屏放下。 */
+.bkv2 .sheet-time { white-space: nowrap; }
+.bkv2 .sheet-time-date {
+  color: var(--muted);
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-bold);
+  letter-spacing: .02em;
+}
 .bkv2 .sheet-table .col-id { width: 100px; }
 .bkv2 .sheet-table .col-status { width: 92px; }
 .bkv2 .sheet-table .col-num { width: 60px; }
@@ -2706,6 +2714,8 @@ input[data-cstatus-pick][data-cstatus-desktop] {
 /* OPERATOR（交易记录页，2026-11-10）：录入 / 审批人一行，被改过时下面小字一行。 */
 .bkv2 .sheet-table .col-operator { width: 96px; }
 @media (max-width: 1500px) {
+  .bkv2 .sheet-table .col-time { width: 56px; }
+  .bkv2 .sheet-time-date { display: block; }
   .bkv2 .sheet-table .col-bank { width: 110px; }
   .bkv2 .sheet-table .col-user { width: 100px; }
   .bkv2 .sheet-table .col-name { width: 116px; }
@@ -3009,6 +3019,17 @@ input[data-cstatus-pick][data-cstatus-desktop] {
 #bk-intake .pend-date:focus-within {
   border-color: var(--focus);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--focus) 16%, transparent);
+}
+/* 入账日期 ≠ 平台单日期：橙色提醒（合法，比如隔天才审批）；早于平台日期前一天：红色，审批会被拦。 */
+#bk-intake .pend-date.is-shifted {
+  border-color: var(--orange);
+  color: var(--orange);
+  background: color-mix(in srgb, var(--orange) 10%, var(--surface-2));
+}
+#bk-intake .pend-date.is-invalid {
+  border-color: var(--danger);
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 12%, var(--surface-2));
 }
 #bk-intake .pend-date-input {
   position: absolute;

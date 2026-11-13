@@ -812,6 +812,7 @@ const I18N_PHRASES = [
   [/^(\d+)\s*个渠道$/, "$1 channels"],
   [/^(\d+)\s*笔\s*·\s*出流\s*(.+)$/, "$1 tx · outflow $2"],
   [/^有\s*(\d+)\s*笔待审批$/, "$1 pending approvals"],
+  [/^入账日期早于平台单日期（(\d{2}-\d{2})，平台 (\d{2}-\d{2})），请检查$/, "Entry date $1 is before the platform date $2 — please check"],
   [/^还有\s*(\d+)\s*笔$/, "$1 more"],  [/^已复制\s*(.+)$/, "Copied $1"],
   [/^加载失败：(.+)$/, "Load failed: $1"],
   [/^测试通过:\s*(.+)$/, "Test passed: $1"],
@@ -875,6 +876,7 @@ const I18N_PHRASES = [
   [/^活动领取加载失败：(.+)$/, "Failed to load promo claims: $1"],
 ];
 const I18N_PHRASES_ZH = [
+  [/^Entry date (\d{2}-\d{2}) is before the platform date (\d{2}-\d{2}) — please check$/, "入账日期早于平台单日期（$1，平台 $2），请检查"],
   [/^(\d+)s ago$/, "$1秒前"],
   [/^(\d+)m ago$/, "$1分钟前"],
   [/^(\d+) total$/, "共 $1 笔"],

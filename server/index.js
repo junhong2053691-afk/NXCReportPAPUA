@@ -219,7 +219,7 @@ function pageLayout(title, active, body, script) {
 
 // 交易页（/bank-ledger.html）与交易记录页（/bank-transactions.html）共用同一份 bank-ledger.js，
 // 按 .bkv2 的 data-view 分流（2026-11-10 拆页）。两页的版本号必须一起换。
-const BANK_LEDGER_SCRIPTS = ["/js/ledger-bank-pick.js?v=20261106drill3", "/js/operation-target.js?v=20261106drill1", "/js/render-gate.js?v=20261106drill1", "/js/pending-filter.js?v=20261106drill1", "/js/display-format.js?v=20261106drill2", "/js/cstatus-sheet.js?v=20261113dd4", "/js/bank-common.js?v=20261113copy6", "/js/split-allocation.js?v=20261113split2", "/js/bank-ledger.js?v=20261113desc1"];
+const BANK_LEDGER_SCRIPTS = ["/js/ledger-bank-pick.js?v=20261106drill3", "/js/operation-target.js?v=20261106drill1", "/js/render-gate.js?v=20261106drill1", "/js/pending-filter.js?v=20261106drill1", "/js/display-format.js?v=20261106drill2", "/js/cstatus-sheet.js?v=20261113dd4", "/js/bank-common.js?v=20261113copy6", "/js/split-allocation.js?v=20261113split2", "/js/bank-ledger.js?v=20261114tsdate1"];
 
 const pageRoutes = {
   "/": pageLayout(
@@ -750,7 +750,7 @@ const globalFeedbackHtml = '<div class="app-toast-stack" id="app-toast-stack" ar
 // i18n.js holds the dictionary + translation engine. It is injected into <head> (ahead of the
 // render-blocking stylesheet) so the first paint is already in the saved language, instead of
 // painting Chinese and rewriting it after the two vendored scripts at the end of <body> load.
-const i18nHeadHtml = '<script src="/js/i18n.js?v=20261113scope1"></script>';
+const i18nHeadHtml = '<script src="/js/i18n.js?v=20261114tsdate1"></script>';
 // One full translation pass at the end of <body>, where the whole document
 // exists but the two vendored scripts below have not been fetched yet. Anything
 // painted while they load is already in the right language. Must come after
@@ -762,7 +762,7 @@ for (const route of Object.keys(pageRoutes)) {
     .replace('<link rel="stylesheet" href="/css/style.css?v=20260812transferfix1">', i18nHeadHtml + '<link rel="stylesheet" href="/css/style.css?v=20260812transferfix1">')
     .replace('<div class="company-bar glass-control" id="company-bar">', '<div class="company-bar glass-control" id="company-bar">' + companyCompactEntryHtml)
     .replace('<script src="/vendor/lucide-1.65.0.min.js"></script>', globalFeedbackHtml + i18nBootHtml + '<script src="/vendor/lucide-1.65.0.min.js"></script>')
-    .replace('/css/style.css?v=20260812transferfix1', '/css/style.css?v=20261113scope1')
+    .replace('/css/style.css?v=20260812transferfix1', '/css/style.css?v=20261114tsdate1')
     .replace('/js/customer-detail.js?v=20260731bankfix4', '/js/customer-detail.js?v=20261109mtd1')
     .replace('/css/style.css?v=20260802topbarflow1', '/css/style.css?v=20261001archive1')
     .replace('/js/app.js?v=20260802platformsound3', '/js/app.js?v=20261113scope1');

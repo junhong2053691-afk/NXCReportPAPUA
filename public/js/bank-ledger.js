@@ -263,6 +263,27 @@
     return `${m[2]} ${months[Number(m[1]) - 1] || ""}`.trim();
   }
 
+  function shiftDateKey(dateKey, delta) {
+    const m = String(dateKey || "").match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (!m) return "";
+    return new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]) + delta)).toISOString().slice(0, 10);
+  }
+  // 入账日期最早只能是平台单日期前一天，与服务端 pendingLedgerEntryTime 同一条线（那边才是闸，
+  // 这里只是早点告诉员工）。2026-11-13 rolex66 17271440755 就是 11-13 的单被误选成 10-13。
+  // 补付批次（data-paid > 0）默认今天，但下限照样按原平台单日期，与服务端一致。
+  function pendingDateBounds(tr) {
+    const platform = dateFromSql(tr.dataset.txTime, "");
+    return { platform, min: platform ? shiftDateKey(platform, -1) : "", max: todaySydney() };
+  }
+  function pendingDateProblem(tr, date) {
+    const { platform, min } = pendingDateBounds(tr);
+    if (min && date && date < min) {
+      // 与服务端同一句话；中英文由 i18n.js 的 I18N_PHRASES 规则互译。
+      return `入账日期早于平台单日期（${date.slice(5)}，平台 ${platform.slice(5)}），请检查`;
+    }
+    return "";
+  }
+
   function pendingEntryDateTime(dateValue, timeStr) {
     const date = dateFromSql(dateValue, sheetDate || todaySydney());
     const t = normalizeTime24(timeStr);
@@ -273,6 +294,7 @@
   function rowValues(r, isNew) {
     return {
       time: r ? String(r.entry_time || "").slice(11, 16) : nowTime(),
+      date: r ? String(r.entry_time || "").slice(0, 10) : "",
       tx_id: r?.tx_id || "",
       status: r ? statusLabel(inferRowStatus(r)) : "",
       in: r && Number(r.amount_in) ? fmt(r.amount_in) : "",
@@ -531,8 +553,14 @@
     else if (f === "bank_acc") showGridPicker(inp, bankPickerOptions());
     else if (f === "other") showGridPicker(inp, PROBLEM_OPTIONS, true);
   }
-  function roCellHtml(f, val) {
+  function roCellHtml(f, val, date) {
     const num = f === "in" || f === "out" || f === "help_trf";
+    // TIME 格后面跟日期「16:57 13 NOV」（2026-11-14 用户要求）。日期只在只读行显示，编辑框仍只认 HH:MM。
+    if (f === "time" && date) {
+      const dateLabel = compactDateLabel(date);
+      const full = `${val ?? ""} ${date}`;
+      return `<td class="ro-cell field-time sheet-time" translate="no" title="${esc(full)}">${esc(String(val ?? ""))} <small class="sheet-time-date">${esc(dateLabel)}</small></td>`;
+    }
     const parsedStatus = f === "status" ? parseStatus(val) : "";
     const stCls = f === "status" ? statusClass(parsedStatus) : "";
     const cls = ["ro-cell", `field-${f.replace(/_/g, "-")}`, num ? "sheet-num" : "", f === "time" ? "sheet-time" : "", f === "tx_id" ? "mono" : "", stCls].filter(Boolean).join(" ");
@@ -571,7 +599,7 @@
       const expandedAttr = MOBILE_MQ.matches ? ` aria-expanded="${openLedgerCards.has(id) ? "true" : "false"}"` : "";
       return `<tr class="sheet-grid-row sheet-row-ro sheet-row-adjustment${openLedgerCards.has(id) ? " m-open" : ""}" data-id="${id}"${expandedAttr}>
         <td class="col-no">${no}</td>
-        ${GRID_FIELDS.map((f) => roCellHtml(f, v[f])).join("")}
+        ${GRID_FIELDS.map((f) => roCellHtml(f, v[f], f === "time" ? v.date : "")).join("")}
         ${operatorCellHtml(r)}
         <td class="col-act"><a class="sheet-history admin-audit-link" href="/audit-history.html?ledger_id=${id}" title="查看操作历史" aria-label="查看流水操作历史">${renderIcon("history", { size: 15 })}<span class="icon-fallback">史</span></a><button type="button" class="sheet-del admin-only" data-id="${id}" title="删除余额校正" aria-label="删除余额校正">${renderIcon("trash-2", { size: 15 })}<span class="icon-fallback">删</span></button></td>
       </tr>`;
@@ -582,7 +610,7 @@
       const expandedAttr = MOBILE_MQ.matches ? ` aria-expanded="${openLedgerCards.has(id) ? "true" : "false"}"` : "";
       return `<tr class="sheet-grid-row sheet-row-ro${openLedgerCards.has(id) ? " m-open" : ""}" data-id="${id}"${expandedAttr}>
         <td class="col-no">${no}</td>
-        ${GRID_FIELDS.map((f) => roCellHtml(f, v[f])).join("")}
+        ${GRID_FIELDS.map((f) => roCellHtml(f, v[f], f === "time" ? v.date : "")).join("")}
         ${operatorCellHtml(r)}
         <td class="col-act"><a class="sheet-history admin-audit-link" href="/audit-history.html?ledger_id=${id}" title="\u67e5\u770b\u64cd\u4f5c\u5386\u53f2" aria-label="\u67e5\u770b\u6d41\u6c34\u64cd\u4f5c\u5386\u53f2">${renderIcon("history", { size: 15 })}<span class="icon-fallback">\u53f2</span></a><button type="button" class="sheet-edit" data-id="${id}" title="\u7f16\u8f91\u6d41\u6c34" aria-label="\u7f16\u8f91\u6d41\u6c34">${renderIcon("pencil", { size: 15 })}<span class="icon-fallback">\u7f16</span></button><button type="button" class="sheet-del" data-id="${id}" title="\u5220\u9664\u6d41\u6c34" aria-label="\u5220\u9664\u6d41\u6c34">${renderIcon("trash-2", { size: 15 })}<span class="icon-fallback">\u5220</span></button></td>
       </tr>`;
@@ -1642,13 +1670,14 @@
     const remaining = pendingRemainingOf(r);
     const pendTime = partial ? defaultPendTime : timeFromSql(r.tx_time, defaultPendTime);
     const pendDate = partial ? todaySydney() : dateFromSql(r.tx_time, sheetDate || todaySydney());
+    const pendMinDate = shiftDateKey(dateFromSql(r.tx_time, ""), -1);
     const pendName = ledgerNameText(r.name);
     const modeOptions = partial
       ? '<option value="split">拆分调钱</option>'
       : '<option value="bank">本户</option><option value="help">调钱</option><option value="split">拆分调钱</option><option value="redeposit">REDEP</option>';
     return `<tr data-txid="${esc(r.tx_id)}" data-tx-time="${esc(r.tx_time || "")}" data-pending-amount="${esc(remaining)}" data-paid="${esc(paid)}">
       <td translate="no">${esc(r.tx_type)}</td>
-      <td><div class="pend-datetime"><label class="pend-date" title="调整入账日期（平台日期 ${esc(dateFromSql(r.tx_time, pendDate))}）"><span class="pend-date-label" aria-hidden="true">${esc(compactDateLabel(pendDate))}</span><input class="pend-date-input" type="date" value="${esc(pendDate)}" aria-label="入账日期，平台原始日期 ${esc(dateFromSql(r.tx_time, pendDate))}"></label><input class="pend-time" type="time" step="60" value="${esc(pendTime)}" title="${esc(r.tx_time || "")}" aria-label="入账时间"></div></td>
+      <td><div class="pend-datetime"><label class="pend-date" title="调整入账日期（平台日期 ${esc(dateFromSql(r.tx_time, pendDate))}）"><span class="pend-date-label" aria-hidden="true">${esc(compactDateLabel(pendDate))}</span><input class="pend-date-input" type="date" value="${esc(pendDate)}"${pendMinDate ? ` min="${esc(pendMinDate)}"` : ""} max="${esc(todaySydney())}" aria-label="入账日期，平台原始日期 ${esc(dateFromSql(r.tx_time, pendDate))}"></label><input class="pend-time" type="time" step="60" value="${esc(pendTime)}" title="${esc(r.tx_time || "")}" aria-label="入账时间"></div></td>
       <td class="mono" translate="no">${esc(r.tx_id)}</td>
       <td translate="no">${esc(r.username)} / ${esc(pendName)}</td>
       <td>${fmt(r.amount)}${partial ? `<div class="pend-paid-note"><span>已付</span> <b translate="no">${fmt(paid)}</b> · <span>还差</span> <b translate="no">${fmt(remaining)}</b></div>` : ""}</td>
@@ -1703,7 +1732,13 @@
       const label = tr.querySelector(".pend-date-label");
       if (label) label.textContent = compactDateLabel(date);
       const control = tr.querySelector(".pend-date");
-      if (control) control.title = `调整入账日期（平台日期 ${dateFromSql(tr.dataset.txTime, date)}）`;
+      if (control) {
+        const problem = pendingDateProblem(tr, date);
+        const { platform } = pendingDateBounds(tr);
+        control.classList.toggle("is-invalid", Boolean(problem));
+        control.classList.toggle("is-shifted", !problem && Boolean(platform) && date !== platform);
+        control.title = problem || `调整入账日期（平台日期 ${dateFromSql(tr.dataset.txTime, date)}）`;
+      }
     };
     dateInput?.addEventListener("input", syncPendingDateLabel);
     dateInput?.addEventListener("change", syncPendingDateLabel);
@@ -2568,6 +2603,12 @@
       const modeEl = tr.querySelector(".pend-mode");
       const mode = modeEl ? modeEl.value : "bank";
       if (mode === "split" && !updatePendingSplitState(tr)) return;
+      const dateProblem = pendingDateProblem(tr, tr.querySelector(".pend-date-input")?.value || "");
+      if (dateProblem) {
+        showToast(dateProblem, { tone: "error" });
+        tr.querySelector(".pend-date-input")?.focus();
+        return;
+      }
       const body = {
         mode: mode === "split" ? "help_split" : mode,
         bank_account_id: mode === "help" || mode === "split" || mode === "redeposit" ? null : (Number(tr.querySelector(".pend-bank")?.value || 0) || null),

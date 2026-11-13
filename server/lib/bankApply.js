@@ -8,7 +8,7 @@ const {
   displayBalanceForAccount,
 } = require("./bankReport");
 const { SQL_OPERATING, isBanned } = require("./bankLifecycle");
-const { formatWallClock, todayKey, localMidnightUtc } = require("./dates");
+const { formatWallClock, todayKey, localMidnightUtc, shiftDateKey } = require("./dates");
 const { cleanLedgerName } = require("./displayName");
 const { isDemoTenant } = require("./readConfig");
 const {
@@ -83,6 +83,18 @@ function pendingLedgerEntryTime(pending, requested, nowMs = Date.now()) {
   }
   if (reqTime && reqTime > formatWallClock(new Date(nowMs + FUTURE_ENTRY_SLACK_MS).toISOString())) {
     throw Object.assign(new Error("入账时间不能晚于现在"), { status: 400 });
+  }
+  // 下限：入账日期不得早于平台单日期的前一天（先转账、过了午夜才下单留一天余量）。
+  // 2026-11-13 rolex66 17271440755：11-13 的单审批时日期被误改成 10-13，这里没有下限就照单
+  // 全收，11-13 的流水与日报里凭空少了这笔，看起来就像漏单。补付批次的默认时间是现在，但下限
+  // 仍按**原平台单日期**（platform_tx_time），手填回平台那天是合法的。
+  const floorTime = normalizeSqlDateTime(pending?.platform_tx_time) || txTime;
+  const minDate = shiftDateKey(floorTime.slice(0, 10), -1);
+  if (reqTime && reqTime.slice(0, 10) < minDate) {
+    throw Object.assign(
+      new Error(`入账日期早于平台单日期（${reqTime.slice(5, 10)}，平台 ${floorTime.slice(5, 10)}），请检查`),
+      { status: 400 }
+    );
   }
   // Keep the platform timestamp in pending.tx_time. The separately stored
   // approval timestamp is intentionally editable and remains auditable.
@@ -588,7 +600,10 @@ function approvePendingTx(db, companyId, txId, body, actor) {
     );
   }
   // 第一批默认平台单时间，补付的批次默认提交时间（用户定：补付记在付钱那天）。手填的照样校验。
-  const entryTime = pendingLedgerEntryTime(paidCents > 0 ? { ...pending, tx_time: nowSql() } : pending, body.entry_time);
+  const entryTime = pendingLedgerEntryTime(
+    paidCents > 0 ? { ...pending, tx_time: nowSql(), platform_tx_time: pending.tx_time } : pending,
+    body.entry_time
+  );
 
   let splitRows = null;
   let splitSelfRows = null;
