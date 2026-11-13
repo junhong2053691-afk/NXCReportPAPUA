@@ -59,32 +59,11 @@ function backfillDateColumns(database) {
   }
 }
 
-function repairAutoLedgerTimes(database) {
-  const { formatSydneyDateTime } = require("../lib/dates");
-  const rows = database
-    .prepare(
-      `SELECT l.id, l.entry_time, t.created_at
-       FROM bank_ledger l
-       JOIN transactions t ON t.company_id = l.company_id AND t.id = l.tx_id
-       WHERE l.auto_generated = 1
-         AND l.tx_id != ''
-         AND t.created_at IS NOT NULL
-         AND t.created_at != ''`
-    )
-    .all();
-  if (!rows.length) return;
-
-  const stmt = database.prepare("UPDATE bank_ledger SET entry_time = ?, updated_at = datetime('now') WHERE id = ?");
-  let fixed = 0;
-  for (const row of rows) {
-    const entryTime = formatSydneyDateTime(row.created_at);
-    if (entryTime && entryTime !== row.entry_time) {
-      stmt.run(entryTime, row.id);
-      fixed += 1;
-    }
-  }
-  if (fixed) console.log(`[db] repaired ${fixed} auto ledger timestamp(s)`);
-}
+// ⚠️ 这里曾有 repairAutoLedgerTimes：每次启动把所有审批流水（auto_generated = 1）的
+// entry_time 按 transactions.created_at 改回平台时间。审批时入账日期 / 时间是员工可改的
+// （pendingLedgerEntryTime），它把那些选择在每次重启时静默抹掉、不留审计——2026-11-13
+// EzSpin68 一笔跨午夜单因此从 11-13 退回 11-12，当日 DEPOSIT 与 Excel 差 10。
+// 别再加回任何「按平台时间重写流水时间」的启动迁移。测试 auto-ledger-time-restart.test.js。
 
 function ensureIndex(database, name, sql) {
   const exists = database.prepare("SELECT 1 FROM sqlite_master WHERE type = 'index' AND name = ?").get(name);
@@ -466,7 +445,6 @@ function migrate(database) {
     if (Number(migratedHelpRows?.changes || 0) > 0) {
       console.log(`[db] moved ${migratedHelpRows.changes} helped withdraw rows to HELP TRF`);
     }
-    repairAutoLedgerTimes(database);
   } catch (e) {
     console.warn("[db] bank_tx_pending:", e.message);
   }
@@ -648,8 +626,8 @@ function migrate(database) {
  * 把实例 locale（时区 + 币种）注入进程。
  *
  * ⚠️ 必须在 getDb() 内部、conn.exec(schema) 之后、**migrate(conn) 之前**调。因为
- * migrate 会跑 backfillDateColumns()（用 dateKeyFromIso）和 repairAutoLedgerTimes()
- * （用 formatWallClock），放到 migrate 之后这两个就会在默认 Sydney 下执行。
+ * migrate 会跑 backfillDateColumns()（用 dateKeyFromIso），放到 migrate 之后它就会在
+ * 默认 Sydney 下执行。
  * app_settings 表在 conn.exec(schema) 之后就存在了。
  *
  * index.js 里 scheduler / telegramBots / backup / cleanup 全在 getDb() 之后启动，

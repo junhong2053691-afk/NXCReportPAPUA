@@ -126,6 +126,9 @@ $env:TUNNEL_EDGE_IP_VERSION="4"
   用 `bank_balance_log` 按 `tx_id` 查重。**同步本身不碰余额**——必须有人在后台点「审批」，
   `approvePendingTx` 才会写 `bank_ledger` 并刷新余额
 - ⚠️ `sync.js` 的 `applyDepositsToBank`（自动入账）是**死代码，无任何调用**，别照它推断行为
+- **审批流水的 `entry_time` 是员工在接单区选的，任何启动迁移 / 同步都不许按平台时间重写它**。
+  2026-11-13 删掉了每次启动都这么干的 `repairAutoLedgerTimes`（它让跨午夜单在重启后退回前一天、
+  不留审计）。测试 `auto-ledger-time-restart.test.js`
 
 **修改同步逻辑前必须考虑**：分页完整性、去重、公司隔离、重启后 fast-recovery。
 
