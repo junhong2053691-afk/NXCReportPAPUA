@@ -2193,6 +2193,21 @@ tr:hover .bank-bal-btns { opacity: 1; }
   max-height: 240px;
   overflow-y: auto;
 }
+/* 电脑上的 C STATUS 输入框（cstatus-sheet.js 设成 readonly + data-cstatus-desktop）：外观像 BANK 下拉，
+   点开是 #cstatus-dropdown。流水表格那格（data-f）不加，它有自己的浮层。 */
+input[data-cstatus-pick][data-cstatus-desktop] {
+  cursor: pointer;
+  padding-right: 26px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath fill='%2364748b' d='M0 0l5 6 5-6z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  caret-color: transparent;
+}
+/* 实底：--surface 是半透明玻璃，浮在接单区表格上会透出底下的 BANK 下拉文字。 */
+.cstatus-dropdown { max-height: 280px; max-width: none; background: var(--surface-solid); -webkit-backdrop-filter: none; backdrop-filter: none; }
+:root[data-theme="dark"] .cstatus-dropdown { background: var(--surface-solid); }
+.cstatus-dropdown .is-blank, .cstatus-dropdown .is-current { color: var(--muted); }
+.cstatus-dropdown .is-blank.active, .cstatus-dropdown .is-current.active { color: #fff; }
 .sheet-table .ac-wrap { position: static; }
 .sheet-table .ac-dropdown.ac-sheet {
   position: fixed; z-index: calc(var(--z-modal) + 10); min-width: 120px; max-width: 200px;

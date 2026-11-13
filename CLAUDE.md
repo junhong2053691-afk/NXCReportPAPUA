@@ -114,6 +114,13 @@ $env:TUNNEL_EDGE_IP_VERSION="4"
 - `resolveCompany` 中间件设置 **`req.companyId`**（不是 `req.session.activeCompanyId`）
 - `customers` / `transactions` / `bank_*` 均按 `company_id` 隔离
 - 路由写公司相关逻辑时**必须用 `req.companyId`**
+- **每个标签页各管各的公司（2026-11-13）**：本标签页的公司存 `sessionStorage["dash-company"]`，`app.js` 的 `api()`
+  每个请求带 **`X-Company-Id`** 头；`resolveCompany` 有头就每次按库复核（operator `hasCompanyAccess`、admin 公司存在），
+  **不通过 403 `COMPANY_NOT_ALLOWED`、绝不静默回退到别家**（回退 = 这个标签页的审批写进别的公司），通过也**不写回 session**。
+  session 里的 `companyId` 只是「新标签页默认值」= 最后一次手动切过的公司（`POST /api/companies/active`）；
+  `loadCompanies` 刻意**不再**每次加载都 POST 它。`fetch` 直调（下载文件）用 `companyHeaders()`，
+  **别再用 `location.href = "/api/..."` 下载**——整页跳转带不了头，会拿到默认公司的数据（客户导出曾经这样）。
+  测试 `company-per-tab.test.js`
 
 ### 同步（最高优先级：数据准确）
 
@@ -163,6 +170,10 @@ $env:TUNNEL_EDGE_IP_VERSION="4"
   「<」（`#sidebar-collapse-btn`）收起；平板 701–768 左上角浮的也是 logo（`#mobile-menu-btn`），抽屉里那颗「<」就是关闭。
   logo 只在桌面收起时可点，展开时 `tabIndex=-1`。测试 `server/tests/sidebar-toggle.test.js`
 - 全局 `api(url, opts)` 在 `public/js/app.js`，**只接受 2 个参数** `(url, opts)`；后台轮询用 `{ bg: true }`
+- **电脑版 C STATUS 是只读输入框 + 完整下拉**（`cstatus-sheet.js` 的 `cstatusDropdownRows`，2026-11-13 用户要「像选 BANK 那样」）：
+  调钱 / 待处理 / 拆分协助方 / 转出余额的 `input[data-cstatus-pick]` 在桌面上 `readOnly`、摘掉 datalist，点开 `#cstatus-dropdown`；
+  **用户明确不要搜索框、不能新增**（新名字先去设置里加）。手机仍是底部抽屉（带搜索、可「+ 使用」）；流水表格那格（`data-f`）
+  仍是 `bank-ledger.js` 自己的浮层。当前值不在选项里（老数据 / 多家）时下拉保留它一项，别删
 - Modal 显示用 `classList.add("show")`，不是 `open`
 - 页面 HTML 大量在 `server/index.js` 字符串拼接（Unicode `\uXXXX`），改 UI 时注意编码
 - 暗色模式：`data-theme="dark"` on `:root`

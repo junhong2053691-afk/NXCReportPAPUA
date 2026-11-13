@@ -381,8 +381,12 @@ function xcoNavigate(companyId) {
       location.assign(target);
     }
   };
+  // 本标签页切过去（sessionStorage），POST 顺带更新新标签页默认值；别的标签页不受影响。
   api("/api/companies/active", { method: "POST", body: JSON.stringify({ id: companyId }) })
-    .then(go)
+    .then(function () {
+      if (typeof setTabCompanyId === "function") setTabCompanyId(companyId);
+      go();
+    })
     .catch(function (e) {
       if (typeof showToast === "function") showToast((e && e.message) || "切换公司失败", { tone: "error", title: "切换公司失败" });
     });

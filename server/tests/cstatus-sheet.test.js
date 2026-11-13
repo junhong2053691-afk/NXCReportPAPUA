@@ -6,7 +6,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
-const { cstatusSheetRows } = require("../../public/js/cstatus-sheet");
+const { cstatusSheetRows, cstatusDropdownRows } = require("../../public/js/cstatus-sheet");
 
 const NAMES = ["EZ68", "PK7", "RX66"];
 const kinds = (rows) => rows.map((r) => `${r.kind}:${r.value}`);
@@ -31,6 +31,23 @@ test("选项里的空名字丢掉", () => {
 
 test("多家一起填：搜索框整串当一个「+ 使用」（服务端再按 , ; / | 拆）", () => {
   assert.deepEqual(kinds(cstatusSheetRows(NAMES, "EZ68, PK7", "", { allowAdd: true })), ["add:EZ68, PK7"]);
+});
+
+// 2026-11-13：电脑上调钱 / 待处理 / 拆分协助方 / 转出的 C STATUS 也改成「点开就是完整列表」的下拉，
+// 像 BANK 那样；用户明确不要搜索框，新名字先去设置里加。
+test("电脑下拉：空白 + 全部选项，当前值打勾（不分大小写），没有「+ 使用」", () => {
+  const rows = cstatusDropdownRows(NAMES, "pk7");
+  assert.deepEqual(kinds(rows), ["blank:", "name:EZ68", "name:PK7", "name:RX66"]);
+  assert.deepEqual(rows.filter((r) => r.selected).map((r) => r.value), ["PK7"]);
+  assert.equal(cstatusDropdownRows(NAMES, "")[0].selected, true, "空值时「空白」打勾");
+  assert.ok(!cstatusDropdownRows(NAMES, "x").some((r) => r.kind === "add"));
+});
+
+test("电脑下拉：当前值不在选项里（老数据 / 多家）时留成一项，打开下拉不会把它弄丢", () => {
+  const rows = cstatusDropdownRows(NAMES, " EZ68, PK7 ");
+  assert.deepEqual(kinds(rows), ["blank:", "current:EZ68, PK7", "name:EZ68", "name:PK7", "name:RX66"]);
+  assert.deepEqual(rows.filter((r) => r.selected).map((r) => r.value), ["EZ68, PK7"]);
+  assert.deepEqual(kinds(cstatusDropdownRows(["", null, " EZ68 "], "")), ["blank:", "name:EZ68"], "空名字丢掉");
 });
 
 test("页面接入：五个输入框都带 data-cstatus-pick，脚本在 bank-ledger.js 之前", () => {

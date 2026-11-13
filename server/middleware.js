@@ -71,10 +71,32 @@ function requireAdmin(req, res, next) {
   next();
 }
 
+// 每个标签页各管各的公司：前端把本标签页的公司放在 X-Company-Id 头里（public/js/app.js 的 api()）。
+// 有头 → 每次按库复核授权，不通过就 403，**绝不静默回退到别家**（回退 = 这个标签页的审批/调钱写进别的公司）；
+// 通过也**不写回 session**，否则各标签页的普通请求会互相改「新标签页默认值」。
+// 没有头（老页面、页面请求）→ 旧行为：session 公司，失效时回退首个授权公司并写回。
+function companyFromHeader(req) {
+  const raw = req.get ? req.get("X-Company-Id") : req.headers?.["x-company-id"];
+  return String(raw || "").trim().toLowerCase();
+}
+
 function resolveCompany(req, res, next) {
   if (!req.session || !req.session.user) return next();
+  if (typeof res.vary === "function") res.vary("X-Company-Id");
   const db = getDb();
   const user = req.session.user;
+
+  const tabCompany = companyFromHeader(req);
+  if (tabCompany) {
+    const allowed = isOperator(user) ? hasCompanyAccess(db, user, tabCompany) : !!getCompany(db, tabCompany);
+    if (!allowed) {
+      return res.status(403).json({ error: "无权访问此公司，请刷新页面", code: "COMPANY_NOT_ALLOWED" });
+    }
+    req.companyId = tabCompany;
+    req.companyName = getCompany(db, tabCompany)?.name || tabCompany;
+    return next();
+  }
+
   let companyId = req.session.companyId;
 
   if (isOperator(user)) {

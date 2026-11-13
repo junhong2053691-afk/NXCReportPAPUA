@@ -282,8 +282,29 @@ function downloadExport() {
     encodeURIComponent(segments.join(",")) +
     "&q=" +
     encodeURIComponent(q);
-  window.location.href = url;
+  // 不能 location.href：整页跳转带不了 X-Company-Id 头，会导出 session 默认那家而不是本标签页的公司。
   closeExportModal();
+  fetch(url, { headers: companyHeaders() })
+    .then(async (res) => {
+      if (res.status === 401) return redirectToLogin();
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        if (res.status === 403 && data.code === "COMPANY_NOT_ALLOWED") return resetTabCompany();
+        throw new Error(data.error || "导出失败");
+      }
+      const disp = res.headers.get("Content-Disposition") || "";
+      const m = /filename="([^"]+)"/.exec(disp);
+      const blob = await res.blob();
+      const href = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = href;
+      a.download = m ? m[1] : "phones-export";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(href), 1000);
+    })
+    .catch((e) => showToast(e.message || "导出失败", { tone: "error", title: "导出失败" }));
 }
 
 document.getElementById("export-btn").onclick = openExportModal;

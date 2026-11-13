@@ -110,12 +110,14 @@ router.get("/", requireLogin, (req, res) => {
   if (isOperator(req.session.user) && !companies.length) {
     return res.status(403).json({ error: "管理员尚未为此账号分配公司" });
   }
-  const active = companies.some((company) => company.id === req.session.companyId)
-    ? req.session.companyId
+  // req.companyId 由 resolveCompany 定：有 X-Company-Id 头时是本标签页的公司（不写 session），
+  // 没有头时就是 session 默认值（resolveCompany 已校正并写回）。
+  const current = req.companyId || req.session.companyId;
+  const active = companies.some((company) => company.id === current)
+    ? current
     : isOperator(req.session.user)
       ? firstAuthorizedCompanyId(db, req.session.user)
-      : req.session.companyId || defaultCompanyId(db);
-  if (active) req.session.companyId = active;
+      : current || defaultCompanyId(db);
   res.json({
     active: active || null,
     companies,

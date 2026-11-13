@@ -1,5 +1,6 @@
-// 手机上填 C STATUS 的底部抽屉选择（≤700）。桌面不走这里：流水表格仍是贴着输入框的下拉，
-// 调钱 / 审批 / 转出仍是 datalist。
+// 填 C STATUS 的选择器。手机（≤700）：底部抽屉（带搜索、可「+ 使用」新名字）。
+// 电脑（2026-11-13 起）：调钱 / 审批 / 转出 / 拆分协助方是只读输入框 + 点开的完整下拉（像 BANK 下拉，
+// 没有搜索、不能新增）；流水表格那格（data-f）仍是 bank-ledger.js 自己的贴框浮层。
 //
 // 2026-11-06：手机上 datalist 只是键盘上方一排建议（iPhone）或一个小下拉（Android），表格那个
 // 浮层又会被键盘顶走。改成：点输入框 → 底部弹出公司列表（带搜索），点一下就填进去。
@@ -27,6 +28,19 @@ function cstatusSheetRows(names, query, current, opts) {
   if (o.allowAdd && q && !list.some((n) => n.toLowerCase() === ql)) {
     rows.push({ kind: "add", value: q, selected: false });
   }
+  return rows;
+}
+
+// 电脑上的 C STATUS 下拉（2026-11-13，用户要「像选 BANK 那样」）：点开就是完整列表，没有搜索、没有「+ 使用」，
+// 新名字先去设置里加。当前值不在选项里（老数据、待处理调钱以前填的多家）时留成一项 current，
+// 否则打开再关掉也没事，但用户会以为值丢了。
+function cstatusDropdownRows(names, current) {
+  const list = (Array.isArray(names) ? names : []).map((n) => String(n == null ? "" : n).trim()).filter(Boolean);
+  const cur = String(current || "").trim();
+  const curL = cur.toLowerCase();
+  const rows = [{ kind: "blank", value: "", selected: !cur }];
+  if (cur && !list.some((n) => n.toLowerCase() === curL)) rows.push({ kind: "current", value: cur, selected: true });
+  list.forEach((n) => rows.push({ kind: "name", value: n, selected: !!cur && n.toLowerCase() === curL }));
   return rows;
 }
 
@@ -118,45 +132,189 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
       if (selected) selected.scrollIntoView({ block: "nearest" });
     }
 
-    // 手机：不弹键盘、不弹 datalist；回到桌面宽度时原样还回去。pointerdown 先于 focus，
-    // 在这里改才赶得上这一次点击。
+    // 手机：不弹键盘、不弹 datalist。电脑（不含流水表格那格 data-f）：只读 + 摘掉 datalist，点开走下拉。
+    // 跨断点时原样还回去。pointerdown / focusin 先于这一次点击和打字，在这里改才赶得上。
+    function stashList(input) {
+      if (input.hasAttribute("list")) {
+        input.dataset.cstatusList = input.getAttribute("list");
+        input.removeAttribute("list");
+      }
+    }
     function prepareCstatusInput(input) {
       if (!input) return;
+      const desktopPick = !MQ.matches && !input.hasAttribute("data-f");
       if (MQ.matches) {
-        if (input.hasAttribute("list")) {
-          input.dataset.cstatusList = input.getAttribute("list");
-          input.removeAttribute("list");
-        }
+        stashList(input);
         input.setAttribute("inputmode", "none");
         input.dataset.cstatusMobile = "1";
       } else if (input.dataset.cstatusMobile) {
-        if (input.dataset.cstatusList) input.setAttribute("list", input.dataset.cstatusList);
+        if (input.dataset.cstatusList && !desktopPick) input.setAttribute("list", input.dataset.cstatusList);
         input.removeAttribute("inputmode");
         delete input.dataset.cstatusMobile;
       }
+      if (desktopPick) {
+        stashList(input);
+        input.readOnly = true;
+        input.dataset.cstatusDesktop = "1";
+      } else if (input.dataset.cstatusDesktop) {
+        input.readOnly = false;
+        delete input.dataset.cstatusDesktop;
+      }
+    }
+
+    // ── 电脑下拉 ── 挂在 body 上、position: fixed（.grid-picker），不放进 .modal：
+    // .modal 带 transform，会成为 fixed 的 containing block（见 style.css .ac-dropdown 那段注释）。
+    let dd = null; // { input, index }
+    function dropdownEl() {
+      let el = document.getElementById("cstatus-dropdown");
+      if (el) return el;
+      el = document.createElement("ul");
+      el.id = "cstatus-dropdown";
+      el.className = "ac-dropdown grid-picker cstatus-dropdown";
+      el.setAttribute("role", "listbox");
+      el.setAttribute("aria-label", "C STATUS");
+      el.setAttribute("translate", "no");
+      document.body.appendChild(el);
+      // mousedown + preventDefault：焦点留在输入框，不先触发 blur。
+      el.addEventListener("mousedown", (e) => {
+        const li = e.target.closest(".ac-item");
+        if (!li) return;
+        e.preventDefault();
+        if (!dd) return;
+        dd.index = Array.from(el.querySelectorAll(".ac-item")).indexOf(li);
+        confirmDropdown();
+      });
+      return el;
+    }
+    function placeDropdown(el, input) {
+      const rect = input.getBoundingClientRect();
+      el.style.left = `${Math.max(4, rect.left)}px`;
+      el.style.width = `${Math.max(rect.width, 180)}px`; // 与输入框同宽，像原生 <select>
+      // 按实际高度贴住输入框（列表短时不留空隙）；下面放不下且上面更宽才往上开。
+      const h = el.offsetHeight || 240;
+      const below = window.innerHeight - rect.bottom;
+      if (below < h + 8 && rect.top > below) el.style.top = `${Math.max(4, rect.top - h - 2)}px`;
+      else el.style.top = `${rect.bottom + 2}px`;
+    }
+    function highlight(i) {
+      const el = document.getElementById("cstatus-dropdown");
+      const items = el ? Array.from(el.querySelectorAll(".ac-item")) : [];
+      if (!items.length || !dd) return;
+      dd.index = Math.max(0, Math.min(i, items.length - 1));
+      items.forEach((li, k) => {
+        li.classList.toggle("active", k === dd.index);
+        li.setAttribute("aria-selected", k === dd.index ? "true" : "false");
+      });
+      items[dd.index].scrollIntoView({ block: "nearest" });
+    }
+    function isDropdownOpen() {
+      return !!dd;
+    }
+    function closeDropdown() {
+      const el = document.getElementById("cstatus-dropdown");
+      if (el) el.style.display = "none";
+      if (dd) dd.input.setAttribute("aria-expanded", "false");
+      dd = null;
+    }
+    function openDropdown(input, names) {
+      const el = dropdownEl();
+      const rows = cstatusDropdownRows(names, input.value);
+      el.innerHTML = rows.map((r) => {
+        const label = r.kind === "blank" ? `<span>${esc(BLANK_LABEL)}</span>` : `<span translate="no">${esc(r.value)}</span>`;
+        return `<li class="ac-item cstatus-dd-item is-${r.kind}" role="option" data-kind="${r.kind}" data-value="${esc(r.value)}">${label}</li>`;
+      }).join("");
+      dd = { input, index: 0 };
+      input.setAttribute("aria-expanded", "true");
+      el.style.display = "block"; // 先显示再定位：placeDropdown 要读实际高度
+      placeDropdown(el, input);
+      const sel = rows.findIndex((r) => r.selected);
+      highlight(sel < 0 ? 0 : sel);
+    }
+    function confirmDropdown() {
+      const el = document.getElementById("cstatus-dropdown");
+      const li = el?.querySelectorAll(".ac-item")[dd?.index ?? -1];
+      const input = dd?.input;
+      closeDropdown();
+      if (!li || !input) return;
+      const next = li.dataset.kind === "blank" ? "" : String(li.dataset.value || "").trim();
+      if (next === input.value) return;
+      input.value = next;
+      // 调用方靠 input 事件重算（拆分协助方的合计、审批按钮可不可点），与手机抽屉的 pick() 一样。
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+      input.dispatchEvent(new Event("change", { bubbles: true }));
     }
 
     // getNames() 每次打开时现取（选项会在页面上被新增）。流水表格的输入框（带 data-f）
     // 由 bank-accounts.js 的 openFieldPicker 自己打开，这里只替它摘键盘。
     function bindCstatusSheet(getNames) {
+      const pickInput = (t) => t?.closest?.("input[data-cstatus-pick]");
       document.addEventListener("pointerdown", (e) => {
-        const input = e.target.closest?.("input[data-cstatus-pick]");
+        const input = pickInput(e.target);
+        if (input) prepareCstatusInput(input);
+        // 点在下拉和当前输入框以外 = 收起。
+        if (dd && input !== dd.input && !e.target.closest?.("#cstatus-dropdown")) closeDropdown();
+      }, true);
+      // Tab 进来也要先变只读，否则 datalist 照样在打字时弹出来。
+      document.addEventListener("focusin", (e) => {
+        const input = pickInput(e.target);
         if (input) prepareCstatusInput(input);
       }, true);
+      document.addEventListener("focusout", (e) => {
+        if (dd && e.target === dd.input) closeDropdown();
+      }, true);
       document.addEventListener("click", (e) => {
-        const input = e.target.closest?.("input[data-cstatus-pick]");
-        if (!input || input.hasAttribute("data-f") || !MQ.matches) return;
+        const input = pickInput(e.target);
+        if (!input || input.hasAttribute("data-f") || input.disabled) return;
         prepareCstatusInput(input);
-        openCstatusSheet(input, getNames(), { allowBlank: true, allowAdd: true });
+        if (MQ.matches) {
+          openCstatusSheet(input, getNames(), { allowBlank: true, allowAdd: true });
+          return;
+        }
+        if (dd && dd.input === input) closeDropdown();
+        else openDropdown(input, getNames());
       });
+      // 键盘与 <select> 一致：↓ / Enter / 空格 打开，↑↓ 移动，Enter 选中，Esc 收起。
+      // 挂在 window 的 capture 上并 stopPropagation：Esc 只收下拉，不能让 app.js 顺手把整个弹窗关掉。
+      // 必须是 window 不是 document：app.js 的弹窗键盘处理也是 document capture、先注册、还会
+      // stopImmediatePropagation，同一层上它永远先跑（实测 Esc 直接关掉了调钱弹窗）。
+      window.addEventListener("keydown", (e) => {
+        const input = pickInput(e.target);
+        if (!input || input.hasAttribute("data-f") || MQ.matches || e.isComposing) return;
+        if (!dd || dd.input !== input) {
+          if (e.key === "ArrowDown" || e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            e.stopPropagation();
+            prepareCstatusInput(input);
+            openDropdown(input, getNames());
+          }
+          return;
+        }
+        if (e.key === "ArrowDown" || e.key === "ArrowUp") highlight(dd.index + (e.key === "ArrowDown" ? 1 : -1));
+        else if (e.key === "Enter" || e.key === " ") confirmDropdown();
+        else if (e.key === "Escape") closeDropdown();
+        else if (e.key === "Tab") { closeDropdown(); return; }
+        else return;
+        e.preventDefault();
+        e.stopPropagation();
+      }, true);
+      // 下拉是 fixed + 视口坐标：页面 / 弹窗滚动时跟着输入框走，输入框没了或滚出视口就收起。
+      window.addEventListener("scroll", () => {
+        if (!dd) return;
+        const r = dd.input.getBoundingClientRect();
+        if (!dd.input.isConnected || r.bottom < 0 || r.top > window.innerHeight) closeDropdown();
+        else placeDropdown(dropdownEl(), dd.input);
+      }, true);
+      window.addEventListener("resize", closeDropdown);
     }
 
     window.cstatusSheetRows = cstatusSheetRows;
+    window.cstatusDropdownRows = cstatusDropdownRows;
+    window.isCstatusDropdownOpen = isDropdownOpen;
     window.openCstatusSheet = openCstatusSheet;
     window.bindCstatusSheet = bindCstatusSheet;
     window.isCstatusSheetMobile = () => MQ.matches;
   })();
 }
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { cstatusSheetRows };
+  module.exports = { cstatusSheetRows, cstatusDropdownRows };
 }

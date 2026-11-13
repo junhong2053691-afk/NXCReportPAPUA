@@ -17,14 +17,50 @@ function redirectToLogin() {
   window.location.replace("/login.html"); // replace 不留历史，Back 不会再弹回来
 }
 
+// 每个标签页各管各的公司（2026-11-13）：本标签页的公司存 sessionStorage（天然按标签页隔离），
+// 每个请求带 X-Company-Id 头，服务端 resolveCompany 每次按库复核。server session 里的公司只是
+// 「新标签页的默认值」= 最后一次手动切过的公司（POST /api/companies/active）。
+const TAB_COMPANY_KEY = "dash-company";
+let _tabCompanyMemo = null; // sessionStorage 不可用时（隐私模式等）退到内存
+function tabCompanyId() {
+  try {
+    const v = sessionStorage.getItem(TAB_COMPANY_KEY);
+    if (v) return v;
+  } catch (_) {}
+  return _tabCompanyMemo;
+}
+function setTabCompanyId(id) {
+  _tabCompanyMemo = id || null;
+  try {
+    if (id) sessionStorage.setItem(TAB_COMPANY_KEY, id);
+    else sessionStorage.removeItem(TAB_COMPANY_KEY);
+  } catch (_) {}
+}
+// 公司被撤权 / 删除：清掉本标签页的公司，整页重载回到 session 默认那家。只做一次，免得并发请求连环重载。
+let _companyResetting = false;
+function resetTabCompany() {
+  if (_companyResetting) return;
+  _companyResetting = true;
+  setTabCompanyId(null);
+  window.location.reload();
+}
+// 带上本标签页公司的请求头。fetch 直调（下载文件等）也用它。
+function companyHeaders(extra) {
+  const headers = Object.assign({}, extra || {});
+  const cid = tabCompanyId();
+  if (cid) headers["X-Company-Id"] = cid;
+  return headers;
+}
+
 async function api(url, opts = {}) {
   const epoch = opts.epoch != null ? opts.epoch : fetchEpoch;
   const { epoch: _epoch, bg: _bg, ...fetchOpts } = opts;
   if (!_bg) progressStart();
   try {
+    // headers 放在展开之后：以前 ...fetchOpts 在后，调用方传 headers 时会把 Content-Type 冲掉。
     const res = await fetch(url, {
-      headers: { "Content-Type": "application/json", ...(fetchOpts.headers || {}) },
       ...fetchOpts,
+      headers: companyHeaders({ "Content-Type": "application/json", ...(fetchOpts.headers || {}) }),
     });
     // 必须在 res.json() 之前：401 的 body 只是 {error:"请先登录"}，读它没有意义。
     // cancelled 标记复用了各页面脚本已有的 `if (e && e.cancelled) return;` 约定，
@@ -39,6 +75,12 @@ async function api(url, opts = {}) {
     const data = await res.json().catch(() => ({}));
     if (epoch !== fetchEpoch) {
       const err = new Error("请求已取消");
+      err.cancelled = true;
+      throw err;
+    }
+    if (res.status === 403 && data.code === "COMPANY_NOT_ALLOWED") {
+      resetTabCompany();
+      const err = new Error(data.error || "无权访问此公司");
       err.cancelled = true;
       throw err;
     }
@@ -134,10 +176,10 @@ async function loadCompanies() {
   if (!sel) return;
   try {
     const data = await api("/api/companies");
+    // data.active 已由服务端按本标签页的 X-Company-Id 解析（没有就是 session 默认值）。
+    // 这里不再 POST /active：那会让「刷新一个标签页」改掉新标签页的默认公司。
     activeCompanyId = data.active;
-    if (activeCompanyId) {
-      api("/api/companies/active", { method: "POST", body: JSON.stringify({ id: activeCompanyId }) }).catch(function () {});
-    }
+    setTabCompanyId(activeCompanyId);
     sel.innerHTML = "";
     for (const co of data.companies || []) {
       const opt = document.createElement("option");
@@ -159,7 +201,9 @@ async function loadCompanies() {
       setPageLoading(true);
       bumpFetchEpoch();
       try {
+        // POST 只是更新「新标签页默认值」并校验授权；切的是本标签页（sessionStorage）。
         await api("/api/companies/active", { method: "POST", body: JSON.stringify({ id }) });
+        setTabCompanyId(id);
         activeCompanyId = id;
         delete lastSyncAtByCompany[id];
         updateCompanySyncHint(data.companies, id);
@@ -334,6 +378,8 @@ function setupLogout() {
   if (!btn) return;
   btn.addEventListener("click", async () => {
     await api("/api/auth/logout", { method: "POST" });
+    // 换账号登录时别带着上一个账号这个标签页的公司（带了也只会 403 → 重载，但白闪一下）。
+    setTabCompanyId(null);
     window.location.href = "/login.html";
   });
 }
