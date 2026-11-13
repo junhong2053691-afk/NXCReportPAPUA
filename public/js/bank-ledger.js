@@ -1106,7 +1106,10 @@
       const hay = [statusLabel(rowStatus), r.tx_id, r.username, r.name, r.bank_acc, r.c_status, r.other_info, r.remark].join(" ").toLowerCase();
       return hay.includes(q);
     });
-    const rowsHtml = filtered.map((r, i) => buildGridRow(r, i + 1, false)).join("");
+    // 最新一条在最上面（2026-11-13 用户要求）；序号跟着时间走，最新那条最大，新单进来老单序号不变。
+    // 后端仍按 entry_time 升序分页（loadSheet 并发拉页再拼，升序才稳定），只在这里倒过来画。
+    const n = filtered.length;
+    const rowsHtml = filtered.slice().reverse().map((r, i) => buildGridRow(r, n - i, false)).join("");
     const emptyHtml = !rowsHtml && !adding
       ? `<tr><td colspan="15" class="sheet-empty">${q || sf ? "\u6ca1\u6709\u5339\u914d\u7b5b\u9009\u6761\u4ef6\u7684\u6d41\u6c34" : "\u5f53\u5929\u6682\u65e0\u6d41\u6c34"}</td></tr>`
       : "";

@@ -199,3 +199,33 @@ test("交易页渠道列表收紧：没有银行资料与 Copy info，余额 / �
   // 标签在名字左边（同一格里先 tags 后 text）
   assert.match(row, /<div class="bk-col-channel"><div class="bk-channel-tags">\$\{tags\}<\/div><div class="bk-channel-text">/);
 });
+
+test("交易记录流水表最新一条在最上面，序号最新的最大", () => {
+  const grid = ledger.slice(ledger.indexOf("function renderGrid("), ledger.indexOf("function renderSheet("));
+  assert.ok(grid.length > 0);
+  assert.match(grid, /const n = filtered\.length;/);
+  assert.match(grid, /filtered\.slice\(\)\.reverse\(\)\.map\(\(r, i\) => buildGridRow\(r, n - i, false\)\)/);
+  // 后端仍升序分页：loadSheet 并发拉页再拼，倒序只在渲染时做
+  const routes = read("server", "routes", "banks.js");
+  const list = routes.slice(routes.indexOf('router.get("/ledger", (req, res) => {'), routes.indexOf('router.get("/ledger/deleted"'));
+  assert.match(list, /ORDER BY l\.entry_time ASC, l\.id ASC/);
+});
+
+test("Copy info 固定六行：BANK BRANCH / NAME / BSB / ACCOUNT / PAYID / REMARK，没填的留空", () => {
+  const common = read("public", "js", "bank-common.js");
+  const pick = (name) => {
+    const m = common.match(new RegExp(`function ${name}\\([^)]*\\) \\{[\\s\\S]*?\\n  \\}`));
+    assert.ok(m, `${name} 不在预期位置`);
+    return m[0];
+  };
+  const bankCopyText = new Function(`${pick("bankBranchOf")}\n${pick("bankCopyText")}\nreturn bankCopyText;`)();
+  assert.equal(
+    bankCopyText({ bank_branch: " CBA Sydney ", account_name: "Amy Lee", bsb: "062-000", account_number: "1234 5678", payid: "amy@pay.id", note: "主收款" }),
+    "BANK BRANCH : CBA Sydney\nNAME : Amy Lee\nBSB : 062-000\nACCOUNT : 1234 5678\nPAYID : amy@pay.id\nREMARK : 主收款"
+  );
+  assert.equal(
+    bankCopyText({ bank_branch: "NAB", bsb: "083-111" }),
+    "BANK BRANCH : NAB\nNAME :\nBSB : 083-111\nACCOUNT :\nPAYID :\nREMARK :"
+  );
+  assert.equal(bankCopyText(null).split("\n").length, 6);
+});

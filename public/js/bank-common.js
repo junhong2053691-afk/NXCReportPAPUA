@@ -216,11 +216,18 @@
       ["PAYID", b?.payid],
     ].filter(([, value]) => String(value ?? "").trim());
   }
+  // Copy info 固定六行（2026-11-13 用户要求）：没填的保留标签、值留空，顺序永远一样，方便直接贴给对方。
+  // 页面上那块展示仍只列有值的 BSB / ACCOUNT / PAYID（bankInfoFields）。
   function bankCopyText(b) {
-    const fields = bankInfoFields(b);
-    return fields.length
-      ? fields.map(([label, value]) => `${label} : ${String(value).trim()}`).join("\n")
-      : "未填写银行资料";
+    const text = (v) => String(v ?? "").trim();
+    return [
+      ["BANK BRANCH", bankBranchOf(b)],
+      ["NAME", b?.account_name],
+      ["BSB", b?.bsb],
+      ["ACCOUNT", b?.account_number],
+      ["PAYID", b?.payid],
+      ["REMARK", b?.note],
+    ].map(([label, value]) => `${label} : ${text(value)}`.trimEnd()).join("\n");
   }
   function bankInfoHtml(b) {
     const fields = bankInfoFields(b);

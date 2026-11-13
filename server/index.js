@@ -219,7 +219,7 @@ function pageLayout(title, active, body, script) {
 
 // 交易页（/bank-ledger.html）与交易记录页（/bank-transactions.html）共用同一份 bank-ledger.js，
 // 按 .bkv2 的 data-view 分流（2026-11-10 拆页）。两页的版本号必须一起换。
-const BANK_LEDGER_SCRIPTS = ["/js/ledger-bank-pick.js?v=20261106drill3", "/js/operation-target.js?v=20261106drill1", "/js/render-gate.js?v=20261106drill1", "/js/pending-filter.js?v=20261106drill1", "/js/display-format.js?v=20261106drill2", "/js/cstatus-sheet.js?v=20261113dd4", "/js/bank-common.js?v=20261113adj1", "/js/split-allocation.js?v=20261113split2", "/js/bank-ledger.js?v=20261113split2"];
+const BANK_LEDGER_SCRIPTS = ["/js/ledger-bank-pick.js?v=20261106drill3", "/js/operation-target.js?v=20261106drill1", "/js/render-gate.js?v=20261106drill1", "/js/pending-filter.js?v=20261106drill1", "/js/display-format.js?v=20261106drill2", "/js/cstatus-sheet.js?v=20261113dd4", "/js/bank-common.js?v=20261113copy6", "/js/split-allocation.js?v=20261113split2", "/js/bank-ledger.js?v=20261113desc1"];
 
 const pageRoutes = {
   "/": pageLayout(
@@ -641,7 +641,7 @@ const pageRoutes = {
 <p id="adjust-err" class="form-error" role="alert" aria-live="polite"></p>
 <div class="actions"><button class="btn btn-outline btn-sm" id="adjust-cancel" type="button">取消</button><button class="btn btn-success btn-sm" id="adjust-submit" type="button">确认校正</button></div>
 </div></div>`,
-    ["/js/ledger-bank-pick.js?v=20261106drill3", "/js/operation-target.js?v=20261106drill1", "/js/render-gate.js?v=20261106drill1", "/js/display-format.js?v=20261106drill2", "/js/appeal-csv.js?v=20261106drill1", "/js/cstatus-sheet.js?v=20261113dd4", "/js/bank-common.js?v=20261113adj1", "/js/bank-channels.js?v=20261113adjust1"]
+    ["/js/ledger-bank-pick.js?v=20261106drill3", "/js/operation-target.js?v=20261106drill1", "/js/render-gate.js?v=20261106drill1", "/js/display-format.js?v=20261106drill2", "/js/appeal-csv.js?v=20261106drill1", "/js/cstatus-sheet.js?v=20261113dd4", "/js/bank-common.js?v=20261113copy6", "/js/bank-channels.js?v=20261113adjust1"]
   ),
   "/audit-history.html": pageLayout(
     "\u64cd\u4f5c\u5386\u53f2",
