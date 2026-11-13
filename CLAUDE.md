@@ -121,6 +121,13 @@ $env:TUNNEL_EDGE_IP_VERSION="4"
   `loadCompanies` 刻意**不再**每次加载都 POST 它。`fetch` 直调（下载文件）用 `companyHeaders()`，
   **别再用 `location.href = "/api/..."` 下载**——整页跳转带不了头，会拿到默认公司的数据（客户导出曾经这样）。
   测试 `company-per-tab.test.js`
+- **admin 也能限定公司（2026-11-13）**：`users.company_scope` = `'all'`（全部公司 admin，默认）/ `'limited'`（受限 admin，
+  按 `user_companies`，和 operator 同一条路）。授权判断**只认 `lib/userAccess.js`**（`isFullAdmin` / `isCompanyRestricted` /
+  `hasCompanyAccess` …），scope **每次查库、不进 session**，库里查不到的 admin 按受限处理（失败要关门）。
+  别再写「`isOperator` 才查公司、admin 直接放行」——受限 admin 就漏了。只给全部公司 admin 的端点用 `requireFullAdmin`
+  （新建 / 删除公司、备份、建 admin、设别的 admin 范围）；按 `:id` 改公司的端点必须再查 `hasCompanyAccess`。
+  测试里伪造 admin session 时，那个 admin 必须真在库里（见 `company-per-tab.test.js` 的 seed）。
+  规矩见 `CONTEXT.md`「账号与公司范围」，测试 `admin-company-scope.test.js`
 
 ### 同步（最高优先级：数据准确）
 

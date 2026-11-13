@@ -48,7 +48,7 @@ const {
   upsertStatusOption,
   deleteStatusOption,
 } = require("../lib/bankStatusOptions");
-const { listCompaniesForUser } = require("../lib/userAccess");
+const { listCompaniesForUser, hasCompanyAccess } = require("../lib/userAccess");
 const { setLiveReceiving } = require("../lib/bankLiveReceiving");
 const { crossCompanyPending } = require("../lib/crossCompanyPending");
 const { appealDeposits } = require("../lib/appealExport");
@@ -277,6 +277,11 @@ router.post("/c-status-options", requireAdmin, (req, res) => {
   const target = req.body.target_company_id != null ? String(req.body.target_company_id).trim() : null;
   const reconcileRequired = req.body.reconcile_required == null ? null : Number(req.body.reconcile_required) ? 1 : 0;
   if (!name) return res.status(400).json({ error: "name required" });
+  // 关联公司只能选自己看得到的（受限 admin，2026-11-13）：否则指向范围外的公司，就能从对平告警里读到别家的 C STATUS 合计。
+  // 已经存在的指向不动；空字符串 = 取消关联，不用校验。
+  if (target && !hasCompanyAccess(getDb(), req.session.user, target.toLowerCase())) {
+    return res.status(403).json({ error: "只能关联你有权限的公司" });
+  }
   try {
     const row = upsertCStatusOption(getDb(), cid, name, target, reconcileRequired);
     res.json({ row });

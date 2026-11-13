@@ -1,6 +1,6 @@
 const express = require("express");
 const { getDb } = require("../db/init");
-const { requireLogin, requireAdmin } = require("../middleware");
+const { requireLogin, requireAdmin, requireFullAdmin } = require("../middleware");
 const {
   upsertCompany,
   deleteCompany,
@@ -8,7 +8,7 @@ const {
   rowToPublic,
   defaultCompanyId,
 } = require("../lib/companies");
-const { isOperator, hasCompanyAccess, listCompaniesForUser, firstAuthorizedCompanyId } = require("../lib/userAccess");
+const { isCompanyRestricted, hasCompanyAccess, listCompaniesForUser, firstAuthorizedCompanyId } = require("../lib/userAccess");
 const { setActiveCompany } = require("../lib/activeCompany");
 const { invalidateSegmentCounts } = require("../lib/segmentCountCache");
 const { parseChatIds, isValidChatId } = require("../services/telegramBots");
@@ -106,8 +106,9 @@ function resolveCredentials(db, id, body) {
 
 router.get("/", requireLogin, (req, res) => {
   const db = getDb();
+  const restricted = isCompanyRestricted(db, req.session.user); // operator 或受限 admin
   const companies = listCompaniesForUser(db, req.session.user);
-  if (isOperator(req.session.user) && !companies.length) {
+  if (restricted && !companies.length) {
     return res.status(403).json({ error: "管理员尚未为此账号分配公司" });
   }
   // req.companyId 由 resolveCompany 定：有 X-Company-Id 头时是本标签页的公司（不写 session），
@@ -115,7 +116,7 @@ router.get("/", requireLogin, (req, res) => {
   const current = req.companyId || req.session.companyId;
   const active = companies.some((company) => company.id === current)
     ? current
-    : isOperator(req.session.user)
+    : restricted
       ? firstAuthorizedCompanyId(db, req.session.user)
       : current || defaultCompanyId(db);
   res.json({
@@ -124,7 +125,8 @@ router.get("/", requireLogin, (req, res) => {
   });
 });
 
-router.post("/", requireAdmin, (req, res) => {
+// 新建 / 删除公司只给「全部公司」admin（受限 admin 只能改自己范围内的公司设置）。
+router.post("/", requireFullAdmin, (req, res) => {
   const body = req.body || {};
   const id = String(body.id || "").trim().toLowerCase();
   const name = String(body.name || "").trim();
@@ -163,8 +165,8 @@ router.post("/active", requireLogin, (req, res) => {
   const db = getDb();
   const row = getCompany(db, id);
   if (!row) return res.status(404).json({ error: "公司不存在" });
-  if (isOperator(req.session.user) && !hasCompanyAccess(db, req.session.user, id)) {
-    return res.status(403).json({ error: "operator 无权访问此公司" });
+  if (!hasCompanyAccess(db, req.session.user, id)) {
+    return res.status(403).json({ error: "无权访问此公司" });
   }
   req.session.companyId = id;
   setActiveCompany(id);
@@ -172,7 +174,17 @@ router.post("/active", requireLogin, (req, res) => {
   res.json({ ok: true, active: id, company: rowToPublic(row) });
 });
 
-router.put("/:id", requireAdmin, (req, res) => {
+// 受限 admin 只能改 / 测自己范围内的公司：按 :id 改的是 token 与 Bot，不能只看「是不是 admin」。
+function requireCompanyParamAccess(req, res, next) {
+  const id = String(req.params.id || "").trim().toLowerCase();
+  const db = getDb();
+  if (getCompany(db, id) && !hasCompanyAccess(db, req.session.user, id)) {
+    return res.status(403).json({ error: "无权修改此公司" });
+  }
+  next();
+}
+
+router.put("/:id", requireAdmin, requireCompanyParamAccess, (req, res) => {
   const id = String(req.params.id || "").trim().toLowerCase();
   const db = getDb();
   const existing = getCompany(db, id);
@@ -213,7 +225,7 @@ router.put("/:id", requireAdmin, (req, res) => {
   res.json({ ok: true, company: rowToPublic(row) });
 });
 
-router.delete("/:id", requireAdmin, (req, res) => {
+router.delete("/:id", requireFullAdmin, (req, res) => {
   const id = String(req.params.id || "").trim().toLowerCase();
   const confirm = String(req.body?.confirm || "").trim().toLowerCase();
   if (confirm !== id) {
@@ -232,7 +244,7 @@ router.delete("/:id", requireAdmin, (req, res) => {
   }
 });
 
-router.post("/:id/test", requireAdmin, async (req, res) => {
+router.post("/:id/test", requireAdmin, requireCompanyParamAccess, async (req, res) => {
   const id = String(req.params.id || "").trim().toLowerCase();
   const db = getDb();
   const existing = getCompany(db, id);

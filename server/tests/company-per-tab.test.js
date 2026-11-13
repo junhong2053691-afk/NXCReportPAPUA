@@ -28,6 +28,11 @@ function seed() {
   company.run("alpha", "Alpha", 1);
   company.run("beta", "Beta", 2);
   company.run("gamma", "Gamma", 3);
+  // 假 session 里的 admin（id 1）必须真在库里：受限 admin 上线后（admin-company-scope.test.js），
+  // 库里查不到的 admin 按受限处理（失败要关门）。
+  db.prepare(
+    "INSERT OR REPLACE INTO users (id, username, password_hash, name, role, status, company_scope) VALUES (1, 'admin', 'x', 'admin', 'admin', 'active', 'all')"
+  ).run();
   // operator 只授权 alpha、beta。
   const grant = db.prepare("INSERT OR REPLACE INTO user_companies (user_id, company_id) VALUES (?, ?)");
   grant.run(OPERATOR_ID, "alpha");

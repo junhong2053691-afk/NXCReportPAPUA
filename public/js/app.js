@@ -344,6 +344,8 @@ async function loadUser() {
     const { user, companyId } = await api("/api/auth/me");
     currentUser = user;
     document.body.dataset.userRole = user.role;
+    // admin 的公司范围（all / limited，服务端每次查库）。只用于显示；新建公司、备份等由服务端 requireFullAdmin 把关。
+    if (user.company_scope) document.body.dataset.companyScope = user.company_scope;
     const el = document.getElementById("current-user");
     if (el) el.textContent = user.name + " (" + user.username + ")";
     const userLabel = document.querySelector(".user-label");

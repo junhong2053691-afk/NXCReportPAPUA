@@ -22,6 +22,10 @@ function seed() {
   const company = db.prepare("INSERT OR REPLACE INTO companies (id, name, enabled, sort_order) VALUES (?, ?, 1, ?)");
   company.run("alpha", "Alpha", 1);
   company.run("beta", "Beta", 2);
+  // 假 session 的 admin（id 1）要真在库里：库里查不到的 admin 按受限处理（admin-company-scope.test.js）。
+  db.prepare(
+    "INSERT OR REPLACE INTO users (id, username, password_hash, name, role, status, company_scope) VALUES (1, 'admin', 'x', 'admin', 'admin', 'active', 'all')"
+  ).run();
   const customer = db.prepare(
     "INSERT INTO customers (company_id, id, username, name, referrer, register_date_key) VALUES (?, ?, ?, ?, ?, ?)"
   );

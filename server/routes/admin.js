@@ -3,8 +3,8 @@ const express = require("express");
 const bcrypt = require("bcryptjs");
 const { getDb } = require("../db/init");
 const { getCompany, maskToken } = require("../lib/companies");
-const { companyDetailsForUser } = require("../lib/userAccess");
-const { requireAdmin } = require("../middleware");
+const { companyDetailsForUser, companyIdsForUser, isFullAdmin, authorizedCompanyIds } = require("../lib/userAccess");
+const { requireAdmin, requireFullAdmin } = require("../middleware");
 const { MIN_PASSWORD_LENGTH } = require("../lib/passwordPolicy");
 const {
   getTelegramSettings,
@@ -62,14 +62,45 @@ function replaceCompanyAssignments(db, userId, companyIds) {
   for (const companyId of companyIds) insert.run(userId, companyId);
 }
 
+// admin 的公司范围（2026-11-13）：'all' = 全部公司 admin，'limited' = 只看 user_companies。operator 没有这个概念。
+function normalizeScope(value) {
+  const scope = String(value || "").trim().toLowerCase();
+  return scope === "all" || scope === "limited" ? scope : null;
+}
+
+function userScope(user) {
+  if (user.role !== "admin") return null;
+  return user.company_scope === "limited" ? "limited" : "all";
+}
+
+// 受限 admin 只能管「授权公司全部落在自己范围内」的 operator：部分在外的也不行，
+// 否则它改授权时会把那个 operator 在别家的授权顺手抹掉。全部公司 admin 什么都能管。
+function canManageOperator(db, actor, target) {
+  if (target.role !== "operator") return false;
+  if (isFullAdmin(db, actor)) return true;
+  const mine = new Set(authorizedCompanyIds(db, actor));
+  const theirs = companyIdsForUser(db, target.id);
+  return theirs.length > 0 && theirs.every((id) => mine.has(id));
+}
+
+function companiesWithinActorScope(db, actor, companyIds) {
+  if (isFullAdmin(db, actor)) return true;
+  const mine = new Set(authorizedCompanyIds(db, actor));
+  return companyIds.every((id) => mine.has(id));
+}
+
+const USER_COLUMNS = "id, username, name, role, status, company_scope, created_at, updated_at";
+
 function publicUser(db, user) {
-  const companies = user.role === "operator" ? companyDetailsForUser(db, user.id) : [];
+  const scope = userScope(user);
+  const companies = user.role === "operator" || scope === "limited" ? companyDetailsForUser(db, user.id) : [];
   return {
     id: user.id,
     username: user.username,
     name: user.name,
     role: user.role,
     status: user.status,
+    company_scope: scope,
     created_at: user.created_at,
     updated_at: user.updated_at,
     company_ids: companies.map((company) => company.id),
@@ -274,7 +305,8 @@ function publicBackupSettings(s, dir) {
   };
 }
 
-router.get("/backup", (_req, res) => {
+// 备份是整个库（含所有公司的客户资料）：只给「全部公司」admin。
+router.get("/backup", requireFullAdmin, (_req, res) => {
   const db = getDb();
   const backup = require("../services/backup");
   const settings = getBackupSettings(db);
@@ -296,7 +328,7 @@ router.get("/backup", (_req, res) => {
   });
 });
 
-router.put("/backup", (req, res) => {
+router.put("/backup", requireFullAdmin, (req, res) => {
   const db = getDb();
   const body = req.body || {};
   const backup = require("../services/backup");
@@ -327,7 +359,7 @@ router.put("/backup", (req, res) => {
 
 // 手动触发。不 await —— 226MB 的库要跑十秒级，HTTP 请求不该挂在那里等。
 // 结果去 GET /backup 的 log 里看。
-router.post("/backup/run", (_req, res) => {
+router.post("/backup/run", requireFullAdmin, (_req, res) => {
   const backup = require("../services/backup");
   backup
     .runSnapshot({ kind: "manual" })
@@ -335,16 +367,20 @@ router.post("/backup/run", (_req, res) => {
   res.json({ ok: true, started: true, message: "已在后台开始备份，约需十几秒，完成后刷新查看" });
 });
 
-router.get("/users", (_req, res) => {
+// 全部公司 admin 看全部账号；受限 admin 只看自己 + 它管得了的 operator。
+router.get("/users", (req, res) => {
   const db = getDb();
+  const actor = req.session.user;
+  const full = isFullAdmin(db, actor);
   const users = db
     .prepare(
-      `SELECT id, username, name, role, status, created_at, updated_at
+      `SELECT ${USER_COLUMNS}
        FROM users
        WHERE role IN ('admin', 'operator')
        ORDER BY CASE role WHEN 'admin' THEN 0 ELSE 1 END, username ASC`
     )
     .all()
+    .filter((user) => full || user.id === actor.id || canManageOperator(db, actor, user))
     .map((user) => publicUser(db, user));
   res.json({ users });
 });
@@ -371,11 +407,25 @@ router.post("/users", (req, res) => {
   }
 
   const db = getDb();
+  const actor = req.session.user;
+  const full = isFullAdmin(db, actor);
+  // 建 admin（以及设它的公司范围）只给全部公司 admin。
+  if (role === "admin" && !full) {
+    return res.status(403).json({ error: "只有「全部公司」管理员可以新建管理员" });
+  }
+  const scope = role === "admin" ? normalizeScope(req.body?.company_scope) || "all" : "all";
   if (db.prepare("SELECT id FROM users WHERE username = ? COLLATE NOCASE").get(u)) {
     return res.status(409).json({ error: "该账号已存在" });
   }
   if (role === "operator" && !companyIds.length) {
     return res.status(400).json({ error: "operator 至少选择一家公司" });
+  }
+  if (role === "admin" && scope === "limited" && !companyIds.length) {
+    return res.status(400).json({ error: "受限管理员至少选择一家公司" });
+  }
+  const assignCompanies = role === "operator" || scope === "limited";
+  if (assignCompanies && !companiesWithinActorScope(db, actor, companyIds)) {
+    return res.status(403).json({ error: "只能授权你自己范围内的公司" });
   }
   try {
     validateCompanyIds(db, companyIds);
@@ -383,13 +433,13 @@ router.post("/users", (req, res) => {
     const result = runAtomic(db, () => {
       const inserted = db
         .prepare(
-          "INSERT INTO users (username, password_hash, name, role, status) VALUES (?, ?, ?, ?, 'active')"
+          "INSERT INTO users (username, password_hash, name, role, status, company_scope) VALUES (?, ?, ?, ?, 'active', ?)"
         )
-        .run(u, hash, displayName, role);
-      if (role === "operator") replaceCompanyAssignments(db, inserted.lastInsertRowid, companyIds);
+        .run(u, hash, displayName, role, scope);
+      if (assignCompanies) replaceCompanyAssignments(db, inserted.lastInsertRowid, companyIds);
       return inserted;
     });
-    const user = db.prepare("SELECT id, username, name, role, status, created_at, updated_at FROM users WHERE id = ?").get(result.lastInsertRowid);
+    const user = db.prepare(`SELECT ${USER_COLUMNS} FROM users WHERE id = ?`).get(result.lastInsertRowid);
     res.json({ ok: true, user: publicUser(db, user) });
   } catch (error) {
     res.status(error.status || 500).json({ error: error.message });
@@ -404,14 +454,36 @@ router.put("/users/:id", (req, res) => {
   if (!user || !["admin", "operator"].includes(user.role)) {
     return res.status(404).json({ error: "账号不存在" });
   }
-  if (user.role === "admin" && req.session.user.id !== user.id) {
-    return res.status(403).json({ error: "不能修改其他管理员" });
+  const actor = req.session.user;
+  const actorFull = isFullAdmin(db, actor);
+  const isSelf = actor.id === user.id;
+  const body = req.body || {};
+  const hasCompanyUpdate = Object.prototype.hasOwnProperty.call(body, "company_ids");
+  const hasScopeUpdate = Object.prototype.hasOwnProperty.call(body, "company_scope");
+  const companyIds = normalizeCompanyIds(body.company_ids);
+
+  if (user.role === "admin") {
+    if (isSelf && (hasCompanyUpdate || hasScopeUpdate)) {
+      // 防止全部公司 admin 把自己锁在外面，也防止受限 admin 给自己放宽。
+      return res.status(403).json({ error: "不能修改自己的公司范围" });
+    }
+    if (!isSelf) {
+      // 别的 admin：只有全部公司 admin 能动，而且只能动公司范围（名字、密码、状态还是各管各的）。
+      if (!actorFull) return res.status(403).json({ error: "不能修改其他管理员" });
+      if (name != null || password != null || status != null) {
+        return res.status(403).json({ error: "不能修改其他管理员的名字、密码或状态" });
+      }
+      if (!hasCompanyUpdate && !hasScopeUpdate) {
+        return res.status(400).json({ error: "没有要更新的内容" });
+      }
+      return updateAdminScope(db, user, body, companyIds, hasCompanyUpdate, res);
+    }
+  } else if (!canManageOperator(db, actor, user)) {
+    return res.status(403).json({ error: "无权管理此账号" });
   }
 
   const updates = [];
   const params = [];
-  const hasCompanyUpdate = Object.prototype.hasOwnProperty.call(req.body || {}, "company_ids");
-  const companyIds = normalizeCompanyIds(req.body?.company_ids);
 
   if (name != null && String(name).trim()) {
     updates.push("name = ?");
@@ -438,6 +510,9 @@ router.put("/users/:id", (req, res) => {
     if (!companyIds.length) {
       return res.status(400).json({ error: "operator 至少保留一家公司" });
     }
+    if (!companiesWithinActorScope(db, actor, companyIds)) {
+      return res.status(403).json({ error: "只能授权你自己范围内的公司" });
+    }
     try {
       validateCompanyIds(db, companyIds);
     } catch (error) {
@@ -458,14 +533,43 @@ router.put("/users/:id", (req, res) => {
       }
       if (hasCompanyUpdate) replaceCompanyAssignments(db, id, companyIds);
     });
-    const updated = db
-      .prepare("SELECT id, username, name, role, status, created_at, updated_at FROM users WHERE id = ?")
-      .get(id);
+    const updated = db.prepare(`SELECT ${USER_COLUMNS} FROM users WHERE id = ?`).get(id);
     res.json({ ok: true, user: publicUser(db, updated) });
   } catch (error) {
     res.status(error.status || 500).json({ error: error.message });
   }
 });
+
+// 全部公司 admin 改别的 admin 的公司范围（调用方已确认：操作者是全部公司 admin、目标不是自己）。
+function updateAdminScope(db, target, body, companyIds, hasCompanyUpdate, res) {
+  const currentScope = userScope(target);
+  const requested = Object.prototype.hasOwnProperty.call(body, "company_scope") ? normalizeScope(body.company_scope) : currentScope;
+  if (!requested) return res.status(400).json({ error: "公司范围只能是 all 或 limited" });
+  const ids = requested === "limited"
+    ? (hasCompanyUpdate ? companyIds : companyIdsForUser(db, target.id))
+    : [];
+  if (requested === "limited" && !ids.length) {
+    return res.status(400).json({ error: "受限管理员至少选择一家公司" });
+  }
+  if (requested === "limited" && currentScope === "all") {
+    // 不变量：至少留一个全部公司 admin，否则没人能再建公司、设范围、做备份。
+    const others = db
+      .prepare("SELECT COUNT(*) AS n FROM users WHERE role = 'admin' AND company_scope = 'all' AND status = 'active' AND id <> ?")
+      .get(target.id).n;
+    if (!others) return res.status(403).json({ error: "至少要保留一个「全部公司」管理员" });
+  }
+  try {
+    validateCompanyIds(db, ids);
+    runAtomic(db, () => {
+      db.prepare("UPDATE users SET company_scope = ?, updated_at = datetime('now') WHERE id = ?").run(requested, target.id);
+      replaceCompanyAssignments(db, target.id, ids);
+    });
+    const updated = db.prepare(`SELECT ${USER_COLUMNS} FROM users WHERE id = ?`).get(target.id);
+    return res.json({ ok: true, user: publicUser(db, updated) });
+  } catch (error) {
+    return res.status(error.status || 500).json({ error: error.message });
+  }
+}
 
 router.delete("/users/:id", (req, res) => {
   const id = Number(req.params.id);
@@ -476,6 +580,9 @@ router.delete("/users/:id", (req, res) => {
   }
   if (user.role === "admin") {
     return res.status(403).json({ error: "不能删除管理员账号" });
+  }
+  if (!canManageOperator(db, req.session.user, user)) {
+    return res.status(403).json({ error: "无权管理此账号" });
   }
   runAtomic(db, () => {
     db.prepare("DELETE FROM user_companies WHERE user_id = ?").run(id);

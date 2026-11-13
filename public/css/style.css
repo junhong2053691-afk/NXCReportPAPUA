@@ -836,6 +836,9 @@ input:focus, select:focus, textarea:focus { border-color: var(--focus); box-shad
 .user-company-picker[hidden] { display: none; }
 .user-company-picker legend { padding: 0 4px; color: var(--text-soft); font-size: var(--text-xs); font-weight: var(--weight-bold); }
 .company-option-grid { display: grid; gap: 8px; max-height: 190px; overflow: auto; }
+/* admin 的「全部公司（不限制）」开关（admin-users.js）：取消勾才显示下面的公司勾选。 */
+.scope-all-toggle { display: flex; align-items: center; gap: 8px; margin: 4px 0 10px; font-size: var(--text-sm); cursor: pointer; }
+.scope-all-toggle[hidden] { display: none; }
 .company-option {
   display: flex;
   align-items: center;

@@ -2,7 +2,7 @@ const express = require("express");
 const bcrypt = require("bcryptjs");
 const { getDb } = require("../db/init");
 const { defaultCompanyId } = require("../lib/companies");
-const { isOperator, firstAuthorizedCompanyId } = require("../lib/userAccess");
+const { isFullAdmin, isCompanyRestricted, firstAuthorizedCompanyId } = require("../lib/userAccess");
 const { createLoginLimiter } = require("../lib/loginLimiter");
 const { establishSession } = require("../middleware");
 const { createCaptchaStore } = require("../lib/captcha");
@@ -77,8 +77,10 @@ router.post("/login", async (req, res, next) => {
       return res.status(403).json({ error: "账号角色无效，请联系管理员" });
     }
 
-    const operatorCompanyId = isOperator(user) ? firstAuthorizedCompanyId(db, user) : null;
-    if (isOperator(user) && !operatorCompanyId) {
+    // operator 与受限 admin（company_scope = 'limited'）一样：没有任何授权公司就不让进，默认公司取首个授权公司。
+    const restricted = isCompanyRestricted(db, user);
+    const operatorCompanyId = restricted ? firstAuthorizedCompanyId(db, user) : null;
+    if (restricted && !operatorCompanyId) {
       return res.status(403).json({ error: "管理员尚未为此账号分配公司" });
     }
 
@@ -103,8 +105,11 @@ router.get("/me", (req, res) => {
   if (!req.session || !req.session.user) {
     return res.status(401).json({ error: "未登录" });
   }
+  // company_scope 现查库（不进 session）：前端按它藏「新建公司」等只给全部公司 admin 的按钮，服务端另有 requireFullAdmin 把关。
+  const db = getDb();
+  const user = req.session.user;
   res.json({
-    user: req.session.user,
+    user: { ...user, company_scope: user.role === "admin" ? (isFullAdmin(db, user) ? "all" : "limited") : null },
     companyId: req.session.companyId || null,
   });
 });

@@ -6,6 +6,12 @@
   }
   setActiveNav("company-settings");
   setupLogout();
+  // 受限 admin（只管几家公司）能改自己公司的设置，但新建 / 删除公司只给「全部公司」admin（服务端 requireFullAdmin 同样拦）。
+  const fullAdmin = user.company_scope !== "limited";
+  if (!fullAdmin) {
+    const createBtn = document.getElementById("create-btn");
+    if (createBtn) createBtn.hidden = true;
+  }
 
   const ID_RE = /^[a-z0-9][a-z0-9_-]{0,31}$/;
   // 两栏都是 password 框且上下紧挨，Bot Token 粘进 Access Token 是很容易犯的错，
@@ -99,11 +105,12 @@
         '<div class="actions company-actions">' +
         '<button class="btn btn-primary btn-sm save-btn">保存</button> ' +
         '<button class="btn btn-outline btn-sm test-btn">测试连接</button> ' +
-        '<button class="btn btn-danger btn-sm delete-btn">删除</button>' +
+        (fullAdmin ? '<button class="btn btn-danger btn-sm delete-btn">删除</button>' : "") +
         "</div>";
       card.querySelector(".save-btn").onclick = () => saveCard(co, card);
       card.querySelector(".test-btn").onclick = () => testCard(co, card);
-      card.querySelector(".delete-btn").onclick = () => openDelete(co);
+      const delBtn = card.querySelector(".delete-btn");
+      if (delBtn) delBtn.onclick = () => openDelete(co);
       wrap.appendChild(card);
     }
   }

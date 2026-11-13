@@ -147,6 +147,10 @@ function migrateUserRoles(database) {
     );
     CREATE INDEX IF NOT EXISTS idx_user_companies_company ON user_companies(company_id);
   `);
+  // admin 的公司范围（2026-11-13）：'all' = 全部公司 admin，'limited' = 只看 user_companies 里那几家。
+  // operator 忽略这一列（永远按 user_companies）。默认 'all'：现有 admin 上线后行为不变。
+  // 刻意用显式列而不是「admin 没勾公司 = 全部」——那样把勾全取消就变成全放开。见 lib/userAccess.js。
+  ensureColumn(database, "users", "company_scope", "TEXT NOT NULL DEFAULT 'all'");
 }
 
 const { migrateMultiCompany } = require("./migrateMultiCompany");

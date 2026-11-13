@@ -6,7 +6,8 @@ CREATE TABLE IF NOT EXISTS users (
   role TEXT NOT NULL DEFAULT 'operator' CHECK (role IN ('admin', 'operator')),
   status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'disabled')),
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
-  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  company_scope TEXT NOT NULL DEFAULT 'all'
 );
 
 CREATE TABLE IF NOT EXISTS user_companies (

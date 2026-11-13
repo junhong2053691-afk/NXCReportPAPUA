@@ -351,7 +351,7 @@ const pageRoutes = {
     "\u516c\u53f8/API \u8bbe\u7f6e",
     "company-settings",
     '<div class="page-toolbar"><h1>\u516c\u53f8 / API \u8bbe\u7f6e</h1><button class="btn btn-success btn-sm" id="create-btn">+ \u65b0\u5efa\u516c\u53f8</button></div><div id="company-cards" class="company-cards"></div><div class="modal-overlay" id="create-modal"><div class="modal"><h2>\u65b0\u5efa\u5bf9\u63a5\u76d8</h2><div class="form-group"><label>\u516c\u53f8 ID</label><input id="new-id" placeholder="\u4f8b\u5982 mybrand01"></div><div class="form-group"><label>\u663e\u793a\u540d\u79f0</label><input id="new-name" placeholder="\u4f8b\u5982 MyBrand"></div><div class="form-group"><label>API URL</label><input id="new-api-url" autocomplete="off" data-lpignore="true" data-1p-ignore placeholder="https://.../api/v1/index.php"></div><div class="form-group"><label>Access ID</label><input id="new-access-id" autocomplete="off" data-lpignore="true" data-1p-ignore></div><div class="form-group"><label>Access Token</label><input id="new-access-token" type="password" autocomplete="new-password" data-lpignore="true" data-1p-ignore></div><p id="create-hint" class="form-message" role="status" aria-live="polite"></p><div class="actions"><button class="btn btn-outline btn-sm" id="cancel-btn">\u53d6\u6d88</button><button class="btn btn-outline btn-sm" id="create-test-btn">\u6d4b\u8bd5\u8fde\u63a5</button><button class="btn btn-primary btn-sm" id="create-submit">\u521b\u5efa</button></div></div></div><div class="modal-overlay" id="delete-modal"><div class="modal"><h2>\u5220\u9664\u516c\u53f8</h2><p class="modal-note">\u5c06\u6c38\u4e45\u5220\u9664 <strong id="delete-name"></strong> \u7684\u6240\u6709\u540c\u6b65\u6570\u636e\uff08\u5ba2\u6237\u3001\u4ea4\u6613\u3001\u7edf\u8ba1\uff09\uff0c\u4e14\u4e0d\u53ef\u6062\u590d\u3002</p><div class="form-group"><label>\u8bf7\u8f93\u5165\u516c\u53f8 ID \u4ee5\u786e\u8ba4</label><input id="delete-confirm-id" placeholder="\u8f93\u5165\u8981\u5220\u9664\u7684\u516c\u53f8 ID"></div><div class="actions"><button class="btn btn-outline btn-sm" id="delete-cancel-btn">\u53d6\u6d88</button><button class="btn btn-danger btn-sm" id="delete-submit-btn">\u786e\u8ba4\u5220\u9664</button></div></div></div>',
-    "/js/company-settings.js?v=20260924tgalert1"
+    "/js/company-settings.js?v=20261113scope1"
   ),
   "/bank-settings.html": pageLayout(
     "\u652f\u4ed8\u8bbe\u7f6e",
@@ -681,7 +681,7 @@ const pageRoutes = {
     "\u8d26\u53f7\u7ba1\u7406",
     "admin",
     '<div class="page-toolbar"><h1>\u8d26\u53f7\u7ba1\u7406</h1><button class="btn btn-success btn-sm" id="create-btn">+ \u65b0\u5efa\u8d26\u53f7</button></div><div class="table-wrap data-surface"><table class="m-cards m-users"><thead><tr><th>\u8d26\u53f7 ID</th><th>\u540d\u79f0</th><th>\u89d2\u8272</th><th>\u72b6\u6001</th><th>\u64cd\u4f5c</th></tr></thead><tbody id="rows"></tbody></table></div><div class="modal-overlay" id="create-modal"><div class="modal"><h2>\u65b0\u5efa\u8d26\u53f7</h2><div class="form-group"><label>\u8d26\u53f7 ID</label><input id="new-username"></div><div class="form-group"><label>\u663e\u793a\u540d\u79f0</label><input id="new-name"></div><div class="form-group"><label>\u5bc6\u7801</label><input id="new-password" type="password"></div><div class="actions"><button class="btn btn-outline btn-sm" id="cancel-btn">\u53d6\u6d88</button><button class="btn btn-success btn-sm" id="save-btn">\u521b\u5efa</button></div></div></div><div class="modal-overlay" id="share-modal"><div class="modal"><h2>\u53d1\u9001\u8d26\u53f7\u4fe1\u606f</h2><div class="copy-box" id="share-text"></div><div class="actions"><button class="btn btn-primary btn-sm" id="copy-btn">\u590d\u5236</button><button class="btn btn-outline btn-sm" id="close-share">\u5173\u95ed</button></div></div></div>',
-    "/js/admin-users.js?v=20261105cols1"
+    "/js/admin-users.js?v=20261113scope1"
   ),
   "/monthly-report.html": pageLayout(
     "月报",
@@ -750,7 +750,7 @@ const globalFeedbackHtml = '<div class="app-toast-stack" id="app-toast-stack" ar
 // i18n.js holds the dictionary + translation engine. It is injected into <head> (ahead of the
 // render-blocking stylesheet) so the first paint is already in the saved language, instead of
 // painting Chinese and rewriting it after the two vendored scripts at the end of <body> load.
-const i18nHeadHtml = '<script src="/js/i18n.js?v=20261113tab1"></script>';
+const i18nHeadHtml = '<script src="/js/i18n.js?v=20261113scope1"></script>';
 // One full translation pass at the end of <body>, where the whole document
 // exists but the two vendored scripts below have not been fetched yet. Anything
 // painted while they load is already in the right language. Must come after
@@ -762,10 +762,10 @@ for (const route of Object.keys(pageRoutes)) {
     .replace('<link rel="stylesheet" href="/css/style.css?v=20260812transferfix1">', i18nHeadHtml + '<link rel="stylesheet" href="/css/style.css?v=20260812transferfix1">')
     .replace('<div class="company-bar glass-control" id="company-bar">', '<div class="company-bar glass-control" id="company-bar">' + companyCompactEntryHtml)
     .replace('<script src="/vendor/lucide-1.65.0.min.js"></script>', globalFeedbackHtml + i18nBootHtml + '<script src="/vendor/lucide-1.65.0.min.js"></script>')
-    .replace('/css/style.css?v=20260812transferfix1', '/css/style.css?v=20261113dd4')
+    .replace('/css/style.css?v=20260812transferfix1', '/css/style.css?v=20261113scope1')
     .replace('/js/customer-detail.js?v=20260731bankfix4', '/js/customer-detail.js?v=20261109mtd1')
     .replace('/css/style.css?v=20260802topbarflow1', '/css/style.css?v=20261001archive1')
-    .replace('/js/app.js?v=20260802platformsound3', '/js/app.js?v=20261113tab1');
+    .replace('/js/app.js?v=20260802platformsound3', '/js/app.js?v=20261113scope1');
 }
 
 function requireAdminPage(req, res, next) {

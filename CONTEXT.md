@@ -2,6 +2,19 @@
 
 本文件只记**词的定义与口径**，代码结构见 `CLAUDE.md`。同一个词在不同页面口径不同时，两边都写在这里。
 
+## 账号与公司范围
+
+2026-11-13 用户定。文档里写「仅 admin 可见」的页面，受限 admin 也能进，只是只看得到自己范围内的公司。
+
+| 术语 | 定义 |
+|---|---|
+| **operator** | 只能进银行三页（交易 / 支付渠道 / 交易记录），只看 `user_companies` 里授权的公司 |
+| **全部公司 admin** | `users.company_scope = 'all'`（默认，现有 admin 都是）。看所有公司，能做所有事 |
+| **受限 admin** | `company_scope = 'limited'`，只看 `user_companies` 里勾的公司，至少一家。后台各页照常能进，数据只到这几家 |
+| **受限 admin 能做** | 改自己范围内公司的「公司 / API」设置（含公司 Telegram Bot）；管自己范围内的 operator（只看得到、只能改「授权公司全部在范围内」的 operator，给他勾的公司也只能在范围内）；总控 Telegram 设置 |
+| **只给全部公司 admin** | 新建 / 删除公司、数据库备份、新建 admin、给别的 admin 设公司范围 |
+| **范围规矩** | 谁都不能改自己的范围；受限 admin 不能改任何别的 admin；至少保留一个全部公司 admin |
+
 ## 月报（MONTHLY REPORT › REPORT）
 
 数据源只有 `bank_ledger`（已审批流水，HELP TRF 计入，按 `entry_time` 悉尼墙上时间分日），

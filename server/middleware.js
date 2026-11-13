@@ -1,7 +1,7 @@
 const crypto = require("crypto");
 const { getDb } = require("./db/init");
 const { defaultCompanyId, getCompany } = require("./lib/companies");
-const { isOperator, hasCompanyAccess, firstAuthorizedCompanyId } = require("./lib/userAccess");
+const { isOperator, isFullAdmin, isCompanyRestricted, hasCompanyAccess, firstAuthorizedCompanyId } = require("./lib/userAccess");
 
 // 与 cookie.maxAge 一致。cookie 不滚动，但 store 的过期时间每个请求都会被 touch 顺延，
 // 所以偷到 cookie 的人只要持续发请求就永不过期 —— 绝对上限必须由服务端自己算。
@@ -71,6 +71,17 @@ function requireAdmin(req, res, next) {
   next();
 }
 
+// \u53ea\u7ed9\u300c\u5168\u90e8\u516c\u53f8\u300dadmin\uff1a\u65b0\u5efa / \u5220\u9664\u516c\u53f8\u3001\u6570\u636e\u5e93\u5907\u4efd\u3001\u8bbe\u5b9a\u522b\u7684 admin \u7684\u516c\u53f8\u8303\u56f4\u3002
+// \u53d7\u9650 admin\uff08users.company_scope = 'limited'\uff09\u5728\u8fd9\u91cc 403\u3002\u6bcf\u6b21\u67e5\u5e93\uff0c\u6536\u7d27\u7acb\u5373\u751f\u6548\u3002
+function requireFullAdmin(req, res, next) {
+  return requireAdmin(req, res, () => {
+    if (!isFullAdmin(getDb(), req.session.user)) {
+      return res.status(403).json({ error: "\u9700\u8981\u300c\u5168\u90e8\u516c\u53f8\u300d\u7ba1\u7406\u5458\u6743\u9650" });
+    }
+    next();
+  });
+}
+
 // 每个标签页各管各的公司：前端把本标签页的公司放在 X-Company-Id 头里（public/js/app.js 的 api()）。
 // 有头 → 每次按库复核授权，不通过就 403，**绝不静默回退到别家**（回退 = 这个标签页的审批/调钱写进别的公司）；
 // 通过也**不写回 session**，否则各标签页的普通请求会互相改「新标签页默认值」。
@@ -88,8 +99,8 @@ function resolveCompany(req, res, next) {
 
   const tabCompany = companyFromHeader(req);
   if (tabCompany) {
-    const allowed = isOperator(user) ? hasCompanyAccess(db, user, tabCompany) : !!getCompany(db, tabCompany);
-    if (!allowed) {
+    // 全部公司 admin 的 hasCompanyAccess 就是「公司存在」；operator 与受限 admin 查 user_companies。
+    if (!hasCompanyAccess(db, user, tabCompany)) {
       return res.status(403).json({ error: "无权访问此公司，请刷新页面", code: "COMPANY_NOT_ALLOWED" });
     }
     req.companyId = tabCompany;
@@ -99,7 +110,7 @@ function resolveCompany(req, res, next) {
 
   let companyId = req.session.companyId;
 
-  if (isOperator(user)) {
+  if (isCompanyRestricted(db, user)) {
     if (!hasCompanyAccess(db, user, companyId)) {
       companyId = firstAuthorizedCompanyId(db, user);
     }
@@ -118,7 +129,7 @@ function resolveCompany(req, res, next) {
 
 function requireCompany(req, res, next) {
   if (!req.companyId) {
-    if (isOperator(req.session?.user)) {
+    if (req.session?.user && isCompanyRestricted(getDb(), req.session.user)) {
       return res.status(403).json({ error: "管理员尚未为此账号分配公司" });
     }
     return res.status(400).json({ error: "\u8bf7\u5148\u9009\u62e9\u516c\u53f8" });
@@ -136,6 +147,7 @@ function requireDataAccess(req, res, next) {
 module.exports = {
   requireLogin,
   requireAdmin,
+  requireFullAdmin,
   resolveCompany,
   requireCompany,
   requireDataAccess,
