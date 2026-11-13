@@ -1624,33 +1624,46 @@
   let pendingTxAll = [];
   let pendingTxView = [];
   let pendingTxShown = 0;
+  // 拆分调钱 · 分批付（CONTEXT.md「拆分调钱」）：付过一部分的单只剩「拆分」，金额格下面显示已付 / 还差，
+  // 入账时间默认现在（补付记在付钱那天），「跳过」换成「按已付结单」。
+  function pendingPaidOf(r) {
+    return r.tx_type === "WITHDRAW" ? Number(r.paid_amount || 0) : 0;
+  }
+  function pendingRemainingOf(r) {
+    return r.remaining_amount != null ? Number(r.remaining_amount) : Number(r.amount || 0);
+  }
   function pendingTxRowHtml(r, defaultPendTime) {
     const isWd = r.tx_type === "WITHDRAW";
-    const pendTime = timeFromSql(r.tx_time, defaultPendTime);
-    const pendDate = dateFromSql(r.tx_time, sheetDate || todaySydney());
+    const paid = pendingPaidOf(r);
+    const partial = paid > 0;
+    const remaining = pendingRemainingOf(r);
+    const pendTime = partial ? defaultPendTime : timeFromSql(r.tx_time, defaultPendTime);
+    const pendDate = partial ? todaySydney() : dateFromSql(r.tx_time, sheetDate || todaySydney());
     const pendName = ledgerNameText(r.name);
-    return `<tr data-txid="${esc(r.tx_id)}" data-tx-time="${esc(r.tx_time || "")}" data-pending-amount="${esc(r.amount)}">
+    const modeOptions = partial
+      ? '<option value="split">拆分调钱</option>'
+      : '<option value="bank">本户</option><option value="help">调钱</option><option value="split">拆分调钱</option><option value="redeposit">REDEP</option>';
+    return `<tr data-txid="${esc(r.tx_id)}" data-tx-time="${esc(r.tx_time || "")}" data-pending-amount="${esc(remaining)}" data-paid="${esc(paid)}">
       <td translate="no">${esc(r.tx_type)}</td>
-      <td><div class="pend-datetime"><label class="pend-date" title="调整入账日期（平台日期 ${esc(pendDate)}）"><span class="pend-date-label" aria-hidden="true">${esc(compactDateLabel(pendDate))}</span><input class="pend-date-input" type="date" value="${esc(pendDate)}" aria-label="入账日期，平台原始日期 ${esc(pendDate)}"></label><input class="pend-time" type="time" step="60" value="${esc(pendTime)}" title="${esc(r.tx_time || "")}" aria-label="入账时间"></div></td>
+      <td><div class="pend-datetime"><label class="pend-date" title="调整入账日期（平台日期 ${esc(dateFromSql(r.tx_time, pendDate))}）"><span class="pend-date-label" aria-hidden="true">${esc(compactDateLabel(pendDate))}</span><input class="pend-date-input" type="date" value="${esc(pendDate)}" aria-label="入账日期，平台原始日期 ${esc(dateFromSql(r.tx_time, pendDate))}"></label><input class="pend-time" type="time" step="60" value="${esc(pendTime)}" title="${esc(r.tx_time || "")}" aria-label="入账时间"></div></td>
       <td class="mono" translate="no">${esc(r.tx_id)}</td>
       <td translate="no">${esc(r.username)} / ${esc(pendName)}</td>
-      <td>${fmt(r.amount)}</td>
+      <td>${fmt(r.amount)}${partial ? `<div class="pend-paid-note"><span>已付</span> <b translate="no">${fmt(paid)}</b> · <span>还差</span> <b translate="no">${fmt(remaining)}</b></div>` : ""}</td>
       <td>${isWd
-         ? `<select class="pend-mode"><option value="bank">本户</option><option value="help">调钱</option><option value="split">拆分调钱</option><option value="redeposit">REDEP</option></select>
+         ? `<select class="pend-mode">${modeOptions}</select>
            <div class="pend-help-summary" hidden role="status" aria-label="调钱方向和状态"><strong>IN</strong><span translate="no">${esc(statusLabel("withdraw") || "WITHDRAW")}</span></div>`
         : `<select class="pend-mode"><option value="bank">本户</option><option value="redeposit">REDEP</option></select>`}</td>
       <td>${isWd
          ? `<select class="pend-bank">${pendingBankOptionsHtml()}</select>
            <input class="pend-cstatus" list="cstatus-datalist" data-cstatus-pick aria-label="调钱 C STATUS" placeholder="C STATUS / multiple ok" hidden>
            <div class="pend-split-panel" hidden>
-             <div class="pend-split-summary"><span>已分配 <b class="pend-split-total">0.00</b> / ${esc(fmt(r.amount))}</span><span class="pend-split-remaining">剩余 ${esc(fmt(r.amount))}</span></div>
+             <div class="pend-split-summary"><span>已分配 <b class="pend-split-total">0.00</b> / ${esc(fmt(remaining))}</span><span class="pend-split-remaining">剩余 ${esc(fmt(remaining))}</span></div>
              <div class="pend-split-self-label">本户自付</div>
-             <div class="pend-split-columns pend-split-self-columns"><span>BANK</span><span>AMT</span></div>
-             <div class="pend-split-self">
-               <select class="pend-split-self-bank" aria-label="本户自付银行账户">${bankOptionsHtml()}</select>
-               <input class="pend-split-self-amount" inputmode="decimal" aria-label="本户自付金额" placeholder="0.00">
-             </div>
-             <div class="pend-split-columns"><span>C STATUS</span><span>AMT</span><span></span></div>
+             <div class="pend-split-columns pend-split-self-columns"><span>BANK</span><span>AMT</span><span></span></div>
+             <div class="pend-split-self-rows"></div>
+             <button type="button" class="btn btn-outline btn-xs pend-split-self-add">+ 加一个户口</button>
+             <div class="pend-split-helper-label">协助方</div>
+             <div class="pend-split-columns pend-split-helper-columns" hidden><span>C STATUS</span><span>AMT</span><span></span></div>
              <div class="pend-split-rows"></div>
              <button type="button" class="btn btn-outline btn-xs pend-split-add">+ 添加协助方</button>
              <p class="pend-split-error" role="alert" aria-live="polite"></p>
@@ -1659,7 +1672,9 @@
       <td><input class="pend-remark" placeholder="REMARK"></td>
       <td>
         <button type="button" class="btn btn-success btn-xs pend-approve">审批</button>
-        <button type="button" class="btn btn-outline btn-xs pend-skip">跳过</button>
+        ${partial
+          ? '<button type="button" class="btn btn-outline btn-xs pend-close-short">按已付结单</button>'
+          : '<button type="button" class="btn btn-outline btn-xs pend-skip">跳过</button>'}
       </td>
     </tr>`;
   }
@@ -1705,9 +1720,11 @@
       const splitPanel = tr.querySelector(".pend-split-panel");
       if (splitPanel) splitPanel.hidden = !split;
       if (split) {
-        const splitRows = tr.querySelector(".pend-split-rows");
-        if (splitRows && !splitRows.children.length) {
-          addPendingSplitRow(tr);
+        // 默认 1 个自付行、0 个协助方（用户定）：只用自家户口也是合法拆分，空的协助方行只会挡路。
+        const selfRows = tr.querySelector(".pend-split-self-rows");
+        const helperRows = tr.querySelector(".pend-split-rows");
+        if (selfRows && !selfRows.children.length && !helperRows?.children.length) {
+          addPendingSelfRow(tr);
         }
         updatePendingSplitState(tr);
       } else {
@@ -1720,8 +1737,18 @@
       addPendingSplitRow(tr);
       updatePendingSplitState(tr);
     });
-    tr.querySelector(".pend-split-self-amount")?.addEventListener("input", () => updatePendingSplitState(tr));
-    tr.querySelector(".pend-split-self-bank")?.addEventListener("change", () => updatePendingSplitState(tr));
+    tr.querySelector(".pend-split-self-add")?.addEventListener("click", () => {
+      addPendingSelfRow(tr)?.querySelector("select")?.focus();
+      updatePendingSplitState(tr);
+    });
+    const selfRowsBox = tr.querySelector(".pend-split-self-rows");
+    selfRowsBox?.addEventListener("input", () => updatePendingSplitState(tr));
+    selfRowsBox?.addEventListener("change", () => updatePendingSplitState(tr));
+    selfRowsBox?.addEventListener("click", (event) => {
+      if (!event.target.closest(".pend-split-remove")) return;
+      event.target.closest(".pend-split-self-row")?.remove();
+      updatePendingSplitState(tr);
+    });
     tr.querySelector(".pend-split-rows")?.addEventListener("input", () => updatePendingSplitState(tr));
     tr.querySelector(".pend-split-rows")?.addEventListener("click", (event) => {
       if (!event.target.closest(".pend-split-remove")) return;
@@ -1799,6 +1826,11 @@
     for (const r of pendingTxView) {
       if (shown >= limit) break;
       let row = rendered.get(String(r.tx_id));
+      // 别人补付了一批（已付变了）：没动过的行按新的还差重画；动过的行不碰，多付由服务端拦。
+      if (row && row.dataset.dirty !== "1" && Math.round(Number(row.dataset.paid || 0) * 100) !== Math.round(pendingPaidOf(r) * 100)) {
+        row.remove();
+        row = null;
+      }
       if (!row) {
         const holder = document.createElement("tbody");
         holder.innerHTML = pendingTxRowHtml(r, defaultPendTime);
@@ -1870,7 +1902,30 @@
       <input class="pend-split-amount" inputmode="decimal" value="${esc(values.amount || "")}" aria-label="协助金额" placeholder="金额">
       <button type="button" class="btn btn-outline btn-xs pend-split-remove" title="删除协助方" aria-label="删除协助方">${renderIcon("x", { size: 14 })}</button>`;
     container.appendChild(row);
+    renderIcons(row);
     return row;
+  }
+
+  // 自付行：本公司一个户口 + 金额，行尾显示「余额 · 付后」（CONTEXT.md「拆分调钱」）。
+  function addPendingSelfRow(tr, values = {}) {
+    const container = tr?.querySelector(".pend-split-self-rows");
+    if (!container) return null;
+    const row = document.createElement("div");
+    row.className = "pend-split-self-row";
+    row.innerHTML = `<select class="pend-split-self-bank" aria-label="本户自付银行账户">${bankOptionsHtml(values.bank_account_id)}</select>
+      <input class="pend-split-self-amount" inputmode="decimal" value="${esc(values.amount || "")}" aria-label="本户自付金额" placeholder="0.00">
+      <button type="button" class="btn btn-outline btn-xs pend-split-remove" title="删除这一行" aria-label="删除这一行">${renderIcon("x", { size: 14 })}</button>
+      <div class="pend-split-bal"></div>`;
+    container.appendChild(row);
+    renderIcons(row); // 删除钮的 × 是 lucide 占位，插进来之后要渲染，否则是个空框
+    return row;
+  }
+
+  function pendingSelfRows(tr) {
+    return [...(tr?.querySelectorAll(".pend-split-self-row") || [])].map((row) => ({
+      bank_account_id: row.querySelector(".pend-split-self-bank")?.value || "",
+      amount: row.querySelector(".pend-split-self-amount")?.value.trim() || "",
+    }));
   }
 
   function pendingSplitRows(tr) {
@@ -1880,50 +1935,60 @@
     }));
   }
 
-  function updatePendingSplitState(tr) {
-    const rows = pendingSplitRows(tr);
-    const targetCents = Math.round(parseNum(tr?.dataset.pendingAmount || 0) * 100);
-    const selfAmountCents = Math.round(parseNum(tr?.querySelector(".pend-split-self-amount")?.value || 0) * 100);
-    const selfBank = tr?.querySelector(".pend-split-self-bank");
-    // 同一个 C STATUS 可以填多行（同一家分几笔替我付），后端各自落一条流水。
-    let helperTotalCents = 0;
-    let invalid = false;
-    rows.forEach((row) => {
-      const amountCents = Math.round(parseNum(row.amount) * 100);
-      if (!row.c_status || amountCents <= 0) invalid = true;
-      helperTotalCents += amountCents;
+  // 「余额」与交易页渠道列表 BALANCE 同一个数（bankDisplayBalance，与报警同口径）。
+  function pendingSplitBalances() {
+    const out = {};
+    for (const b of usableBanks()) out[String(b.id)] = BC.bankDisplayBalance(b, dailyReport);
+    return out;
+  }
+
+  function pendingSplitAllocation(tr) {
+    return window.computeSplitAllocation({
+      remaining: parseNum(tr?.dataset.pendingAmount || 0),
+      selfRows: pendingSelfRows(tr),
+      helperRows: pendingSplitRows(tr),
+      balances: pendingSplitBalances(),
+      fmt,
     });
-    const totalCents = selfAmountCents + helperTotalCents;
-    const remainingCents = targetCents - totalCents;
+  }
+
+  function updatePendingSplitState(tr) {
+    const state = pendingSplitAllocation(tr);
     const totalEl = tr?.querySelector(".pend-split-total");
     const remainingEl = tr?.querySelector(".pend-split-remaining");
     const errorEl = tr?.querySelector(".pend-split-error");
-    if (selfBank) selfBank.disabled = selfAmountCents <= 0;
-    if (totalEl) totalEl.textContent = fmt(totalCents / 100);
+    if (totalEl) totalEl.textContent = fmt(state.totalCents / 100);
     if (remainingEl) {
-      remainingEl.textContent = remainingCents >= 0
-        ? `剩余 ${fmt(remainingCents / 100)}`
-        : `超出 ${fmt(Math.abs(remainingCents) / 100)}`;
+      remainingEl.textContent = state.remainingCents >= 0
+        ? `剩余 ${fmt(state.remainingCents / 100)}`
+        : `超出 ${fmt(Math.abs(state.remainingCents) / 100)}`;
     }
-    let error = "";
-    if (selfAmountCents > 0 && !selfBank?.value) error = "请选择本户自付银行账户";
-    else if (invalid) error = "请填写每个协助方和金额";
-    else if (selfAmountCents > targetCents) error = `本户自付不能超过 ${fmt(targetCents / 100)}`;
-    else if (rows.length < 1) error = "请至少添加 1 个协助方";
-    else if ((selfAmountCents > 0 ? 1 : 0) + rows.length < 2) error = "请至少填写 2 个分配项";
-    else if (remainingCents > 0) error = `还差 ${fmt(remainingCents / 100)}`;
-    else if (remainingCents < 0) error = `超出 ${fmt(Math.abs(remainingCents) / 100)}`;
-    if (errorEl) errorEl.textContent = error;
+    [...(tr?.querySelectorAll(".pend-split-self-row") || [])].forEach((row, i) => {
+      const view = state.selfView[i] || {};
+      const bal = row.querySelector(".pend-split-bal");
+      row.classList.toggle("is-negative", !!view.negative);
+      if (!bal) return;
+      bal.innerHTML = view.balance == null
+        ? ""
+        : `<span>余额</span> <b translate="no">${esc(fmt(view.balance))}</b> · <span>付后</span> <b translate="no">${esc(fmt(view.after))}</b>`;
+    });
+    tr?.querySelector(".pend-split-helper-columns")?.toggleAttribute("hidden", !tr.querySelector(".pend-split-row"));
+    if (errorEl) {
+      errorEl.textContent = state.error || state.info;
+      errorEl.classList.toggle("is-info", !state.error && !!state.info);
+    }
     const approve = tr?.querySelector(".pend-approve");
     const splitMode = tr?.querySelector(".pend-mode")?.value === "split";
-    const allocationCount = (selfAmountCents > 0 ? 1 : 0) + rows.length;
-    const valid = splitMode && rows.length >= 1 && allocationCount >= 2 && !invalid
-      && (selfAmountCents <= 0 || !!selfBank?.value) && selfAmountCents <= targetCents && remainingCents === 0;
     if (approve && splitMode) {
-      approve.disabled = !valid;
-      approve.title = valid ? "按拆分金额审批" : (error || "请完成拆分");
+      approve.disabled = !state.valid;
+      approve.textContent = state.partial ? "先付这批" : "审批";
+      approve.title = !state.valid
+        ? (state.error || "请完成拆分")
+        : (state.partial ? "先付这一批，单子留在接单区" : "按拆分金额审批");
+    } else if (approve) {
+      approve.textContent = "审批";
     }
-    return valid;
+    return state.valid;
   }
 
   // 2026-11-12 前默认 bank transfer / bank trf；之后那一对只表示两户互转，要员工自己选。
@@ -2475,6 +2540,26 @@
         });
         return;
       }
+      if (e.target.closest(".pend-close-short")) {
+        requestOperationReason({
+          title: "按已付结单",
+          description: "结单后剩下的钱不再付，也不补任何流水。已付多少以这一行显示的为准。",
+          target: `平台交易 ${txId}`,
+          confirmLabel: "确认结单",
+        }).then((reason) => {
+          if (!reason) return null;
+          return api(`/api/banks/pending-tx/${encodeURIComponent(txId)}/close-short`, {
+            method: "POST",
+            body: JSON.stringify({ reason }),
+          }).then(() => {
+            tr.remove();
+            showToast("已按已付金额结单", { tone: "success" });
+            loadPendingPanels();
+            refreshPendingBadge();
+          });
+        }).catch((err) => showToast(err.message || "结单失败", { tone: "error" }));
+        return;
+      }
       const approveBtn = e.target.closest(".pend-approve");
       if (!approveBtn || approveBtn.disabled) return;
       const modeEl = tr.querySelector(".pend-mode");
@@ -2497,17 +2582,19 @@
         body.c_status = tr.querySelector(".pend-cstatus")?.value || "";
       }
       if (mode === "split") {
-        body.self_amount = parseNum(tr.querySelector(".pend-split-self-amount")?.value || 0);
-        body.self_bank_account_id = Number(tr.querySelector(".pend-split-self-bank")?.value || 0) || null;
-        body.splits = pendingSplitRows(tr);
+        // 空白行已经被忽略；自付走 self_rows（可多户），协助方走 splits。
+        Object.assign(body, pendingSplitAllocation(tr).body);
       }
       // 接单区常驻页面，连点两下的机会比弹窗多：请求在途时锁住这一行的审批按钮。
       approveBtn.disabled = true;
       api(`/api/banks/pending-tx/${encodeURIComponent(txId)}/approve`, {
         method: "POST",
         body: JSON.stringify(body),
-      }).then(() => {
+      }).then((result) => {
         tr.remove(); // 同上：先拿掉，别被刷新标成「已被他人处理」
+        if (result && result.closed === false) {
+          showToast(`已付 ${fmt(result.paid_amount)}，还差 ${fmt(result.remaining_amount)}`, { tone: "success" });
+        }
         return reloadAll().then(() => loadPendingPanels());
       }).catch((err) => {
         approveBtn.disabled = false;

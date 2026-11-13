@@ -3063,11 +3063,51 @@ tr:hover .bank-bal-btns { opacity: 1; }
   gap: 4px;
   margin-bottom: 7px;
 }
-#bk-intake .pend-split-self-columns { grid-template-columns: minmax(0, 1fr) 76px; }
+#bk-intake .pend-split-self-columns { grid-template-columns: minmax(0, 1fr) 76px 28px; }
 #bk-intake .pend-split-self-bank,
 #bk-intake .pend-split-self-amount { min-height: 30px; padding: 5px 6px; font-size: var(--text-2xs); }
 #bk-intake .pend-split-self-amount { text-align: right; font-family: var(--font-mono); }
 #bk-intake .pend-split-self-bank:disabled { opacity: .58; cursor: not-allowed; }
+/* 自付行（CONTEXT.md「拆分调钱」）：户口 | 金额 | 删除，下一行「余额 · 付后」，付后 < 0 标红 */
+#bk-intake .pend-split-self-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 76px 28px;
+  align-items: center;
+  gap: 4px;
+  margin-top: 4px;
+}
+#bk-intake .pend-split-bal {
+  grid-column: 1 / -1;
+  min-height: 0;
+  padding: 0 3px;
+  color: var(--muted);
+  font-size: var(--text-2xs);
+  font-variant-numeric: tabular-nums;
+}
+#bk-intake .pend-split-bal:empty { display: none; }
+#bk-intake .pend-split-bal b { color: var(--text-soft); font-weight: var(--weight-bold); }
+#bk-intake .pend-split-self-row.is-negative .pend-split-self-amount { border-color: var(--red); }
+#bk-intake .pend-split-self-row.is-negative .pend-split-bal,
+#bk-intake .pend-split-self-row.is-negative .pend-split-bal b { color: var(--red); }
+#bk-intake .pend-split-self-add { margin: 6px 0 7px; min-height: 30px; }
+#bk-intake .pend-split-helper-label {
+  margin: 2px 0 3px;
+  color: var(--text-soft);
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-black);
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+#bk-intake .pend-split-columns[hidden] { display: none; }
+#bk-intake .pend-paid-note {
+  margin-top: 2px;
+  color: var(--orange);
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-bold);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+#bk-intake .pend-split-error.is-info { color: var(--orange); }
 #bk-intake .pend-split-summary {
   display: flex;
   align-items: center;
@@ -3241,9 +3281,10 @@ tr:hover .bank-bal-btns { opacity: 1; }
   #bk-intake #pending-tx-rows td:nth-child(8)::before { content: "REMARK"; }
   #bk-intake .pend-remark { width: 100%; }
   #bk-intake .pend-split-row { grid-template-columns: minmax(0, 1fr) 96px 44px; }
-  #bk-intake .pend-split-self,
-  #bk-intake .pend-split-self-columns { grid-template-columns: minmax(0, 1fr) 96px; }
+  #bk-intake .pend-split-self { grid-template-columns: minmax(0, 1fr) 96px; }
+  #bk-intake .pend-split-self-row,
   #bk-intake .pend-split-columns { grid-template-columns: minmax(0, 1fr) 96px 44px; }
+  #bk-intake .pend-split-self-add { min-height: 44px; width: 100%; }
   #bk-intake .pend-split-row input,
   #bk-intake .pend-split-self-bank,
   #bk-intake .pend-split-self-amount { min-height: 44px; font-size: var(--text-lg); }

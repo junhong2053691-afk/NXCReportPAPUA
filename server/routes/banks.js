@@ -21,6 +21,9 @@ const {
   listPendingTx,
   listSkippedPendingTx,
   approvePendingTx,
+  closePendingShort,
+  splitPendingForRow,
+  settleSplitPendingAfterRestore,
   skipPendingTx,
   restoreSkippedPendingTx,
   deleteSkippedPendingTx,
@@ -375,6 +378,17 @@ router.post("/pending-tx/:txId/approve", (req, res) => {
   try {
     const result = approvePendingTx(getDb(), companyId(req), req.params.txId, req.body || {}, actorFromRequest(req));
     res.json(result);
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+// 按已付金额结单（CONTEXT.md「拆分调钱」）：付了一部分、剩下的不付了。原因必填。
+router.post("/pending-tx/:txId/close-short", (req, res) => {
+  try {
+    const reason = requireReason(req.body);
+    const row = closePendingShort(getDb(), companyId(req), req.params.txId, actorFromRequest(req), reason);
+    res.json({ row });
   } catch (e) {
     res.status(e.status || 500).json({ error: e.message });
   }
@@ -1092,6 +1106,15 @@ router.post("/ledger/deleted/:deletedId/restore", (req, res) => {
     }
 
     restoredId = insertBack(deleted);
+
+    // 拆分调钱的批次：一张单本来就可以有几批在账上，按恢复后的已付决定关单还是留在待处理
+    // （CONTEXT.md「拆分调钱」），不走下面「没有别的流水才打回」的老路。
+    if (splitPendingForRow(db, deleted)) {
+      const settled = settleSplitPendingAfterRestore(db, cid, deleted.tx_id, actor(req), deleted.entry_time);
+      restoredPlatformOrder = settled === "approved";
+      auditRestored(deleted, restoredId, { restored_platform_order: restoredPlatformOrder, split_pending_state: settled });
+      return;
+    }
 
     const txType = platformTxTypeForLedger(db, deleted);
     const hasDeletedSibling = deleted.transfer_group_id

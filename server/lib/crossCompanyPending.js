@@ -11,6 +11,7 @@
 // 不带客户真名 `name`，免得个人信息出现在每个页面的角落里。
 const { isOperator, authorizedCompanyIds } = require("./userAccess");
 const { listCompanies } = require("./companies");
+const { PAID_FOR_PENDING_SQL } = require("./bankApply");
 
 // 待审批正常是个位数到几十笔；这只是挡住异常积压把 8 秒一次的轮询撑大。
 // **每家各取**最新 N 笔，不能是全局 LIMIT：一家积压上千笔时会把别家挤成 0 笔，
@@ -34,16 +35,18 @@ function crossCompanyPending(db, user, currentCompanyId) {
   const rows = companies.length
     ? db
         .prepare(
-          `SELECT id, company_id, tx_type, amount, username FROM (
-             SELECT id, company_id, tx_type, amount, username,
-                    ROW_NUMBER() OVER (PARTITION BY company_id ORDER BY id DESC) AS rn
-               FROM bank_tx_pending
-              WHERE state = 'pending' AND company_id IN (${marks})
+          `SELECT id, company_id, tx_type, amount, username, paid_amount FROM (
+             SELECT p.id, p.company_id, p.tx_type, p.amount, p.username, ${PAID_FOR_PENDING_SQL} AS paid_amount,
+                    ROW_NUMBER() OVER (PARTITION BY p.company_id ORDER BY p.id DESC) AS rn
+               FROM bank_tx_pending p
+              WHERE p.state = 'pending' AND p.company_id IN (${marks})
            )
             WHERE rn <= ?
             ORDER BY id DESC`
         )
         .all(...companies.map((c) => c.id), MAX_ROWS_PER_COMPANY)
+        // 付了一部分的单（CONTEXT.md「拆分调钱」）：通知里显示还差多少。
+        .map((r) => ({ ...r, remaining_amount: Math.max(0, Math.round((r.amount - r.paid_amount) * 100)) / 100 }))
     : [];
 
   return { enabled: true, current, companies, rows };

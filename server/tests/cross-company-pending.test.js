@@ -53,7 +53,23 @@ test("operator 只拿到自己授权的公司，含当前公司（前端要用�
   assert.equal(out.current, "aussiex6");
   assert.deepEqual(out.companies, [{ id: "aussiex6", name: "AussieX6" }, { id: "rolex66", name: "Rolex66" }]);
   assert.deepEqual(out.rows.map((x) => x.id), [r, a], "按 id 倒序，新单在前");
-  assert.deepEqual(out.rows[0], { id: r, company_id: "rolex66", tx_type: "WITHDRAW", amount: 120.5, username: "bob" });
+  assert.deepEqual(out.rows[0], {
+    id: r, company_id: "rolex66", tx_type: "WITHDRAW", amount: 120.5, username: "bob", paid_amount: 0, remaining_amount: 120.5,
+  });
+});
+
+test("付了一部分的单（CONTEXT.md「拆分调钱」）：带上已付 / 还差，通知显示还差", () => {
+  const db = setup();
+  grant(db, OPERATOR.id, "aussiex6", "rolex66");
+  pending(db, "rolex66", { tx_id: "W-PART", tx_type: "WITHDRAW", amount: 1000 });
+  db.prepare(
+    `INSERT INTO bank_ledger (bank_account_id, company_id, entry_time, tx_id, status, amount_out, help_amount, auto_generated, transfer_group_id)
+     VALUES (1, 'rolex66', '2026-10-01 10:00:00', 'W-PART', 'withdraw', 200, 0, 1, 'trf_a'),
+            (0, 'rolex66', '2026-10-01 10:00:00', 'W-PART', 'withdraw', 0, 50, 1, 'trf_a')`
+  ).run();
+  const [row] = crossCompanyPending(db, OPERATOR, "aussiex6").rows;
+  assert.equal(row.paid_amount, 250);
+  assert.equal(row.remaining_amount, 750);
 });
 
 test("不带客户真名，只给通知要用的字段", () => {
@@ -61,7 +77,7 @@ test("不带客户真名，只给通知要用的字段", () => {
   grant(db, OPERATOR.id, "aussiex6", "rolex66");
   pending(db, "rolex66");
   const [row] = crossCompanyPending(db, OPERATOR, "aussiex6").rows;
-  assert.deepEqual(Object.keys(row).sort(), ["amount", "company_id", "id", "tx_type", "username"]);
+  assert.deepEqual(Object.keys(row).sort(), ["amount", "company_id", "id", "paid_amount", "remaining_amount", "tx_type", "username"]);
 });
 
 test("只列 state = 'pending'：审批 / 跳过掉的不再出现（前端据此收起那一条）", () => {

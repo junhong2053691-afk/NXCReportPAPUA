@@ -13,6 +13,7 @@ const ACTION_LABELS = {
   "pending.skipped": "跳过平台单",
   "pending.restored": "恢复待处理",
   "pending.deleted": "删除已跳过单",
+  "pending.closed_short": "按已付结单",
   "pending.expired": "\u5df2\u8df3\u8fc7\u5355\u81ea\u52a8\u8fc7\u671f",
   "transfer.created": "创建调钱",
   "balance.adjusted": "余额校正",

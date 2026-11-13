@@ -328,6 +328,149 @@ function markBalanceLog(db, bankAccountId, txId, amount) {
   ).run(Number(bankAccountId || 0), String(txId), money(amount));
 }
 
+// ---- 拆分调钱 · 分批付（CONTEXT.md「拆分调钱」，2026-11-13）---------------------------
+// 已付 = 账上同一 tx_id 的 withdraw 流水 amount_out + help_amount，**每次现算、不另存**：
+// 删一批、恢复一批之后它自然就对，不会有一个「已付」列和账本对不上。
+const PAID_SUM_SQL = "COALESCE(SUM(amount_out + help_amount), 0)";
+const PAID_FOR_PENDING_SQL = `CASE WHEN p.tx_type = 'WITHDRAW' THEN (
+  SELECT ${PAID_SUM_SQL} FROM bank_ledger l
+   WHERE l.company_id = p.company_id AND l.tx_id = p.tx_id AND LOWER(TRIM(l.status)) = 'withdraw'
+) ELSE 0 END`;
+const SPLIT_MAX_SELF_BANKS = 10; // 用户定：一批最多 10 个不同的自付户口
+const SPLIT_MAX_SELF_ROWS = 50; // 只是挡住异常请求；同一户口可以填多行
+const SPLIT_MAX_HELPERS = 50;
+const cents = (n) => Math.round(Number(n || 0) * 100);
+
+function paidCentsForTx(db, companyId, txId) {
+  const tx = String(txId || "").trim();
+  if (!tx) return 0;
+  const row = db
+    .prepare(
+      `SELECT ${PAID_SUM_SQL} AS paid FROM bank_ledger
+       WHERE company_id = ? AND tx_id = ? AND LOWER(TRIM(status)) = 'withdraw'`
+    )
+    .get(companyId, tx);
+  return cents(row?.paid);
+}
+
+function paidAmountForTx(db, companyId, txId) {
+  return paidCentsForTx(db, companyId, txId) / 100;
+}
+
+function withPaidAmounts(row) {
+  const paid = cents(row.paid_amount);
+  return { ...row, paid_amount: paid / 100, remaining_amount: Math.max(0, cents(row.amount) - paid) / 100 };
+}
+
+// 关单时平台单记录上的户口 / C STATUS：账上第一个自付户口、所有协助方的名字（去重）。
+function splitSummaryForTx(db, companyId, txId) {
+  const first = db
+    .prepare(
+      `SELECT bank_account_id FROM bank_ledger
+       WHERE company_id = ? AND tx_id = ? AND LOWER(TRIM(status)) = 'withdraw' AND bank_account_id > 0
+       ORDER BY id ASC LIMIT 1`
+    )
+    .get(companyId, txId);
+  const names = db
+    .prepare(
+      `SELECT c_status FROM bank_ledger
+       WHERE company_id = ? AND tx_id = ? AND LOWER(TRIM(status)) = 'withdraw' AND c_status <> ''
+       ORDER BY id ASC`
+    )
+    .all(companyId, txId)
+    .map((r) => String(r.c_status).trim())
+    .filter(Boolean);
+  return { bankAccountId: Number(first?.bank_account_id || 0), cStatus: [...new Set(names)].join(", ") };
+}
+
+// 一行是不是拆分调钱写出来的批次行，且它属于一张 withdraw 平台单。是就返回那张单。
+function splitPendingForRow(db, row) {
+  if (!row || !Number(row.auto_generated) || !String(row.transfer_group_id || "").trim()) return null;
+  if (String(row.status || "").trim().toLowerCase() !== "withdraw") return null;
+  if (!String(row.tx_id || "").trim()) return null;
+  const pending = db
+    .prepare("SELECT * FROM bank_tx_pending WHERE company_id = ? AND tx_id = ?")
+    .get(row.company_id, row.tx_id);
+  return pending && String(pending.tx_type || "").toUpperCase() === "WITHDRAW" ? pending : null;
+}
+
+function rowPaidCents(row) {
+  return cents(money(row?.amount_out) + money(row?.help_amount));
+}
+
+const PENDING_REOPEN_SQL = `UPDATE bank_tx_pending
+  SET state='pending', bank_account_id=0, approve_mode='', c_status='', decided_at=NULL, decided_by=''
+  WHERE company_id=? AND tx_id=?`;
+
+// 恢复一行拆分批次之后，按账上实际已付决定这张单的状态：付满 → 关单（approve_mode = restored）；
+// 没付满 → 待处理（哪怕它之前被跳过：账上有钱的单不能停在已跳过）。调用方在事务里调用。
+function settleSplitPendingAfterRestore(db, companyId, txId, actorName, entryTime = "") {
+  const pending = db
+    .prepare("SELECT * FROM bank_tx_pending WHERE company_id = ? AND tx_id = ?")
+    .get(companyId, txId);
+  if (!pending) return null;
+  const paid = paidCentsForTx(db, companyId, txId);
+  const { bankAccountId, cStatus } = splitSummaryForTx(db, companyId, txId);
+  if (paid > 0) markBalanceLog(db, bankAccountId, txId, pending.amount);
+  if (paid >= cents(pending.amount)) {
+    if (pending.state !== "approved") {
+      db.prepare(
+        `UPDATE bank_tx_pending
+         SET state='approved', bank_account_id=?, approve_mode='restored', c_status=?,
+             approved_entry_time=?, approved_at=datetime('now'), approved_by=?,
+             decided_at=datetime('now'), decided_by=?
+         WHERE company_id=? AND tx_id=?`
+      ).run(bankAccountId, cStatus, entryTime || "", actorName || "", actorName || "", companyId, txId);
+    }
+    return "approved";
+  }
+  if (pending.state !== "pending") db.prepare(PENDING_REOPEN_SQL).run(companyId, txId);
+  return "pending";
+}
+
+// 按已付金额结单（CONTEXT.md「拆分调钱」）：已付 > 0、原因必填，关单、不补任何流水。
+function closePendingShort(db, companyId, txId, actor, reason) {
+  const why = String(reason || "").trim();
+  if (!why) throw Object.assign(new Error("请填写结单原因"), { status: 400 });
+  const pending = db
+    .prepare("SELECT * FROM bank_tx_pending WHERE company_id = ? AND tx_id = ? AND state = 'pending'")
+    .get(companyId, txId);
+  if (!pending) throw Object.assign(new Error("Pending not found"), { status: 404 });
+  const paid = pending.tx_type === "WITHDRAW" ? paidCentsForTx(db, companyId, txId) : 0;
+  if (paid <= 0) {
+    throw Object.assign(new Error("这张单还没付过钱，不能按已付结单；不处理请用跳过"), { status: 400 });
+  }
+  const by = actorUsername(actor);
+  return runAtomic(db, () => {
+    const { bankAccountId, cStatus } = splitSummaryForTx(db, companyId, txId);
+    const last = db
+      .prepare(
+        `SELECT entry_time FROM bank_ledger WHERE company_id = ? AND tx_id = ? AND LOWER(TRIM(status)) = 'withdraw'
+         ORDER BY id DESC LIMIT 1`
+      )
+      .get(companyId, txId);
+    db.prepare(
+      `UPDATE bank_tx_pending SET state='approved', bank_account_id=?, approve_mode='split_closed',
+        c_status=?, approved_entry_time=?, approved_at=datetime('now'), approved_by=?,
+        decided_at=datetime('now'), decided_by=? WHERE id=?`
+    ).run(bankAccountId, cStatus, last?.entry_time || "", by, by, pending.id);
+    const saved = db.prepare("SELECT * FROM bank_tx_pending WHERE id=?").get(pending.id);
+    appendAuditEvent(db, {
+      companyId,
+      action: "pending.closed_short",
+      source: "user",
+      actor: auditActorValue(actor),
+      summary: `按已付结单 ${pending.tx_id}（已付 ${(paid / 100).toFixed(2)} / ${money(pending.amount).toFixed(2)}）`,
+      reason: why,
+      before: pickFields(pending, PENDING_FIELDS),
+      after: pickFields(saved, PENDING_FIELDS),
+      metadata: { paid_amount: paid / 100, remaining_amount: (cents(pending.amount) - paid) / 100 },
+      refs: pendingRefs(saved),
+    });
+    return saved;
+  });
+}
+
 function enqueuePendingTx(db, companyId, mappedTxs) {
   if (!mappedTxs?.length) return 0;
   const ins = db.prepare(
@@ -360,11 +503,12 @@ function enqueuePendingTx(db, companyId, mappedTxs) {
 function listPendingTx(db, companyId) {
   return db
     .prepare(
-      `SELECT * FROM bank_tx_pending
-       WHERE company_id = ? AND state = 'pending'
-       ORDER BY tx_time ASC, id ASC`
+      `SELECT p.*, ${PAID_FOR_PENDING_SQL} AS paid_amount FROM bank_tx_pending p
+       WHERE p.company_id = ? AND p.state = 'pending'
+       ORDER BY p.tx_time ASC, p.id ASC`
     )
-    .all(companyId);
+    .all(companyId)
+    .map(withPaidAmounts);
 }
 
 // 跳过的单按**跳过的那一天**（实例时区）过期：当天跳过的当天都能在「已跳过」恢复，过了
@@ -435,26 +579,59 @@ function approvePendingTx(db, companyId, txId, body, actor) {
   const mode = String(body.mode || "bank");
   const remark = String(body.remark || "").trim();
   const approvedBy = actorUsername(actor);
-  const entryTime = pendingLedgerEntryTime(pending, body.entry_time);
+  // 付过一部分的单（CONTEXT.md「拆分调钱」）只能继续拆分：别的审批方式都按全额落账，会多付。
+  const paidCents = pending.tx_type === "WITHDRAW" ? paidCentsForTx(db, companyId, pending.tx_id) : 0;
+  if (paidCents > 0 && mode !== "help_split") {
+    throw Object.assign(
+      new Error(`这张单已付 ${(paidCents / 100).toFixed(2)}，只能继续拆分或按已付结单`),
+      { status: 400 }
+    );
+  }
+  // 第一批默认平台单时间，补付的批次默认提交时间（用户定：补付记在付钱那天）。手填的照样校验。
+  const entryTime = pendingLedgerEntryTime(paidCents > 0 ? { ...pending, tx_time: nowSql() } : pending, body.entry_time);
 
   let splitRows = null;
-  let splitSelfAmount = 0;
-  let splitSelfBankId = 0;
-  let splitSelfBank = null;
+  let splitSelfRows = null;
+  let splitBatchCents = 0;
   if (mode === "help_split") {
     if (pending.tx_type !== "WITHDRAW") {
       throw Object.assign(new Error("只有 withdraw 平台单可以拆分调钱"), { status: 400 });
     }
-    const pendingTotalCents = Math.round(money(pending.amount) * 100);
-    splitSelfAmount = money(body.self_amount);
-    if (Math.round(splitSelfAmount * 100) > pendingTotalCents) {
-      throw Object.assign(new Error(`本户自付不能超过平台单金额 ${money(pending.amount).toFixed(2)}`), { status: 400 });
+    const remainingCents = cents(pending.amount) - paidCents;
+    // self_rows 是现在的入参；self_amount + self_bank_account_id 是只有一个自付户口时的旧入参。
+    const selfInput = Array.isArray(body.self_rows)
+      ? body.self_rows
+      : money(body.self_amount) > 0
+        ? [{ bank_account_id: body.self_bank_account_id, amount: body.self_amount }]
+        : [];
+    const helperInput = body.splits == null ? [] : body.splits;
+    if (!Array.isArray(helperInput) || helperInput.length > SPLIT_MAX_HELPERS) {
+      throw Object.assign(new Error(`协助方最多 ${SPLIT_MAX_HELPERS} 行`), { status: 400 });
     }
-    if (!Array.isArray(body.splits) || body.splits.length < 1 || body.splits.length > 50) {
-      throw Object.assign(new Error("请至少添加 1 个协助方"), { status: 400 });
+    if (selfInput.length > SPLIT_MAX_SELF_ROWS) {
+      throw Object.assign(new Error(`自付最多 ${SPLIT_MAX_SELF_ROWS} 行`), { status: 400 });
+    }
+    // 同一户口可以填多行（分两笔付就两行），所以上限数的是不同户口。
+    const bankCache = new Map();
+    splitSelfRows = selfInput.map((row) => {
+      const bankId = Number(row?.bank_account_id || 0);
+      const amount = money(row?.amount);
+      if (!bankId) throw Object.assign(new Error("每个自付行都要选银行账户"), { status: 400 });
+      if (!amount) throw Object.assign(new Error("每个自付金额必须大于 0"), { status: 400 });
+      if (!bankCache.has(bankId)) {
+        const bank = db
+          .prepare(`SELECT * FROM bank_accounts WHERE id = ? AND company_id = ? AND ${SQL_OPERATING}`)
+          .get(bankId, companyId);
+        if (!bank) throw Object.assign(new Error("自付银行账户无效、已封禁或已归档"), { status: 400 });
+        bankCache.set(bankId, bank);
+      }
+      return { bank: bankCache.get(bankId), amount };
+    });
+    if (bankCache.size > SPLIT_MAX_SELF_BANKS) {
+      throw Object.assign(new Error(`一次最多 ${SPLIT_MAX_SELF_BANKS} 个不同的自付户口`), { status: 400 });
     }
     // 同一个 C STATUS 可以出现多行（同一家分几笔替我付），各自落一条流水，见 CONTEXT.md「拆分调钱」。
-    splitRows = body.splits.map((row) => {
+    splitRows = helperInput.map((row) => {
       const cStatus = String(row?.c_status || "").trim();
       const amount = money(row?.amount);
       if (!cStatus) throw Object.assign(new Error("每个协助方都要填写 C STATUS"), { status: 400 });
@@ -462,29 +639,14 @@ function approvePendingTx(db, companyId, txId, body, actor) {
       assertNotSelfCStatus(db, companyId, cStatus);
       return { c_status: cStatus, amount };
     });
-    const allocationCount = (splitSelfAmount > 0 ? 1 : 0) + splitRows.length;
-    if (allocationCount < 2) {
-      throw Object.assign(new Error("拆分至少需要 2 个分配项"), { status: 400 });
+    if (!splitSelfRows.length && !splitRows.length) {
+      throw Object.assign(new Error("请至少填写 1 个自付户口或协助方"), { status: 400 });
     }
-    splitSelfBankId = Number(body.self_bank_account_id || 0);
-    if (splitSelfAmount > 0) {
-      if (!splitSelfBankId) {
-        throw Object.assign(new Error("本户自付请填写银行账户"), { status: 400 });
-      }
-      splitSelfBank = db
-        .prepare(`SELECT * FROM bank_accounts WHERE id = ? AND company_id = ? AND ${SQL_OPERATING}`)
-        .get(splitSelfBankId, companyId);
-      if (!splitSelfBank) {
-        throw Object.assign(new Error("本户自付银行账户无效、已封禁或已归档"), { status: 400 });
-      }
-    } else {
-      splitSelfBankId = 0;
-    }
-    const splitTotalCents = Math.round(splitSelfAmount * 100)
-      + splitRows.reduce((sum, row) => sum + Math.round(row.amount * 100), 0);
-    if (splitTotalCents !== pendingTotalCents) {
+    splitBatchCents = splitSelfRows.reduce((sum, row) => sum + cents(row.amount), 0)
+      + splitRows.reduce((sum, row) => sum + cents(row.amount), 0);
+    if (splitBatchCents > remainingCents) {
       throw Object.assign(
-        new Error(`拆分金额必须等于平台单金额 ${money(pending.amount).toFixed(2)}`),
+        new Error(`拆分金额不能超过还差的 ${(remainingCents / 100).toFixed(2)}`),
         { status: 400 }
       );
     }
@@ -512,25 +674,26 @@ function approvePendingTx(db, companyId, txId, body, actor) {
 
   return runAtomic(db, () => {
     if (mode === "help_split") {
+      // 一批一个组号：删除时整批删，不连累别的批次。
       const splitGroupId = makeTransferGroupId();
-      const splitParts = (splitSelfAmount > 0 ? 1 : 0) + splitRows.length;
+      const splitParts = splitSelfRows.length + splitRows.length;
       const ledgers = [];
-      if (splitSelfAmount > 0) {
+      splitSelfRows.forEach((row, index) => {
         ledgers.push(insertLedger(db, {
-          bank_account_id: splitSelfBankId,
+          bank_account_id: row.bank.id,
           company_id: companyId,
           entry_time: entryTime,
           tx_id: pending.tx_id,
-          ...mapAmountFields("out", "withdraw", splitSelfAmount),
-          bank_acc: bankAccLabel(splitSelfBank),
+          ...mapAmountFields("out", "withdraw", row.amount),
+          bank_acc: bankAccLabel(row.bank),
           username: pending.username,
           name: pending.name,
-          other_info: `${pending.tx_type} ${money(pending.amount).toFixed(2)} split self ${splitSelfAmount.toFixed(2)}`,
+          other_info: `${pending.tx_type} ${money(pending.amount).toFixed(2)} split self ${index + 1}/${splitParts}`,
           remark,
           auto_generated: 1,
           transfer_group_id: splitGroupId,
         }));
-      }
+      });
       splitRows.forEach((row, index) => {
         upsertCStatusOptions(db, companyId, row.c_status, null);
         ledgers.push(insertLedger(db, {
@@ -545,30 +708,33 @@ function approvePendingTx(db, companyId, txId, body, actor) {
           username: pending.username,
           name: pending.name,
           c_status: row.c_status,
-          other_info: `${pending.tx_type} ${money(pending.amount).toFixed(2)} split ${index + 1 + (splitSelfAmount > 0 ? 1 : 0)}/${splitParts}`,
+          other_info: `${pending.tx_type} ${money(pending.amount).toFixed(2)} split ${index + 1 + splitSelfRows.length}/${splitParts}`,
           remark,
           auto_generated: 1,
           transfer_group_id: splitGroupId,
         }));
       });
-      markBalanceLog(db, splitSelfBankId, pending.tx_id, pending.amount);
-      db.prepare(
-        `UPDATE bank_tx_pending SET state='approved', bank_account_id=?, approve_mode='help_split',
-          c_status=?, approved_entry_time=?, approved_at=datetime('now'), approved_by=?,
-          decided_at=datetime('now'), decided_by=? WHERE id=?`
-      ).run(
-        splitSelfBankId,
-        splitRows.map((row) => row.c_status).join(", "),
-        entryTime,
-        approvedBy,
-        approvedBy,
-        pending.id
-      );
-      finishAudit(ledgers, "help_split", splitGroupId);
+      const summary = splitSummaryForTx(db, companyId, pending.tx_id);
+      // 防重锁：第一批写下就够了（INSERT OR IGNORE），之后的批次不动它。
+      markBalanceLog(db, summary.bankAccountId, pending.tx_id, pending.amount);
+      const paidAfter = paidCents + splitBatchCents;
+      const closed = paidAfter >= cents(pending.amount);
+      if (closed) {
+        db.prepare(
+          `UPDATE bank_tx_pending SET state='approved', bank_account_id=?, approve_mode='help_split',
+            c_status=?, approved_entry_time=?, approved_at=datetime('now'), approved_by=?,
+            decided_at=datetime('now'), decided_by=? WHERE id=?`
+        ).run(summary.bankAccountId, summary.cStatus, entryTime, approvedBy, approvedBy, pending.id);
+      }
+      // 付了一部分也记 pending.approved：交易记录页 OPERATOR 列按「最早引用这条流水的事件」找人。
+      finishAudit(ledgers, closed ? "help_split" : "help_split partial", splitGroupId);
       return {
         ledgers,
         pending,
         transfer_group_id: splitGroupId,
+        closed,
+        paid_amount: paidAfter / 100,
+        remaining_amount: Math.max(0, cents(pending.amount) - paidAfter) / 100,
       };
     }
 
@@ -684,6 +850,14 @@ function skipPendingTx(db, companyId, txId, actor, reason) {
     .prepare("SELECT * FROM bank_tx_pending WHERE company_id = ? AND tx_id = ? AND state = 'pending'")
     .get(companyId, txId);
   if (!pending) throw Object.assign(new Error("Pending not found"), { status: 404 });
+  // 账上已有这张单的钱，跳过会让「已跳过的单」带着流水，对账永远对不平（CONTEXT.md「拆分调钱」）。
+  const paid = pending.tx_type === "WITHDRAW" ? paidCentsForTx(db, companyId, txId) : 0;
+  if (paid > 0) {
+    throw Object.assign(
+      new Error(`这张单已付 ${(paid / 100).toFixed(2)}，不能跳过；请按已付结单，或先删掉已付的流水`),
+      { status: 400 }
+    );
+  }
   return runAtomic(db, () => {
     db.prepare(
       `UPDATE bank_tx_pending SET state='skipped', decided_at=datetime('now'), decided_by=? WHERE id=?`
@@ -796,6 +970,14 @@ function otherLedgerForTx(db, companyId, txId, opts = {}) {
 // 就是同一 tx_id 记两次（演练里 4 家公司都复现了）。返回挡路的那一行，没有冲突返回 null。
 function restoreConflictForDeleted(db, deleted) {
   if (!deleted) return null;
+  // 拆分调钱的批次（CONTEXT.md「拆分调钱」）：同一张单本来就可以有好几批在账上，
+  // 「还有别的流水」不等于重复。恢复后已付超过平台单金额才是重复入账。
+  const splitPending = splitPendingForRow(db, deleted);
+  if (splitPending) {
+    const paid = paidCentsForTx(db, deleted.company_id, deleted.tx_id);
+    if (paid + rowPaidCents(deleted) <= cents(splitPending.amount)) return null;
+    return otherLedgerForTx(db, deleted.company_id, deleted.tx_id) || { id: 0 };
+  }
   return otherLedgerForTx(db, deleted.company_id, deleted.tx_id, {
     excludeGroupId: deleted.transfer_group_id,
   });
@@ -852,6 +1034,20 @@ function deletedRowsToRestore(db, companyId, deleted) {
 function reopenPendingForLedger(db, row, opts = {}) {
   const txType = platformTxTypeForLedger(db, row);
   if (!txType) return false;
+
+  // 删掉的是拆分调钱的一批，而账上还有别的批次：按剩下的钱判断。没付满的已关单重新打开
+  // （还差 = 平台单金额 − 账上剩下的），防重锁留着——账上还有这张单的钱。删光了走下面的老路。
+  const splitPending = splitPendingForRow(db, row);
+  if (splitPending) {
+    const paid = paidCentsForTx(db, row.company_id, row.tx_id);
+    if (paid > 0) {
+      if (splitPending.state === "approved" && paid < cents(splitPending.amount)) {
+        db.prepare(PENDING_REOPEN_SQL).run(row.company_id, row.tx_id);
+        return true;
+      }
+      return false;
+    }
+  }
 
   // 删掉的是重复行、同一平台单还有别的流水在账上：这笔单并没有「没入账」，打回待处理
   // 就能被审第三次，删掉 bank_balance_log 还会让同步侧的防重锁失效。
@@ -1208,6 +1404,11 @@ module.exports = {
   listPendingTx,
   listSkippedPendingTx,
   approvePendingTx,
+  closePendingShort,
+  paidAmountForTx,
+  splitPendingForRow,
+  settleSplitPendingAfterRestore,
+  PAID_FOR_PENDING_SQL,
   skipPendingTx,
   restoreSkippedPendingTx,
   deleteSkippedPendingTx,

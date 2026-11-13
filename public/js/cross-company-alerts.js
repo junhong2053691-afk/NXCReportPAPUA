@@ -85,7 +85,8 @@ function xcoPlanAlerts(snapshot, seen, maxVisible) {
         companyId: r.company_id,
         companyName: names[r.company_id],
         type: String(r.tx_type || "").toUpperCase() === "WITHDRAW" ? "WITHDRAW" : "DEPOSIT",
-        amount: Number(r.amount || 0),
+        // 付了一部分的单（CONTEXT.md「拆分调钱」）显示还差多少。
+        amount: Number(r.remaining_amount != null ? r.remaining_amount : r.amount || 0),
         username: String(r.username || ""),
       };
     });

@@ -842,6 +842,9 @@ const I18N_PHRASES = [
   [/^账单流水 #(.+)$/, "Ledger #$1"],
   [/^已删除流水 #(.+)$/, "Deleted ledger #$1"],
   [/^本户自付不能超过\s*(.+)$/, "Own share cannot exceed $1"],
+  // 拆分调钱 · 分批付（CONTEXT.md「拆分调钱」）
+  [/^付完这批还差\s*(.*)$/, "Still short after this batch: $1"],
+  [/^已付\s*(\S+)，还差\s*(\S+)$/, "Paid $1, short by $2"],
   [/^C STATUS 未对平：(.+)$/, "C STATUS out of balance: $1"],
   [/^调整入账日期（平台日期\s*(.+?)）$/, "Adjust entry date (platform date $1)"],
   [/^入账日期，平台原始日期\s*(.+)$/, "Entry date, platform date $1"],
@@ -1399,6 +1402,27 @@ Object.assign(I18N.zh, {
   "已跳过，今天内可在「已跳过」恢复": "已跳过，今天内可在「已跳过」恢复",
   "流水会进入最近删除；如关联平台单，可能同时恢复为待处理。": "流水会进入最近删除；如关联平台单，可能同时恢复为待处理。",
 });
+
+// 拆分调钱 · 分批付（2026-11-13，CONTEXT.md「拆分调钱」）
+const SPLIT_PARTIAL_EN = {
+  "已付": "Paid",
+  "付后": "After",
+  "协助方": "Helpers",
+  "+ 加一个户口": "+ Add an account",
+  "删除这一行": "Remove this row",
+  "先付这批": "Pay this batch",
+  "先付这一批，单子留在接单区": "Pay this batch; the order stays in the queue",
+  "按已付结单": "Close at paid amount",
+  "确认结单": "Close order",
+  "已按已付金额结单": "Order closed at the paid amount",
+  "结单失败": "Could not close the order",
+  "结单后剩下的钱不再付，也不补任何流水。已付多少以这一行显示的为准。": "The rest will not be paid and no ledger rows are added. The paid amount is what this row shows.",
+  "请填写每个自付户口和金额": "Fill in an account and amount on every own-share row",
+  "请至少填写 1 个自付户口或协助方": "Add at least 1 own account or helper",
+  "一次最多 10 个不同的自付户口": "At most 10 different own accounts per batch",
+};
+Object.assign(I18N.zh, Object.fromEntries(Object.keys(SPLIT_PARTIAL_EN).map((k) => [k, k])));
+Object.assign(I18N.en, SPLIT_PARTIAL_EN);
 Object.assign(I18N.en, {
   "编": "E",
   "存": "S",
