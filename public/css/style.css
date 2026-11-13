@@ -3099,6 +3099,8 @@ tr:hover .bank-bal-btns { opacity: 1; }
   text-transform: uppercase;
 }
 #bk-intake .pend-split-columns[hidden] { display: none; }
+/* 桌面上拆分面板很窄，「C STATUS」放不下第一列，会和 AMT 叠在一起：截断而不是溢出 */
+#bk-intake .pend-split-columns > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #bk-intake .pend-paid-note {
   margin-top: 2px;
   color: var(--orange);

@@ -7,10 +7,12 @@
 // 完全空白的行（户口 / C STATUS 和金额都没填）当作没有。
 const SPLIT_MAX_SELF_BANKS = 10;
 
+// 符号不算数：员工习惯把付出去的钱写成负数（-201.33），以前的 parseNum 与后端 money() 都取绝对值，
+// 这里同口径（2026-11-13 上线后截图里协助方填负数被拦）。0 和不是数字的才算没填对。
 function splitCents(value) {
   const raw = String(value == null ? "" : value).replace(/,/g, "").trim();
   if (!raw) return 0;
-  const n = Number(raw);
+  const n = Math.abs(Number(raw));
   return Number.isFinite(n) && n > 0 ? Math.round(n * 100) : -1;
 }
 

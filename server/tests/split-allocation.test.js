@@ -63,6 +63,21 @@ test("余额 · 付后：同户口逐行累减，付后 < 0 标红但照样可�
   assert.equal(s.valid, true);
 });
 
+// 2026-11-13 上线后员工截图：协助方填 -201.33 / -100（习惯把付出去的钱写成负数）被判成「没填金额」。
+// 以前的 parseNum 与后端 money() 都取绝对值，这里必须同口径，否则又是一道前端独有的拦截。
+test("金额写成负数照样认（取绝对值，与 parseNum / 后端 money() 同口径）", () => {
+  const s = computeSplitAllocation({
+    remaining: 301.33,
+    helperRows: [{ c_status: "AuX6", amount: "-201.33" }, { c_status: "EZ68", amount: "-100" }],
+  });
+  assert.equal(s.error, "");
+  assert.equal(s.valid, true);
+  assert.equal(s.partial, false);
+  assert.deepEqual(s.body.splits, [{ c_status: "AuX6", amount: 201.33 }, { c_status: "EZ68", amount: 100 }]);
+  assert.equal(run({ selfRows: [{ bank_account_id: "1", amount: "-100" }] }).body.self_rows[0].amount, 100);
+  assert.equal(run({ selfRows: [{ bank_account_id: "1", amount: "0" }] }).error, "请填写每个自付户口和金额", "0 仍然不算填了");
+});
+
 test("自付与协助方混着填；金额带千分位逗号也认", () => {
   const s = run({
     selfRows: [{ bank_account_id: "1", amount: "700" }],
