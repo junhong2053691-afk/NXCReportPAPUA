@@ -30,9 +30,10 @@ const STATUS_LABELS = {
 // 余额校正，只有 bankApply.adjustBankBalance 写（CONTEXT.md「余额校正（ADJUSTMENT）」）。
 const ADJUSTMENT_STATUS = "adjustment";
 
-// 日报 REPORT 的 DEPOSIT。不含 unclaim：UNCLAIM 在下面单列，含进来就算了两遍
-// （运营 Excel 口径，2026-11-06 确认；测试 daily-report-status.test.js）。
-const DEPOSIT_STATUSES = new Set(["deposit", "new"]);
+// 日报 REPORT 的 DEPOSIT。2026-11-14 起含 unclaim（用户定）：认领时员工删掉那笔 unclaim、
+// 再审批成 deposit，同一笔钱任何时候只有一行，不会重复。UNCLAIM 照旧单列当明细看，
+// 已含在 DEPOSIT 里，别再相加（CONTEXT.md「UNCLAIM 计入 DEPOSIT」；测试 daily-report-status.test.js）。
+const DEPOSIT_STATUSES = new Set(["deposit", "new", "unclaim"]);
 const TOTAL_OUTFLOW_STATUSES = new Set([
   "withdraw",
   "wrong",
@@ -333,7 +334,8 @@ function computeBankDailyReport(db, companyId, opts = {}) {
     if (status === "test in") addReport(report, "test in", inTotal, inTotal > 0 ? 1 : 0);
     if (status === "test out") addReport(report, "test out", -outTotal, outTotal > 0 ? 1 : 0);
 
-    if (status === "deposit" || status === "amopay") depCount += inTotal > 0 ? 1 : 0;
+    // DEP COUNT 含 unclaim（2026-11-14）；TRANSACTION 上面照旧也数 unclaim，用户明确不剔。
+    if (status === "deposit" || status === "amopay" || status === "unclaim") depCount += inTotal > 0 ? 1 : 0;
     if (status === "withdraw") wdCount += outTotal > 0 ? 1 : 0;
     if (status === "new") newReg += 1;
     if (status === "unclaim") unclaimAmount += inTotal;

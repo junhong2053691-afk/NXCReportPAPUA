@@ -22,17 +22,17 @@
 
 | 术语 | 定义 |
 |---|---|
-| **DEP / TOPUP** | 状态 `deposit` + `new` + `amopay` 的入账金额（`amount_in + |trf_amount|`，与日报的 `inTotal` 同算法）。TOPUP 就是 DEP。**不含 `unclaim`** |
+| **DEP / TOPUP** | 状态 `deposit` + `new` + `amopay` + `unclaim` 的入账金额（`amount_in + |trf_amount|`，与日报的 `inTotal` 同算法）。TOPUP 就是 DEP。**含 `unclaim`**（2026-11-14 起，见下文「UNCLAIM 计入 DEPOSIT」） |
 | **WD** | 状态 `withdraw` 的出账金额（`|amount_out| + |help_amount|`），显示为正数 |
 | **WIN/LOSE** | `DEP − WD`，站在公司角度：正 = WIN（公司赚），负 = LOSE。**不扣** WRONG / EXPENSES |
 | **WIN RATE** | `WIN/LOSE ÷ DEP`；DEP = 0 时为「—」。合计行用合计相除，**不是**每日百分比的平均 |
-| **UNCLAIM** | 状态 `unclaim` 的入账金额，单列，不进 DEP |
+| **UNCLAIM** | 状态 `unclaim` 的入账金额，单列当明细看。**已含在 DEP 里，别再相加** |
 | **WRONG** | 状态 `wrong` 的出账金额（转账 / 操作失误亏损），正数显示 |
 | **EXPENSES** | 状态 `expenses` 的出账金额（开销）**+ 当天的封禁户余额变动**（见下文「封禁户余额」），正数显示；从封禁户收回钱的日子可能是负数 |
 | **EXCHANGE** | 状态 `exchange` 的入 + 出金额（换钱总额，**正数**），与日报 REPORT 的 EXCHANGE 同口径、逐分相等（2026-11-12 用户要求）。不看 C STATUS，**不进** WIN/LOSE 或任何别的列 |
-| **DEP单 / WD单** | 上面 DEP 那组状态 / `withdraw` 中金额 > 0 的笔数 |
+| **DEP单 / WD单** | 上面 DEP 那组状态（含 `unclaim`）/ `withdraw` 中金额 > 0 的笔数 |
 | **总单** | DEP单 + WD单 |
-| **UNIQUE CUST** | 当天有 DEP 流水的不同 `username` 数（当天充值顾客数）。按 `TRIM` 后原样比较，区分大小写，与日报一致 |
+| **UNIQUE CUST** | 当天有 `deposit` / `new` / `amopay` 流水的不同 `username` 数（当天充值顾客数）。**不算 `unclaim`**（2026-11-14 用户定，DEP 加了 unclaim 但这里不跟）。按 `TRIM` 后原样比较，区分大小写，与日报一致 |
 | **合计行** | 所有列都是每日相加（UNIQUE CUST 因此是人次，不是去重人数）；只有 WIN RATE 用合计相除 |
 
 年视图：每月一行，各列为该月合计（同上口径），末行年合计。
@@ -43,13 +43,24 @@
 
 | 指标 | 日报 | 月报 |
 |---|---|---|
-| DEPOSIT 金额 | `deposit + new`（**不含 `unclaim`**，UNCLAIM 单列） | `deposit + new + amopay` |
-| DEP COUNT | `deposit + amopay` | `deposit + new + amopay`（与金额同一组） |
-| UNIQUE CUST | 当天任何带 username 的流水（含提现）去重 | 只数 DEP 那组状态 |
-| TRANSACTION / 总单 | TRANSACTION = `deposit` / `amopay` / `withdraw` **以外**的所有流水笔数（带不带 username 都算；2026-11-10 按 Excel 确认；**不含 `adjustment`**，见「余额校正」） | 总单 = DEP单 + WD单（正好相反：只数充值提现） |
+| DEPOSIT 金额 | `deposit + new + unclaim` | `deposit + new + amopay + unclaim` |
+| DEP COUNT | `deposit + amopay + unclaim` | `deposit + new + amopay + unclaim`（与金额同一组） |
+| UNIQUE CUST | 当天任何带 username 的流水（含提现）去重 | 只数 `deposit` / `new` / `amopay`（不算 unclaim） |
+| TRANSACTION / 总单 | TRANSACTION = `deposit` / `amopay` / `withdraw` **以外**的所有流水笔数（带不带 username 都算；2026-11-10 按 Excel 确认；**不含 `adjustment`**，见「余额校正」）。**unclaim 照旧算在里面**（2026-11-14 用户定，虽然它进了 DEP COUNT） | 总单 = DEP单 + WD单（正好相反：只数充值提现） |
 | WIN/LOSE | `TOTAL WIN/LOSE` = DEPOSIT + WITHDRAW（`totals.win_loss`，WITHDRAW 是负数），显示在 REPORT 最底下 | `DEP − WD`，DEP 含 amopay |
 
 同一天两个页面的 DEPOSIT 数字不一样是**对的**。要统一须先和运营对齐 Excel。
+
+### UNCLAIM 计入 DEPOSIT（2026-11-14 用户定）
+
+以前两边的 DEPOSIT 都不含 `unclaim`，现在都含（金额与笔数），历史日期按新口径重算。
+
+| 规则 | 说明 |
+|---|---|
+| **为什么不会重复** | unclaim = 钱到了还不知道是谁的。顾客来认领时员工**删掉那笔 unclaim**、再按顾客审批一笔 deposit（入账日期选回原来那天），同一笔钱任何时候账上只有一行 |
+| **UNCLAIM 格 / 列照留** | 日报右栏 UNCLAIM、月报 UNCLAIM 列与导出列原样不动，当「DEPOSIT 里有多少还没认领」的明细看。**别再和 DEPOSIT 相加** |
+| **跨天认领** | 审批护栏（入账日期不得早于平台单日期前一天）挡住选回原日期时，就记允许的日期，**不放宽护栏**。代价是 unclaim 那天的 DEPOSIT 事后变少、认领那天变多，可以接受 |
+| **不变的** | 余额（unclaim 照旧绑银行、动余额）、日报 TRANSACTION（仍算 unclaim）、两边 UNIQUE CUST、Telegram `/today`（读平台数据，不读流水） |
 
 日报 REPORT 的 **EXPENSES 同样含封禁户余额变动**（负数显示，与月报逐分相等），但**笔数只数 `expenses` 流水**——
 卡住的钱不是一笔流水。数字下面另起一行「其中封禁 X」，接口字段是 `totals.blocked_expense` / reportPairs 的 `leftBlocked`。

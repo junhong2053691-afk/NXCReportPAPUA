@@ -7,7 +7,10 @@
 const { todayKey, shiftDateKey } = require("./dates");
 const { blockedExpenseByDay } = require("./blockedExpense");
 
-const DEP_STATUSES = ["deposit", "new", "amopay"];
+// 2026-11-14 起 DEP 含 unclaim（金额与笔数），UNCLAIM 列照旧单列当明细。
+// UNIQUE CUST 刻意不跟：只数 CUST_STATUSES（用户定）。
+const DEP_STATUSES = ["deposit", "new", "amopay", "unclaim"];
+const CUST_STATUSES = ["deposit", "new", "amopay"];
 
 const MONTH_RE = /^(\d{4})-(0[1-9]|1[0-2])$/;
 const YEAR_RE = /^\d{4}$/;
@@ -25,6 +28,7 @@ const STATUS_EXPR = "LOWER(TRIM(status))";
 const IN_EXPR = "(amount_in + ABS(trf_amount))";
 const OUT_EXPR = "(ABS(amount_out) + ABS(help_amount))";
 const IS_DEP = `${STATUS_EXPR} IN (${sqlList(DEP_STATUSES)})`;
+const IS_CUST = `${STATUS_EXPR} IN (${sqlList(CUST_STATUSES)})`;
 
 /** 按日期键汇总 [from, toExclusive) 区间的流水，返回 Map<dateKey, 分为单位的原始累加值>。 */
 function dailyRows(db, companyId, from, toExclusive) {
@@ -40,7 +44,7 @@ function dailyRows(db, companyId, from, toExclusive) {
          COALESCE(SUM(CASE WHEN ${STATUS_EXPR} = 'expenses' THEN ${OUT_EXPR} ELSE 0 END), 0) AS expenses,
          -- EXCHANGE 与日报 REPORT 同口径：入 + 出，正数（换钱总额）。
          COALESCE(SUM(CASE WHEN ${STATUS_EXPR} = 'exchange' THEN ${IN_EXPR} + ${OUT_EXPR} ELSE 0 END), 0) AS exchange,
-         COUNT(DISTINCT CASE WHEN ${IS_DEP} AND ${IN_EXPR} > 0 AND TRIM(username) != ''
+         COUNT(DISTINCT CASE WHEN ${IS_CUST} AND ${IN_EXPR} > 0 AND TRIM(username) != ''
            THEN TRIM(username) END) AS uniqueCust
        FROM bank_ledger
        WHERE company_id = ? AND entry_time >= ? AND entry_time < ?

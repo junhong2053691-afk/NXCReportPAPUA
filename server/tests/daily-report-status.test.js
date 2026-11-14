@@ -1,7 +1,7 @@
 // 「支付渠道」日报 REPORT 的 STATUS 汇总口径（运营 Excel，2026-11-06 与用户逐项确认）：
 //
 //   GIVE BACK  单独一行，负数（和 WITHDRAW / WRONG / EXPENSES 一样）
-//   DEPOSIT    = deposit + new，**不含 unclaim**；UNCLAIM 照旧单列
+//   DEPOSIT    = deposit + new + unclaim（2026-11-14 起含 unclaim）；UNCLAIM 照旧单列当明细
 //   EXCHANGE   正数（Excel 记的就是换钱总额），刻意和其他出账类不同号
 //   REDEP      只记笔数，金额不展示
 //
@@ -44,7 +44,8 @@ test("没有 GIVE BACK 流水时那一行照样在，值为 0（列位固定）"
   assert.deepStrictEqual(pairOf(r, "GIVE BACK"), { value: 0, metric: false });
 });
 
-test("DEPOSIT = deposit + new，不含 unclaim；UNCLAIM 单列", () => {
+test("DEPOSIT = deposit + new + unclaim；UNCLAIM 照旧单列（明细，已含在 DEPOSIT 里）", () => {
+  // 2026-11-14 用户定：unclaim 认领时会被删掉再审批成 deposit，同一笔钱只有一行，算进来不会重复。
   const db = bankDatabase();
   const acc = addAccount(db);
   addLedger(db, acc, 20, DAY, { status: "deposit" });
@@ -52,13 +53,27 @@ test("DEPOSIT = deposit + new，不含 unclaim；UNCLAIM 单列", () => {
   addLedger(db, acc, 1030, DAY, { status: "unclaim" });
 
   const r = reportOf(db);
-  assert.strictEqual(rowOf(r, "deposit").amount, 25);
-  assert.strictEqual(rowOf(r, "deposit").count, 2);
-  assert.strictEqual(pairOf(r, "DEPOSIT").value, 25);
+  assert.strictEqual(rowOf(r, "deposit").amount, 1055);
+  assert.strictEqual(rowOf(r, "deposit").count, 3);
+  assert.strictEqual(pairOf(r, "DEPOSIT").value, 1055);
   assert.strictEqual(pairOf(r, "UNCLAIM").value, 1030);
   assert.strictEqual(r.metrics.unclaim_amount, 1030);
-  // WIN/LOSS = DEPOSIT + WITHDRAW，跟着不含 unclaim
-  assert.strictEqual(r.totals.win_loss, 25);
+  // WIN/LOSS = DEPOSIT + WITHDRAW，跟着含 unclaim
+  assert.strictEqual(r.totals.win_loss, 1055);
+});
+
+test("DEP COUNT 含 unclaim；TRANSACTION 照旧也数 unclaim", () => {
+  const db = bankDatabase();
+  const acc = addAccount(db);
+  addLedger(db, acc, 100, DAY, { status: "deposit", username: "u1" });
+  addLedger(db, acc, 50, DAY, { status: "amopay", username: "u2" });
+  addLedger(db, acc, 300, DAY, { status: "unclaim" });
+  addLedger(db, acc, 0, DAY, { status: "unclaim" }); // 金额 0 不计 DEP COUNT
+
+  const r = reportOf(db);
+  assert.strictEqual(pairOf(r, "DEP COUNT").value, 3);
+  assert.strictEqual(r.metrics.dep_count, 3);
+  assert.strictEqual(pairOf(r, "TRANSACTION").value, 2);
 });
 
 test("EXCHANGE 保持正数（Excel 口径），REDEP 只记笔数", () => {

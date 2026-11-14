@@ -15,7 +15,7 @@ function day(report, date) {
   return report.days.find((d) => d.date === date);
 }
 
-test("DEP = deposit + new + amopay（含 trf_amount），unclaim 单列不进 DEP", () => {
+test("DEP = deposit + new + amopay + unclaim（含 trf_amount），UNCLAIM 照旧单列当明细", () => {
   const { db, acc } = setup();
   addLedger(db, acc, 100, "2026-11-03", { status: "deposit" });
   addLedger(db, acc, 50, "2026-11-03", { status: "new" });
@@ -25,9 +25,20 @@ test("DEP = deposit + new + amopay（含 trf_amount），unclaim 单列不进 DE
   addLedger(db, acc, 77, "2026-11-03", { status: "cash in" });
 
   const d = day(computeMonthlyReport(db, "alpha", { month: "2026-11", today: "2026-11-04" }), "2026-11-03");
-  assert.equal(d.dep, 200);
+  assert.equal(d.dep, 1199);
   assert.equal(d.unclaim, 999);
-  assert.equal(d.depCount, 4);
+  assert.equal(d.depCount, 5);
+  assert.equal(d.winLose, 1199);
+});
+
+test("UNIQUE CUST 不算 unclaim（2026-11-14 用户定，DEP 加了 unclaim 但这里不跟）", () => {
+  const { db, acc } = setup();
+  addLedger(db, acc, 100, "2026-11-03", { status: "deposit", username: "u1" });
+  addLedger(db, acc, 200, "2026-11-03", { status: "unclaim", username: "u2" });
+
+  const d = day(computeMonthlyReport(db, "alpha", { month: "2026-11", today: "2026-11-04" }), "2026-11-03");
+  assert.equal(d.uniqueCust, 1);
+  assert.equal(d.depCount, 2);
 });
 
 test("WD / WRONG / EXPENSES 为正数，含 HELP TRF 的 help_amount", () => {
