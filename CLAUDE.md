@@ -1,5 +1,21 @@
 # CLAUDE.md — NXC Report (trader-dashboard)
 
+> ## ⚠️ 这是 PAPUA 版（2026-11-18 从 NXC Report 拷出来，独立开发）
+>
+> - **路径** `C:\Users\junho\trader-dashboard - PAPUA`，**仓库** `NXCReportPAPUA`（`origin`）。
+>   原版 NXC Report 是 `upstream`，**只拉不推**（push 地址故意写成无效值）；搬原版修复用
+>   `git fetch upstream` + `git cherry-pick`。
+> - **本地端口 `3001`**（原版占 3000，两边可以同时开）。`.claude/launch.json` 里的名字是 `nxc-papua`。
+> - **库是全新的空库**，不含原版客户与流水；`config.json` 的 `platform` 凭证已清空。
+>   但 `server/lib/companies.js` 的 `PRESETS` 仍是原版 4 家（AussieX6 / Rolex66 / EzSpin68 / Pokies7Bet），
+>   每次启动 `seedCompaniesFromConfig` 都会把它们补回来（空凭证、不会同步）——**删了也会回来**，
+>   PAPUA 的公司定下来后要改 `PRESETS`。
+> - **时区 / 币种仍是 `Australia/Sydney` / AUD**，按 PAPUA 实际情况再改。
+> - 下文提到的生产机、`deploy/`、`DEPLOY.md`、`config.prod.json` 都是**原版 NXC Report 的**。
+>   PAPUA 上线前另定服务器与路径，**别照着把 PAPUA 部署到原版那台机器**（`/opt/trader-dashboard`、
+>   `/var/lib/trader-dashboard`、R2 桶名都会撞）。
+> - 下文的历史记录（11 月的日期、「用户要求」等）都发生在原版，保留作为背景。
+
 > 产品名 2026-11 起改为 **NXC Report**（原「操盘手后台」）。目录、`package.json`、`deploy/*.service`、
 > 日志前缀 `[trader-dashboard]` 等内部标识刻意保留旧名。图标资源在 `public/brand/` 与
 > `public/favicon.ico`，设计原图存档在 `design-system/brand/`。
